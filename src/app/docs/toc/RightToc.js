@@ -10,9 +10,17 @@ export default function RightToc() {
 
   useEffect(() => {
     const nodes = Array.from(document.querySelectorAll("main h2, main h3"))
-    const mapped = nodes.map(n => ({ id: n.id || n.textContent?.toLowerCase().replace(/[^a-z0-9]+/g, "-") || "", text: n.textContent || "" }))
-    // Ensure IDs exist
-    nodes.forEach((n, i) => { if (!n.id) n.id = mapped[i].id })
+    // Generate unique IDs with suffixes if duplicates appear
+    const used = new Map()
+    const mapped = nodes.map((n) => {
+      const base = (n.id || n.textContent?.toLowerCase().replace(/[^a-z0-9]+/g, "-") || "").replace(/(^-|-$)/g, "")
+      const count = (used.get(base) || 0) + 1
+      used.set(base, count)
+      const id = count > 1 ? `${base}-${count}` : base
+      return { id, text: n.textContent || "" }
+    })
+    // Ensure IDs exist on DOM nodes (match mapped ordering)
+    nodes.forEach((n, i) => { if (!n.id || n.id !== mapped[i].id) n.id = mapped[i].id })
     setHeadings(mapped)
 
     const observer = new IntersectionObserver((entries) => {

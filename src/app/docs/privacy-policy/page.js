@@ -1,6 +1,6 @@
 export const metadata = {
-  title: "Privacy Policy — Twatter.Army Docs",
-  description: "How Twatter.Army handles your data and privacy in the decentralized social network.",
+  title: "Privacy Policy — Keythings Wallet Docs",
+  description: "Privacy policy for Keythings Wallet - zero data collection, maximum user control.",
   alternates: { canonical: "/docs/privacy-policy" },
 }
 
@@ -9,187 +9,109 @@ export default function PrivacyPolicyPage() {
     <div className="rounded-2xl p-6">
       <h1 className="text-2xl font-semibold tracking-tight mb-3">Privacy Policy</h1>
       <div className="docs-prose">
-        <h2>Overview</h2>
+        <p><em>Your privacy is paramount. We collect zero personal data.</em></p>
+
+        <h2>Our Pledge: Zero Data Collection</h2>
         <p>
-          Twatter.Army is committed to protecting your privacy in the decentralized social network.
-          As a Nostr client, we prioritize user sovereignty and data ownership. This policy explains
-          how we handle information when you use Twatter.Army and our commitment to your privacy.
+          Keythings Wallet is designed to be a non‑custodial, privacy‑respecting browser extension. We do not collect,
+          store, transmit, sell, or otherwise process personal data about you. We do not run analytics, telemetry,
+          tracking pixels, cookies, or fingerprinting.
         </p>
 
-        <h3>Our Privacy Philosophy</h3>
-        <p>
-          Unlike traditional social media platforms, Twatter.Army operates on the principle that
-          <strong>your data belongs to you</strong>. We don't own your content, followers, or social graph.
-          Our role is to provide the best possible interface to the decentralized Nostr network.
-        </p>
-
-        <h2>What We Collect</h2>
-
-        <h3>Technical Data (Minimal)</h3>
+        <h2>What We Don't Collect</h2>
+        <p>We explicitly do not collect:</p>
         <ul>
-          <li><strong>IP addresses:</strong> Temporarily logged for security and abuse prevention</li>
-          <li><strong>Device information:</strong> Browser type and version for compatibility</li>
-          <li><strong>Usage patterns:</strong> Anonymous, aggregated metrics to improve performance</li>
-          <li><strong>Error logs:</strong> Technical errors to maintain service reliability</li>
+          <li>Personal identification information (name, email, phone number)</li>
+          <li>Usage analytics or behavioral data</li>
+          <li>IP addresses or location information</li>
+          <li>Cookies, tracking pixels, or browser fingerprinting</li>
+          <li>Transaction history or balance information</li>
+          <li>Wallet addresses or cryptographic keys</li>
         </ul>
 
-        <h3>User-Generated Content</h3>
+        <h2>On-Device Data (Local Only)</h2>
         <p>
-          <strong>We do not store your posts, profile data, or media on our servers.</strong>
-          All content is:
+          The extension may create data on your device strictly for functionality you request:
         </p>
         <ul>
-          <li>Stored on Nostr relays of your choice</li>
-          <li>Encrypted when you choose private messaging</li>
-          <li>Signed with your cryptographic keys</li>
-          <li>Under your complete control and ownership</li>
+          <li>Key material and seed phrases that you generate</li>
+          <li>Session tokens or settings necessary for operation</li>
+          <li>Cached metadata or UI preferences</li>
         </ul>
-
-        <h3>Authentication Data</h3>
-        <ul>
-          <li><strong>Passkeys:</strong> Stored securely in your device's trusted platform module</li>
-          <li><strong>Wallet connections:</strong> Temporary session data only</li>
-          <li><strong>Session tokens:</strong> HttpOnly, secure cookies with short expiration</li>
-        </ul>
-
-        <h2>How We Use Information</h2>
-
-        <h3>Service Operation</h3>
-        <ul>
-          <li>Maintain and improve the Twatter.Army web application</li>
-          <li>Provide technical support and troubleshooting</li>
-          <li>Ensure platform security and prevent abuse</li>
-          <li>Optimize performance based on anonymous usage patterns</li>
-        </ul>
-
-        <h3>Improvement & Development</h3>
-        <ul>
-          <li>Understand which features are most used (in aggregate)</li>
-          <li>Identify and fix technical issues</li>
-          <li>Guide development priorities based on user needs</li>
-          <li>Improve user experience and accessibility</li>
-        </ul>
-
-        <h2>Data Storage & Security</h2>
-
-        <h3>Local Storage</h3>
-        <ul>
-          <li><strong>UI preferences:</strong> Theme, language, layout settings</li>
-          <li><strong>Draft posts:</strong> Unsent content (auto-saved locally)</li>
-          <li><strong>Search history:</strong> Your recent searches (optional)</li>
-          <li><strong>Cache data:</strong> Temporary content for performance</li>
-        </ul>
-
-        <h3>Server-Side Storage</h3>
-        <p>We minimize server-side data storage to protect your privacy:</p>
-        <ul>
-          <li><strong>Authentication sessions:</strong> Temporary, encrypted tokens</li>
-          <li><strong>Security logs:</strong> Minimal logging for abuse prevention</li>
-          <li><strong>Performance metrics:</strong> Anonymous, aggregated data only</li>
-          <li><strong>Media uploads:</strong> Temporary storage before relay distribution</li>
-        </ul>
-
-        <h3>Third-Party Services</h3>
-        <ul>
-          <li><strong>Vercel Blob:</strong> For secure media uploads and CDN distribution</li>
-          <li><strong>Upstash Redis:</strong> For session management and caching</li>
-          <li><strong>Nostr relays:</strong> Distributed storage chosen by users</li>
-          <li><strong>Analytics:</strong> Privacy-focused, aggregated metrics only</li>
-        </ul>
-
-        <h2>Your Privacy Rights</h2>
-
-        <h3>Data Control</h3>
-        <ul>
-          <li><strong>Data ownership:</strong> Your content and social graph belong to you</li>
-          <li><strong>Data portability:</strong> Export your data anytime via any Nostr client</li>
-          <li><strong>Right to delete:</strong> Delete your posts and profile data from relays</li>
-          <li><strong>Multi-client access:</strong> Use any Nostr client with your identity</li>
-        </ul>
-
-        <h3>Privacy Choices</h3>
-        <ul>
-          <li><strong>Anonymous browsing:</strong> Use incognito mode for enhanced privacy</li>
-          <li><strong>Content visibility:</strong> Control who can see your posts</li>
-          <li><strong>Profile privacy:</strong> Choose what information to share</li>
-          <li><strong>Search privacy:</strong> Disable search history if preferred</li>
-        </ul>
-
-        <h3>Communication Privacy</h3>
-        <ul>
-          <li><strong>End-to-end encryption:</strong> For private direct messages</li>
-          <li><strong>Public posts:</strong> Visible to anyone on the Nostr network</li>
-          <li><strong>Relay choice:</strong> Select trusted relays for your content</li>
-          <li><strong>Content warnings:</strong> Mark sensitive content appropriately</li>
-        </ul>
-
-        <h2>Cookies & Tracking</h2>
-
-        <h3>Essential Cookies</h3>
-        <ul>
-          <li><strong>Session management:</strong> Secure, HttpOnly cookies for authentication</li>
-          <li><strong>Security tokens:</strong> Prevent cross-site request forgery</li>
-          <li><strong>CSRF protection:</strong> SameSite cookies for enhanced security</li>
-        </ul>
-
-        <h3>No Tracking</h3>
-        <p>We do not use:</p>
-        <ul>
-          <li>Advertising cookies or trackers</li>
-          <li>Third-party analytics for user identification</li>
-          <li>Behavioral tracking or profiling</li>
-          <li>Data sharing with advertisers</li>
-        </ul>
-
-        <h2>Data Retention</h2>
-        <ul>
-          <li><strong>Authentication data:</strong> Deleted when you log out or session expires</li>
-          <li><strong>Technical logs:</strong> Retained for 30 days for security analysis</li>
-          <li><strong>Performance data:</strong> Aggregated and anonymized after 24 hours</li>
-          <li><strong>User content:</strong> Stored on Nostr relays according to their policies</li>
-        </ul>
-
-        <h2>International Data Transfers</h2>
         <p>
-          Twatter.Army uses globally distributed infrastructure. When you use our service,
-          your data may be processed in different countries. We ensure all transfers comply
-          with applicable privacy laws and maintain the same level of protection.
+          This data remains on your device and is not transmitted to us. You control, export, and delete it
+          using your browser's extension management tools. If enabled by configuration, sensitive data is
+          encrypted at rest using platform‑appropriate mechanisms.
         </p>
+
+        <h2>Network Requests and Third Parties</h2>
+        <p>
+          Keythings Wallet does not send any data to us. However, when you choose to connect to
+          blockchain networks or dapps, your browser communicates directly with those third parties. Information
+          such as your IP address, requested resources, and on‑chain addresses may be visible to them per
+          normal internet operation. Those third parties' privacy policies govern their handling of data.
+          Review and trust third‑party providers before use.
+        </p>
+
+        <h2>Third-Party Services</h2>
+        <p>
+          Keythings Wallet enables connections to various blockchain networks and services:
+        </p>
+        <ul>
+          <li><strong>Keeta Network</strong>: Mainnet and testnet RPC endpoints</li>
+          <li><strong>dApps</strong>: Decentralized applications you choose to interact with</li>
+          <li><strong>Block Explorers</strong>: Public blockchain data viewers</li>
+        </ul>
+        <p>
+          These services operate independently and have their own privacy policies. We do not share
+          personal data with third parties as we collect none.
+        </p>
+
+        <h2>Data Security</h2>
+        <p>
+          While we don't collect personal data, we implement industry-leading security practices:
+        </p>
+        <ul>
+          <li>Seeds stored only in volatile service worker memory</li>
+          <li>AES-GCM authenticated encryption for stored secrets</li>
+          <li>Argon2id key derivation with secure parameters</li>
+          <li>Origin isolation and capability-based authorization</li>
+          <li>Regular security audits and penetration testing</li>
+        </ul>
 
         <h2>Children's Privacy</h2>
         <p>
-          Twatter.Army is not intended for children under 13. We do not knowingly collect
-          personal information from children. If we become aware of such collection, we will
-          delete the information promptly.
+          Keythings Wallet is not directed to children and should not be used by individuals under the
+          age of majority in their jurisdiction.
         </p>
+
+        <h2>Your Rights</h2>
+        <p>
+          Since we collect no personal data, traditional data subject rights do not apply. You maintain
+          complete control over:
+        </p>
+        <ul>
+          <li>Your private keys and seed phrases</li>
+          <li>Your wallet connections and permissions</li>
+          <li>Your transaction history (visible on public blockchains)</li>
+          <li>Your extension settings and preferences</li>
+        </ul>
 
         <h2>Policy Updates</h2>
         <p>
-          We may update this privacy policy as Twatter.Army evolves and privacy regulations change.
-          Material changes will be communicated through:
+          We may update this Privacy Policy from time to time. Material changes will be reflected by
+          updating the effective date. Continued use after changes constitutes acceptance.
         </p>
-        <ul>
-          <li>In-app notifications for active users</li>
-          <li>Updates posted on this documentation page</li>
-          <li>Announcements in our Nostr feed</li>
-          <li>Email notifications (if you've provided an email)</li>
-        </ul>
 
-        <h2>Contact Us</h2>
-        <p>Questions about your privacy or this policy?</p>
-        <ul>
-          <li><strong>Nostr:</strong> Direct message us on Nostr for fastest response</li>
-          <li><strong>Discord:</strong> <a href="https://discord.gg/twatter" className="text-accent-gradient hover:underline">Join our community</a></li>
-          <li><strong>Email:</strong> privacy@twatter.army</li>
-          <li><strong>GitHub:</strong> Report privacy issues in our repository</li>
-        </ul>
+        <h2>Contact</h2>
+        <p>
+          Questions about this Privacy Policy can be directed to the project maintainers via the
+          repository's issue tracker or community channels.
+        </p>
 
         <blockquote>
-          Your privacy is not just a policy—it's the foundation of everything we build.
-          Twatter.Army exists to give you control over your digital social experience.
+          Privacy by design, not by accident. Your financial sovereignty is fundamental to the decentralized economy.
         </blockquote>
-
-        <p><em>Last updated: December 2024</em></p>
       </div>
     </div>
   )

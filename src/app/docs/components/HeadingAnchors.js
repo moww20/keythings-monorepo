@@ -10,8 +10,16 @@ export default function HeadingAnchors() {
   useEffect(() => {
     try {
       const headings = Array.from(document.querySelectorAll("main h2, main h3"))
+      const usedIds = new Map()
       headings.forEach((h) => {
         if (!h.id) h.id = slugify(h.textContent)
+        // Ensure uniqueness by appending a numeric suffix when needed
+        let base = h.id
+        let count = usedIds.get(base) || 0
+        if (count > 0) {
+          h.id = `${base}-${count + 1}`
+        }
+        usedIds.set(base, count + 1)
         h.classList.add("group", "relative", "pr-8")
         // Avoid duplicating button
         if (h.querySelector('[data-anchor-btn]')) return

@@ -1,6 +1,6 @@
 export const metadata = {
-  title: "Introduction — Twatter.Army Docs",
-  description: "The world's most advanced Nostr client. Modern social networking powered by censorship-resistant protocols.",
+  title: "Introduction — Keythings Wallet Docs",
+  description: "The gateway to all things Keeta. A secure, non-custodial browser extension wallet for the Keeta Network.",
   alternates: { canonical: "/docs/introduction" },
 }
 
@@ -9,108 +9,106 @@ export default function IntroductionPage() {
     <div className="rounded-2xl p-6">
       <h1 className="text-2xl font-semibold tracking-tight mb-3">Introduction</h1>
       <div className="docs-prose">
-        <p><em>The world's most advanced Nostr client. Modern social networking powered by censorship-resistant protocols.</em></p>
+        <p><em>The gateway to all things Keeta. A secure, non-custodial browser extension wallet for the Keeta Network.</em></p>
 
         <h2>Overview</h2>
         <p>
-          Twatter.Army is a cutting-edge social networking platform built on the Nostr protocol—a decentralized,
-          censorship-resistant communication standard. Unlike traditional social media platforms that rely on
-          centralized servers and corporate control, Twatter.Army empowers users with true ownership of their
-          data, identity, and social graph.
+          Keythings Wallet is your secure gateway to the Keeta Network ecosystem. Built as a production-ready
+          Chrome Manifest V3 browser extension, it provides a non-custodial wallet experience that puts you in
+          complete control of your digital assets, identity, and transactions on the Keeta blockchain.
         </p>
         <p>
-          Built with modern web technologies including Next.js 14, TypeScript, and Tailwind CSS, Twatter.Army
-          delivers a premium user experience while maintaining the core principles of decentralization,
-          privacy, and user sovereignty that make Nostr revolutionary.
+          Unlike traditional wallet solutions, Keythings Wallet is designed with security, privacy, and user
+          sovereignty as first-class citizens. Built with modern web technologies including React, TypeScript,
+          and Redux Toolkit, it delivers enterprise-grade security without compromising on user experience.
         </p>
 
         <blockquote>
-          Social networking should belong to the people, not the platforms. Twatter.Army brings the future
-          of decentralized social media to life with uncompromising performance and user experience.
+          Your keys, your crypto, your control. Keythings Wallet brings the future of decentralized finance
+          to your browser with uncompromising security and user experience.
         </blockquote>
 
         <h2>Core Features</h2>
-        <p>Twatter.Army redefines social networking with these breakthrough capabilities:</p>
+        <p>Keythings Wallet redefines wallet security and usability with these breakthrough capabilities:</p>
         <ul>
-          <li><strong>Passwordless Authentication</strong>: Advanced WebAuthn passkeys for seamless, secure login using platform authenticators.</li>
-          <li><strong>Unified Wallet Integration</strong>: Native NIP-07 support with seamless connections to Alby, nos2x, and Nostr Wallet ID.</li>
-          <li><strong>Advanced Search</strong>: Real-time search with NIP-50 full-text support, smart ranking by engagement and recency.</li>
-          <li><strong>Rich Media Support</strong>: Direct uploads to Vercel Blob with secure token gating and global CDN distribution.</li>
+          <li><strong>Non-Custodial Architecture</strong>: Your private keys never leave your device—stored securely in the extension's isolated environment.</li>
+          <li><strong>Keeta SDK Integration</strong>: Native integration with the official Keeta SDK for seamless blockchain interactions.</li>
+          <li><strong>Multi-Network Support</strong>: Connect to multiple Keeta Network environments including mainnet, testnet, and custom RPC endpoints.</li>
+          <li><strong>Advanced Security</strong>: Industry-leading cryptographic implementations with AES-GCM encryption and Argon2id key derivation.</li>
         </ul>
 
         <h2>Technical Excellence</h2>
         <h3>Modern Architecture</h3>
         <p>
-          Twatter.Army leverages the latest in web technology to deliver unparalleled performance:
+          Keythings Wallet leverages cutting-edge web extension technology to deliver unparalleled security and performance:
         </p>
         <ul>
-          <li>Next.js 14 with App Router for optimal performance and SEO</li>
-          <li>TypeScript for type safety and developer experience</li>
-          <li>Tailwind CSS for responsive, accessible design</li>
-          <li>TanStack Query for intelligent caching and state management</li>
-          <li>Virtualized feeds for smooth scrolling with thousands of posts</li>
+          <li>Chrome Manifest V3 for enhanced security and performance</li>
+          <li>React 18 with TypeScript for type-safe, maintainable code</li>
+          <li>Redux Toolkit for predictable state management</li>
+          <li>Vite for lightning-fast development and optimized builds</li>
+          <li>Comprehensive testing framework with security validation</li>
         </ul>
 
-        <h3>Privacy & Security</h3>
+        <h3>Security-First Design</h3>
         <p>
-          Your data security is paramount. Twatter.Army implements enterprise-grade security measures:
+          Security isn't an afterthought—it's built into every layer of Keythings Wallet:
         </p>
         <ul>
-          <li>End-to-end encryption for private messages</li>
-          <li>Server-side session verification with httpOnly cookies</li>
-          <li>Encrypted private key storage with AES-256</li>
-          <li>NIP-05 verification for trusted identities</li>
+          <li>Seeds stored only in volatile service worker memory</li>
+          <li>Capability-based authorization system for granular permissions</li>
+          <li>Origin isolation preventing cross-site request forgery</li>
+          <li>Progressive security delays on failed unlock attempts</li>
         </ul>
 
         <h3>Developer Experience</h3>
         <p>
-          Built by developers, for developers. Twatter.Army features a modern development workflow:
+          Built by developers, for developers. Keythings Wallet provides a solid foundation for Keeta integration:
         </p>
         <ul>
-          <li>Strict TypeScript configuration for reliability</li>
-          <li>Comprehensive API documentation and examples</li>
+          <li>Comprehensive SDK integration examples and documentation</li>
           <li>Modular architecture with clear separation of concerns</li>
-          <li>Extensive test coverage and continuous integration</li>
+          <li>Extensive TypeScript definitions for better development experience</li>
+          <li>Automated security validation and manifest compatibility checks</li>
         </ul>
 
-        <h2>The Nostr Advantage</h2>
+        <h2>The Keeta Advantage</h2>
         <p>
-          Nostr (Notes and Other Stuff Transmitted by Relays) represents a fundamental rethinking of social media:
+          The Keeta Network represents the next evolution of blockchain technology, and Keythings Wallet is your key to accessing it:
         </p>
         <ul>
-          <li><strong>Censorship Resistance</strong>: No single entity can control or censor content</li>
-          <li><strong>Data Ownership</strong>: Users own their content, followers, and social graph</li>
-          <li><strong>Interoperability</strong>: Works seamlessly across different Nostr clients</li>
-          <li><strong>Global Network</strong>: Distributed relays ensure content availability worldwide</li>
+          <li><strong>High Performance</strong>: Sub-second transaction confirmations with low fees</li>
+          <li><strong>Developer Friendly</strong>: Comprehensive SDK and tooling for seamless integration</li>
+          <li><strong>Interoperability</strong>: Works with existing Ethereum tooling and standards</li>
+          <li><strong>Scalability</strong>: Designed to handle global adoption with enterprise-grade infrastructure</li>
         </ul>
 
         <h2>User Experience Innovation</h2>
         <p>
-          Twatter.Army sets new standards for social media usability:
+          Keythings Wallet sets new standards for wallet usability and security:
         </p>
         <ul>
-          <li><strong>Smart Search</strong>: Advanced query language with hashtag, user, and content type filtering</li>
-          <li><strong>Real-time Updates</strong>: Live streams and notifications without performance impact</li>
-          <li><strong>Mobile-First Design</strong>: Pull-to-refresh, swipe gestures, and touch-optimized interactions</li>
-          <li><strong>Accessibility</strong>: WCAG-compliant design with keyboard navigation and screen reader support</li>
+          <li><strong>Intuitive Interface</strong>: Clean, modern design that makes complex operations simple</li>
+          <li><strong>Transaction Simulation</strong>: Preview transactions before signing to prevent costly mistakes</li>
+          <li><strong>Risk Assessment</strong>: Built-in security scoring for transaction risk evaluation</li>
+          <li><strong>Multi-Device Sync</strong>: Secure session management across browser instances</li>
         </ul>
 
-        <h2>Why Twatter.Army?</h2>
+        <h2>Why Keythings Wallet?</h2>
         <ul>
-          <li><strong>Performance</strong>: Lightning-fast loading and smooth interactions regardless of feed size</li>
-          <li><strong>Privacy</strong>: Your data stays yours—encrypted, decentralized, and under your control</li>
-          <li><strong>Innovation</strong>: Constantly evolving with cutting-edge features and user feedback</li>
-          <li><strong>Community</strong>: Built by and for the decentralized web community</li>
+          <li><strong>Security</strong>: Industry-leading security practices with comprehensive audit coverage</li>
+          <li><strong>Privacy</strong>: Zero data collection—your activities stay private and under your control</li>
+          <li><strong>Reliability</strong>: Production-tested architecture ready for enterprise deployment</li>
+          <li><strong>Community</strong>: Built by and for the decentralized finance community</li>
         </ul>
 
         <h2>TL; DR</h2>
         <p>
-          Twatter.Army is the social network for the decentralized future. Experience the freedom of
-          censorship-resistant communication with the polish and performance of modern web applications.
-          Join the revolution in social media ownership and control.
+          Keythings Wallet is the secure, non-custodial gateway to the Keeta Network ecosystem. Experience the
+          freedom of self-sovereign finance with the security and reliability that enterprise applications demand.
+          Join the revolution in decentralized wallet technology.
         </p>
       </div>
-
     </div>
   )
 }
