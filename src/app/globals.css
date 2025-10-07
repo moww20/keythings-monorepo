@@ -124,7 +124,7 @@ body {
 
 /* Docs content width + typography */
 .docs-prose {
-  max-width: 80ch;
+  max-width: min(100%, 58rem);
   line-height: 1.7;
 }
 .docs-prose .code-block {
