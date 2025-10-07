@@ -13,15 +13,17 @@ export default function IntegrationGuidePage() {
       <div className="docs-prose">
         <p>
           <em>
-            Use this guide to connect your dApp to Keythings Wallet with minimal setup, robust permission management,
-            and security-aware UX patterns.
+            Use this guide to connect your dApp to Keythings Wallet with minimal setup, robust permission management, and
+            security-aware UX patterns.
           </em>
         </p>
 
         <h2>Detect Wallet</h2>
         <CodeBlock
           language="javascript"
-          code={`if (typeof window.keeta === 'undefined') {
+          code={`const provider = window.keythings ?? window.ethereum;
+
+if (!provider) {
   throw new Error('Keythings Wallet not found');
 }`}
         />
@@ -33,19 +35,12 @@ export default function IntegrationGuidePage() {
         </p>
         <CodeBlock
           language="javascript"
-          code={`const permissions = await window.keeta.request({
-  method: 'keeta_requestPermissions',
+          code={`const provider = window.keythings ?? window.ethereum;
+
+const permissions = await provider.request({
+  method: 'wallet_requestPermissions',
   params: [{
     eth_accounts: {},
-    keeta_signTypedData: {},
-    keeta_watchAsset: {
-      type: 'ERC20',
-      options: {
-        address: '0xTokenAddress',
-        symbol: 'TOK',
-        decimals: 18,
-      },
-    },
   }],
 });`}
         />
@@ -53,26 +48,38 @@ export default function IntegrationGuidePage() {
         <h2>Request Accounts</h2>
         <CodeBlock
           language="javascript"
-          code={`const accounts = await window.keeta.request({ method: 'eth_requestAccounts' });`}
+          code={`const provider = window.keythings ?? window.ethereum;
+
+const [account] = await provider.request({
+  method: 'eth_requestAccounts',
+});
+
+console.log('Connected account:', account);`}
         />
 
         <h2>Listen for Changes</h2>
         <CodeBlock
           language="javascript"
-          code={`window.keeta.on('accountsChanged', (accounts) => {
+          code={`const provider = window.keythings ?? window.ethereum;
+
+provider?.on('accountsChanged', (accounts) => {
   // handle account switch
 });
-window.keeta.on('chainChanged', (chainId) => {
-  // handle network switched
+
+provider?.on('chainChanged', (chainId) => {
+  // handle network switch
 });`}
         />
 
         <h2>Send Transaction</h2>
         <CodeBlock
           language="javascript"
-          code={`await window.keeta.request({
+          code={`const provider = window.keythings ?? window.ethereum;
+const [from] = await provider.request({ method: 'eth_requestAccounts' });
+
+await provider.request({
   method: 'eth_sendTransaction',
-  params: [{ from, to, value }]
+  params: [{ from, to, value }],
 });`}
         />
 
@@ -83,33 +90,43 @@ window.keeta.on('chainChanged', (chainId) => {
         </p>
         <CodeBlock
           language="javascript"
-          code={`const assessment = await window.keeta.request({
-  method: 'keeta_simulateTransaction',
-  params: [{ from, to, value, data }],
+          code={`const provider = window.keythings ?? window.ethereum;
+const [from] = await provider.request({ method: 'eth_requestAccounts' });
+
+const simulation = await provider.request({
+  method: 'eth_call',
+  params: [{ from, to, value, data }, 'pending'],
 });
 
-if (assessment.risk === 'high') {
+if (simulation === '0x') {
   // Display an explicit warning before asking the user to confirm in the wallet UI
 }`}
         />
 
         <h2>Handle Revocations</h2>
         <p>
-          Capabilities can expire or be revoked manually. Subscribe to permission updates and downgrade your UI gracefully.
+          Capabilities can expire or be revoked manually. Subscribe to provider changes and re-fetch permissions to
+          downgrade your UI gracefully.
         </p>
         <CodeBlock
           language="javascript"
-          code={`window.keeta.on('permissionsChanged', ({ origin, capabilities }) => {
-  const hasAccounts = Boolean(capabilities?.eth_accounts);
+          code={`const provider = window.keythings ?? window.ethereum;
+
+async function refreshPermissions() {
+  const permissions = await provider.request({ method: 'wallet_getPermissions' });
+  const hasAccounts = permissions.some((permission) => permission.parentCapability === 'eth_accounts');
   updateConnectionState({ connected: hasAccounts });
-});`}
+}
+
+provider?.on('accountsChanged', refreshPermissions);
+provider?.on('chainChanged', refreshPermissions);`}
         />
 
         <h2>Recommended UX Patterns</h2>
         <ul>
-          <li>Preflight transactions with <code>keeta_simulateTransaction</code> to show gas impact and risk.</li>
+          <li>Preflight transactions with <code>eth_call</code> to show gas impact and risk.</li>
           <li>Persist the latest approved account + chain locally so users return to a coherent state on reload.</li>
-          <li>Offer a prominent “Reconnect” call-to-action when <code>permissionsChanged</code> removes required scopes.</li>
+          <li>Offer a prominent “Reconnect” call-to-action after capability loss.</li>
           <li>Throttle repeated permission prompts—wait for explicit user action before requesting capabilities again.</li>
         </ul>
 
@@ -122,8 +139,8 @@ if (assessment.risk === 'high') {
           code={`# Clone and bootstrap the wallet
 git clone https://github.com/moww20/keythings-extension-wallet.git
 cd keythings-extension-wallet
-pnpm install
-pnpm dev
+bun install   # or: npm install
+bun run dev   # or: npm run dev
 
 # In Chrome, load apps/extension/dist as an unpacked extension.`}
         />
@@ -136,7 +153,10 @@ pnpm dev
         <ul>
           <li><strong>Account array empty?</strong> Ensure the capability request included <code>eth_accounts</code>.</li>
           <li><strong>Requests hanging?</strong> Verify the page is served over HTTPS and the origin matches the approved entry.</li>
-          <li><strong>Transaction rejected?</strong> Inspect <code>assessment.risk</code> and <code>error.code</code> for mitigation guidance.</li>
+          <li>
+            <strong>Transaction rejected?</strong> Inspect <code>error.code</code> and transaction simulation output for
+            mitigation guidance.
+          </li>
           <li><strong>Chain mismatch?</strong> Listen for <code>chainChanged</code> and call <code>wallet_switchEthereumChain</code> proactively.</li>
         </ul>
 

@@ -15,33 +15,38 @@ export default function ApiReferencePage() {
 
         <h2>Overview</h2>
         <p>
-          Keythings Wallet exposes a secure API through the <code>window.keeta</code> global object, following the
-          Keeta Wallet standard. This API provides methods for account management, transaction signing,
-          and blockchain interactions.
+          Keythings Wallet exposes an{' '}
+          <code>EIP-1193</code>
+          -compatible provider through the <code>window.keythings</code> global object. It mirrors the behaviour of
+          <code>window.ethereum</code> while adding Keythings-specific polish like network presets and hardened
+          permission flows.
         </p>
 
-        <h2>Connection & Setup</h2>
+        <h2>Connection &amp; Setup</h2>
 
         <h3>Check if Keythings Wallet is Available</h3>
         <CodeBlock
           language="javascript"
-          code={`// Check if Keythings Wallet is installed and available
-if (typeof window.keeta !== 'undefined') {
-  console.log('Keythings Wallet is available');
+          code={`const provider = window.keythings ?? window.ethereum;
+
+if (!provider) {
+  console.error('Keythings Wallet not detected');
 } else {
-  console.log('Keythings Wallet not detected');
+  console.log('Keythings Wallet provider ready', provider);
 }`}
         />
 
         <h3>Request Connection</h3>
         <CodeBlock
           language="javascript"
-          code={`// Request to connect to Keythings Wallet
+          code={`const provider = window.keythings ?? window.ethereum;
+
 try {
-  const accounts = await window.keeta.request({
-    method: 'eth_requestAccounts'
+  const accounts = await provider.request({
+    method: 'eth_requestAccounts',
   });
-  console.log('Connected accounts:', accounts);
+
+  console.log('Connected account:', accounts[0]);
 } catch (error) {
   console.error('Connection failed:', error);
 }`}
@@ -52,21 +57,27 @@ try {
         <h3>Get Connected Accounts</h3>
         <CodeBlock
           language="javascript"
-          code={`// Get currently connected accounts
-const accounts = await window.keeta.request({
-  method: 'eth_accounts'
+          code={`const provider = window.keythings ?? window.ethereum;
+
+const accounts = await provider.request({
+  method: 'eth_accounts',
 });
+
 console.log('Connected accounts:', accounts);`}
         />
 
-        <h3>Get Current Account</h3>
+        <h3>Get Primary Account</h3>
         <CodeBlock
           language="javascript"
-          code={`// Get the currently selected account
-const currentAccount = await window.keeta.request({
-  method: 'eth_coinbase'
+          code={`const provider = window.keythings ?? window.ethereum;
+
+const [primaryAccount] = await provider.request({
+  method: 'eth_accounts',
 });
-console.log('Current account:', currentAccount);`}
+
+if (primaryAccount) {
+  console.log('Primary account:', primaryAccount);
+}`}
         />
 
         <h2>Network Information</h2>
@@ -74,69 +85,80 @@ console.log('Current account:', currentAccount);`}
         <h3>Get Current Network</h3>
         <CodeBlock
           language="javascript"
-          code={`// Get current network information
-const network = await window.keeta.request({
-  method: 'net_version'
+          code={`const provider = window.keythings ?? window.ethereum;
+
+const chainId = await provider.request({
+  method: 'eth_chainId',
 });
-console.log('Current network ID:', network);`}
+
+console.log('Connected chain ID:', chainId);`}
         />
 
         <h3>Switch Network</h3>
         <CodeBlock
           language="javascript"
-          code={`// Switch to Keeta Mainnet
-await window.keeta.request({
+          code={`const provider = window.keythings ?? window.ethereum;
+
+await provider.request({
   method: 'wallet_switchEthereumChain',
-  params: [{ chainId: '0x4d85' }] // 19845 in decimal
+  params: [{ chainId: '0x4d85' }], // 19845 in decimal
 });`}
         />
 
         <h3>Add Custom Network</h3>
         <CodeBlock
           language="javascript"
-          code={`// Add a custom Keeta network
-await window.keeta.request({
+          code={`const provider = window.keythings ?? window.ethereum;
+
+await provider.request({
   method: 'wallet_addEthereumChain',
   params: [{
     chainId: '0x4d86', // 19846 in hex
-    chainName: 'Keeta Testnet',
-    rpcUrls: ['https://testnet.keeta.network/rpc'],
+    chainName: 'Keythings Testnet',
+    rpcUrls: ['https://rpc.testnet.keythings.example'],
     nativeCurrency: {
-      name: 'Test KEETA',
-      symbol: 'TKEETA',
-      decimals: 18
+      name: 'Test KEY',
+      symbol: 'tKEY',
+      decimals: 18,
     },
-    blockExplorerUrls: ['https://testnet.explorer.keeta.network']
-  }]
+    blockExplorerUrls: ['https://explorer.testnet.keythings.example'],
+  }],
 });`}
         />
 
-        <h2>Balance & State</h2>
+        <h2>Balance &amp; State</h2>
 
         <h3>Get Account Balance</h3>
         <CodeBlock
           language="javascript"
-          code={`// Get KEETA balance for an account
-const balance = await window.keeta.request({
-  method: 'eth_getBalance',
-  params: ['0xAccountAddress', 'latest']
-});
-console.log('Balance (wei):', balance);
+          code={`const provider = window.keythings ?? window.ethereum;
+const [account] = await provider.request({ method: 'eth_requestAccounts' });
 
-// Convert to KEETA
-const balanceInKeeta = parseInt(balance) / Math.pow(10, 18);
-console.log('Balance (KEETA):', balanceInKeeta);`}
+const balanceHex = await provider.request({
+  method: 'eth_getBalance',
+  params: [account, 'latest'],
+});
+
+const balanceInEth = Number.parseInt(balanceHex, 16) / 1e18;
+console.log('Balance (ETH):', balanceInEth);`}
         />
 
-        <h3>Get All Account Balances</h3>
+        <h3>Watch an ERC-20 Asset</h3>
         <CodeBlock
           language="javascript"
-          code={`// Get balances for all tokens
-const balances = await window.keeta.request({
-  method: 'keeta_getAllBalances',
-  params: ['0xAccountAddress']
-});
-console.log('Token balances:', balances);`}
+          code={`const provider = window.keythings ?? window.ethereum;
+
+await provider.request({
+  method: 'wallet_watchAsset',
+  params: {
+    type: 'ERC20',
+    options: {
+      address: '0xTokenAddress',
+      symbol: 'TOK',
+      decimals: 18,
+    },
+  },
+});`}
         />
 
         <h2>Transaction Management</h2>
@@ -144,49 +166,58 @@ console.log('Token balances:', balances);`}
         <h3>Send Transaction</h3>
         <CodeBlock
           language="javascript"
-          code={`// Send KEETA to another address
-const txHash = await window.keeta.request({
+          code={`const provider = window.keythings ?? window.ethereum;
+const [from] = await provider.request({ method: 'eth_requestAccounts' });
+
+const txHash = await provider.request({
   method: 'eth_sendTransaction',
   params: [{
-    from: '0xYourAccountAddress',
+    from,
     to: '0xRecipientAddress',
-    value: '0x2386f26fc10000', // 0.01 KEETA in wei
-    gas: '0x5208' // 21000 gas
-  }]
+    value: '0x2386f26fc10000', // 0.01 KEY in wei
+  }],
 });
+
 console.log('Transaction hash:', txHash);`}
         />
 
         <h3>Sign Transaction (No Broadcast)</h3>
         <CodeBlock
           language="javascript"
-          code={`// Sign a transaction without broadcasting
-const signedTx = await window.keeta.request({
+          code={`const provider = window.keythings ?? window.ethereum;
+const [from] = await provider.request({ method: 'eth_requestAccounts' });
+
+const unsignedTx = {
+  from,
+  to: '0xRecipientAddress',
+  value: '0x2386f26fc10000',
+  gas: '0x5208',
+};
+
+const signedTx = await provider.request({
   method: 'eth_signTransaction',
-  params: [{
-    from: '0xYourAccountAddress',
-    to: '0xRecipientAddress',
-    value: '0x2386f26fc10000',
-    gas: '0x5208',
-    gasPrice: '0x4a817c800' // 20 gwei
-  }]
+  params: [unsignedTx],
 });
+
 console.log('Signed transaction:', signedTx);`}
         />
 
         <h3>Estimate Gas</h3>
         <CodeBlock
           language="javascript"
-          code={`// Estimate gas for a transaction
-const gasEstimate = await window.keeta.request({
+          code={`const provider = window.keythings ?? window.ethereum;
+const [from] = await provider.request({ method: 'eth_requestAccounts' });
+
+const gasEstimate = await provider.request({
   method: 'eth_estimateGas',
   params: [{
-    from: '0xYourAccountAddress',
+    from,
     to: '0xRecipientAddress',
-    value: '0x2386f26fc10000'
-  }]
+    value: '0x2386f26fc10000',
+  }],
 });
-console.log('Estimated gas:', gasEstimate);`}
+
+console.log('Estimated gas:', Number.parseInt(gasEstimate, 16));`}
         />
 
         <h2>Message Signing</h2>
@@ -194,77 +225,86 @@ console.log('Estimated gas:', gasEstimate);`}
         <h3>Personal Sign</h3>
         <CodeBlock
           language="javascript"
-          code={`// Sign a message with the user's private key
-const signature = await window.keeta.request({
+          code={`const provider = window.keythings ?? window.ethereum;
+const [from] = await provider.request({ method: 'eth_requestAccounts' });
+
+const signature = await provider.request({
   method: 'personal_sign',
-  params: ['Hello, Keeta!', '0xYourAccountAddress']
+  params: ['Hello, Keythings!', from],
 });
+
 console.log('Signature:', signature);`}
         />
 
         <h3>Eth Sign (Structured Data)</h3>
         <CodeBlock
           language="javascript"
-          code={`// Sign structured data (EIP-712)
+          code={`const provider = window.keythings ?? window.ethereum;
+const [from] = await provider.request({ method: 'eth_requestAccounts' });
+
 const typedData = {
   types: {
     EIP712Domain: [
       { name: 'name', type: 'string' },
       { name: 'version', type: 'string' },
-      { name: 'chainId', type: 'uint256' }
+      { name: 'chainId', type: 'uint256' },
     ],
     Message: [
       { name: 'content', type: 'string' },
-      { name: 'timestamp', type: 'uint256' }
-    ]
+      { name: 'timestamp', type: 'uint256' },
+    ],
   },
   primaryType: 'Message',
   domain: {
     name: 'My dApp',
     version: '1.0',
-    chainId: 19845
+    chainId: 19845,
   },
   message: {
-    content: 'Hello from Keeta!',
-    timestamp: Date.now()
-  }
+    content: 'Hello from Keythings!',
+    timestamp: Date.now(),
+  },
 };
 
-const signature = await window.keeta.request({
+const signature = await provider.request({
   method: 'eth_signTypedData_v4',
-  params: ['0xYourAccountAddress', typedData]
+  params: [from, JSON.stringify(typedData)],
 });
+
 console.log('Typed signature:', signature);`}
         />
 
-        <h2>Capabilities & Permissions</h2>
+        <h2>Capabilities &amp; Permissions</h2>
 
         <h3>Request Capabilities</h3>
         <CodeBlock
           language="javascript"
-          code={`// Request specific capabilities from the wallet
-const capabilities = await window.keeta.request({
-  method: 'keeta_requestCapabilities',
+          code={`const provider = window.keythings ?? window.ethereum;
+
+const permissions = await provider.request({
+  method: 'wallet_requestPermissions',
   params: [{
-    accounts: ['0xYourAccountAddress'],
-    capabilities: [
-      'eth_accounts',
-      'eth_sendTransaction',
-      'personal_sign'
-    ]
-  }]
+    eth_accounts: {},
+  }],
 });
-console.log('Granted capabilities:', capabilities);`}
+
+console.log('Granted permissions:', permissions);`}
         />
 
         <h3>Check Capabilities</h3>
         <CodeBlock
           language="javascript"
-          code={`// Check current capabilities for an origin
-const currentCapabilities = await window.keeta.request({
-  method: 'keeta_getCapabilities'
+          code={`const provider = window.keythings ?? window.ethereum;
+
+const permissions = await provider.request({
+  method: 'wallet_getPermissions',
 });
-console.log('Current capabilities:', currentCapabilities);`}
+
+const hasAccounts = permissions.some(
+  (permission) => permission.parentCapability === 'eth_accounts',
+);
+
+console.log('Has eth_accounts:', hasAccounts);`}
         />
 
         <h2>Advanced Features</h2>
@@ -272,32 +312,37 @@ console.log('Current capabilities:', currentCapabilities);`}
         <h3>Transaction Simulation</h3>
         <CodeBlock
           language="javascript"
-          code={`// Simulate a transaction before signing
-const simulation = await window.keeta.request({
-  method: 'keeta_simulateTransaction',
+          code={`const provider = window.keythings ?? window.ethereum;
+const [from] = await provider.request({ method: 'eth_requestAccounts' });
+
+const simulationResult = await provider.request({
+  method: 'eth_call',
   params: [{
-    from: '0xYourAccountAddress',
+    from,
     to: '0xContractAddress',
     data: '0xContractCallData',
-    value: '0x0'
-  }]
+  }, 'pending'],
 });
-console.log('Simulation result:', simulation);`}
+
+console.log('Simulation result:', simulationResult);`}
         />
 
         <h3>Batch Requests</h3>
         <CodeBlock
           language="javascript"
-          code={`// Send multiple requests in a batch
-const batchResults = await window.keeta.request({
-  method: 'keeta_batch',
-  params: [[
-    { method: 'eth_accounts' },
-    { method: 'net_version' },
-    { method: 'eth_getBalance', params: ['0xAccountAddress'] }
-  ]]
-});
-console.log('Batch results:', batchResults);`}
+          code={`const provider = window.keythings ?? window.ethereum;
+const [account] = await provider.request({ method: 'eth_requestAccounts' });
+
+const [accounts, chainId, balance] = await Promise.all([
+  provider.request({ method: 'eth_accounts' }),
+  provider.request({ method: 'eth_chainId' }),
+  provider.request({
+    method: 'eth_getBalance',
+    params: [account, 'latest'],
+  }),
+]);
+
+console.log({ accounts, chainId, balance });`}
         />
 
         <h2>Error Handling</h2>
@@ -345,11 +390,14 @@ console.log('Batch results:', batchResults);`}
         <h3>Error Handling Example</h3>
         <CodeBlock
           language="javascript"
-          code={`try {
-  const result = await window.keeta.request({
+          code={`const provider = window.keythings ?? window.ethereum;
+
+try {
+  const result = await provider.request({
     method: 'eth_sendTransaction',
-    params: [transaction]
+    params: [transaction],
   });
+
   console.log('Success:', result);
 } catch (error) {
   console.error('Error:', error);
@@ -375,30 +423,21 @@ console.log('Batch results:', batchResults);`}
         <h3>TypeScript Interfaces</h3>
         <CodeBlock
           language="typescript"
-          code={`// Core Keeta Wallet API interface
-interface KeetaWallet {
-  request(args: {
-    method: string;
-    params?: any[];
-  }): Promise<any>;
-
-  on(event: string, handler: Function): void;
-  removeListener(event: string, handler: Function): void;
+          code={`interface RequestArguments {
+  readonly method: string;
+  readonly params?: readonly unknown[] | Record<string, unknown>;
 }
 
-// Transaction object
-interface TransactionObject {
-  from: string;
-  to?: string;
-  value?: string;
-  data?: string;
-  gas?: string;
-  gasPrice?: string;
-  nonce?: string;
+interface KeythingsProvider {
+  request<T = unknown>(args: RequestArguments): Promise<T>;
+  on(event: 'accountsChanged' | 'chainChanged' | 'message' | 'disconnect', listener: (...args: unknown[]) => void): void;
+  removeListener(
+    event: 'accountsChanged' | 'chainChanged' | 'message' | 'disconnect',
+    listener: (...args: unknown[]) => void,
+  ): void;
 }
 
-// Network configuration
-interface NetworkConfig {
+interface AddEthereumChainParameter {
   chainId: string;
   chainName: string;
   rpcUrls: string[];
@@ -444,7 +483,8 @@ interface NetworkConfig {
         <p>For local testing, you can use the Keythings Wallet development build:</p>
         <ol>
           <li>Clone the Keythings Wallet repository</li>
-          <li>Run <code>bun run dev</code> to start the development server</li>
+          <li>Install dependencies with <code>bun install</code> or <code>npm install</code></li>
+          <li>Run <code>bun run dev</code> (or <code>npm run dev</code>) to start the development server</li>
           <li>Load the unpacked extension in Chrome</li>
           <li>Set your dApp to development mode</li>
           <li>Test wallet interactions with your dApp</li>
