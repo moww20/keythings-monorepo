@@ -1,3 +1,5 @@
+import CodeBlock from "@/app/components/CodeBlock"
+
 export const metadata = {
   title: "API Reference — Keythings Wallet Docs",
   description: "Complete API reference for integrating with Keythings Wallet and the Keeta SDK.",
@@ -21,15 +23,20 @@ export default function ApiReferencePage() {
         <h2>Connection & Setup</h2>
 
         <h3>Check if Keythings Wallet is Available</h3>
-        <code className="language-javascript">{`// Check if Keythings Wallet is installed and available
+        <CodeBlock
+          language="javascript"
+          code={`// Check if Keythings Wallet is installed and available
 if (typeof window.keeta !== 'undefined') {
   console.log('Keythings Wallet is available');
 } else {
   console.log('Keythings Wallet not detected');
-}`}</code>
+}`}
+        />
 
         <h3>Request Connection</h3>
-        <code className="language-javascript">{`// Request to connect to Keythings Wallet
+        <CodeBlock
+          language="javascript"
+          code={`// Request to connect to Keythings Wallet
 try {
   const accounts = await window.keeta.request({
     method: 'eth_requestAccounts'
@@ -37,42 +44,57 @@ try {
   console.log('Connected accounts:', accounts);
 } catch (error) {
   console.error('Connection failed:', error);
-}`}</code>
+}`}
+        />
 
         <h2>Account Management</h2>
 
         <h3>Get Connected Accounts</h3>
-        <code className="language-javascript">{`// Get currently connected accounts
+        <CodeBlock
+          language="javascript"
+          code={`// Get currently connected accounts
 const accounts = await window.keeta.request({
   method: 'eth_accounts'
 });
-console.log('Connected accounts:', accounts);`}</code>
+console.log('Connected accounts:', accounts);`}
+        />
 
         <h3>Get Current Account</h3>
-        <code className="language-javascript">{`// Get the currently selected account
+        <CodeBlock
+          language="javascript"
+          code={`// Get the currently selected account
 const currentAccount = await window.keeta.request({
   method: 'eth_coinbase'
 });
-console.log('Current account:', currentAccount);`}</code>
+console.log('Current account:', currentAccount);`}
+        />
 
         <h2>Network Information</h2>
 
         <h3>Get Current Network</h3>
-        <code className="language-javascript">{`// Get current network information
+        <CodeBlock
+          language="javascript"
+          code={`// Get current network information
 const network = await window.keeta.request({
   method: 'net_version'
 });
-console.log('Current network ID:', network);`}</code>
+console.log('Current network ID:', network);`}
+        />
 
         <h3>Switch Network</h3>
-        <code className="language-javascript">{`// Switch to Keeta Mainnet
+        <CodeBlock
+          language="javascript"
+          code={`// Switch to Keeta Mainnet
 await window.keeta.request({
   method: 'wallet_switchEthereumChain',
   params: [{ chainId: '0x4d85' }] // 19845 in decimal
-});`}</code>
+});`}
+        />
 
         <h3>Add Custom Network</h3>
-        <code className="language-javascript">{`// Add a custom Keeta network
+        <CodeBlock
+          language="javascript"
+          code={`// Add a custom Keeta network
 await window.keeta.request({
   method: 'wallet_addEthereumChain',
   params: [{
@@ -86,12 +108,15 @@ await window.keeta.request({
     },
     blockExplorerUrls: ['https://testnet.explorer.keeta.network']
   }]
-});`}</code>
+});`}
+        />
 
         <h2>Balance & State</h2>
 
         <h3>Get Account Balance</h3>
-        <code className="language-javascript">{`// Get KEETA balance for an account
+        <CodeBlock
+          language="javascript"
+          code={`// Get KEETA balance for an account
 const balance = await window.keeta.request({
   method: 'eth_getBalance',
   params: ['0xAccountAddress', 'latest']
@@ -100,20 +125,26 @@ console.log('Balance (wei):', balance);
 
 // Convert to KEETA
 const balanceInKeeta = parseInt(balance) / Math.pow(10, 18);
-console.log('Balance (KEETA):', balanceInKeeta);`}</code>
+console.log('Balance (KEETA):', balanceInKeeta);`}
+        />
 
         <h3>Get All Account Balances</h3>
-        <code className="language-javascript">{`// Get balances for all tokens
+        <CodeBlock
+          language="javascript"
+          code={`// Get balances for all tokens
 const balances = await window.keeta.request({
   method: 'keeta_getAllBalances',
   params: ['0xAccountAddress']
 });
-console.log('Token balances:', balances);`}</code>
+console.log('Token balances:', balances);`}
+        />
 
         <h2>Transaction Management</h2>
 
         <h3>Send Transaction</h3>
-        <code className="language-javascript">{`// Send KEETA to another address
+        <CodeBlock
+          language="javascript"
+          code={`// Send KEETA to another address
 const txHash = await window.keeta.request({
   method: 'eth_sendTransaction',
   params: [{
@@ -123,10 +154,13 @@ const txHash = await window.keeta.request({
     gas: '0x5208' // 21000 gas
   }]
 });
-console.log('Transaction hash:', txHash);`}</code>
+console.log('Transaction hash:', txHash);`}
+        />
 
         <h3>Sign Transaction (No Broadcast)</h3>
-        <code className="language-javascript">{`// Sign a transaction without broadcasting
+        <CodeBlock
+          language="javascript"
+          code={`// Sign a transaction without broadcasting
 const signedTx = await window.keeta.request({
   method: 'eth_signTransaction',
   params: [{
@@ -137,10 +171,13 @@ const signedTx = await window.keeta.request({
     gasPrice: '0x4a817c800' // 20 gwei
   }]
 });
-console.log('Signed transaction:', signedTx);`}</code>
+console.log('Signed transaction:', signedTx);`}
+        />
 
         <h3>Estimate Gas</h3>
-        <code className="language-javascript">{`// Estimate gas for a transaction
+        <CodeBlock
+          language="javascript"
+          code={`// Estimate gas for a transaction
 const gasEstimate = await window.keeta.request({
   method: 'eth_estimateGas',
   params: [{
@@ -149,20 +186,26 @@ const gasEstimate = await window.keeta.request({
     value: '0x2386f26fc10000'
   }]
 });
-console.log('Estimated gas:', gasEstimate);`}</code>
+console.log('Estimated gas:', gasEstimate);`}
+        />
 
         <h2>Message Signing</h2>
 
         <h3>Personal Sign</h3>
-        <code className="language-javascript">{`// Sign a message with the user's private key
+        <CodeBlock
+          language="javascript"
+          code={`// Sign a message with the user's private key
 const signature = await window.keeta.request({
   method: 'personal_sign',
   params: ['Hello, Keeta!', '0xYourAccountAddress']
 });
-console.log('Signature:', signature);`}</code>
+console.log('Signature:', signature);`}
+        />
 
         <h3>Eth Sign (Structured Data)</h3>
-        <code className="language-javascript">{`// Sign structured data (EIP-712)
+        <CodeBlock
+          language="javascript"
+          code={`// Sign structured data (EIP-712)
 const typedData = {
   types: {
     EIP712Domain: [
@@ -191,12 +234,15 @@ const signature = await window.keeta.request({
   method: 'eth_signTypedData_v4',
   params: ['0xYourAccountAddress', typedData]
 });
-console.log('Typed signature:', signature);`}</code>
+console.log('Typed signature:', signature);`}
+        />
 
         <h2>Capabilities & Permissions</h2>
 
         <h3>Request Capabilities</h3>
-        <code className="language-javascript">{`// Request specific capabilities from the wallet
+        <CodeBlock
+          language="javascript"
+          code={`// Request specific capabilities from the wallet
 const capabilities = await window.keeta.request({
   method: 'keeta_requestCapabilities',
   params: [{
@@ -208,19 +254,25 @@ const capabilities = await window.keeta.request({
     ]
   }]
 });
-console.log('Granted capabilities:', capabilities);`}</code>
+console.log('Granted capabilities:', capabilities);`}
+        />
 
         <h3>Check Capabilities</h3>
-        <code className="language-javascript">{`// Check current capabilities for an origin
+        <CodeBlock
+          language="javascript"
+          code={`// Check current capabilities for an origin
 const currentCapabilities = await window.keeta.request({
   method: 'keeta_getCapabilities'
 });
-console.log('Current capabilities:', currentCapabilities);`}</code>
+console.log('Current capabilities:', currentCapabilities);`}
+        />
 
         <h2>Advanced Features</h2>
 
         <h3>Transaction Simulation</h3>
-        <code className="language-javascript">{`// Simulate a transaction before signing
+        <CodeBlock
+          language="javascript"
+          code={`// Simulate a transaction before signing
 const simulation = await window.keeta.request({
   method: 'keeta_simulateTransaction',
   params: [{
@@ -230,10 +282,13 @@ const simulation = await window.keeta.request({
     value: '0x0'
   }]
 });
-console.log('Simulation result:', simulation);`}</code>
+console.log('Simulation result:', simulation);`}
+        />
 
         <h3>Batch Requests</h3>
-        <code className="language-javascript">{`// Send multiple requests in a batch
+        <CodeBlock
+          language="javascript"
+          code={`// Send multiple requests in a batch
 const batchResults = await window.keeta.request({
   method: 'keeta_batch',
   params: [[
@@ -242,7 +297,8 @@ const batchResults = await window.keeta.request({
     { method: 'eth_getBalance', params: ['0xAccountAddress'] }
   ]]
 });
-console.log('Batch results:', batchResults);`}</code>
+console.log('Batch results:', batchResults);`}
+        />
 
         <h2>Error Handling</h2>
 
@@ -287,7 +343,9 @@ console.log('Batch results:', batchResults);`}</code>
         </div>
 
         <h3>Error Handling Example</h3>
-        <code className="language-javascript">{`try {
+        <CodeBlock
+          language="javascript"
+          code={`try {
   const result = await window.keeta.request({
     method: 'eth_sendTransaction',
     params: [transaction]
@@ -309,12 +367,15 @@ console.log('Batch results:', batchResults);`}</code>
     default:
       console.log('Unknown error:', error.message);
   }
-}`}</code>
+}`}
+        />
 
         <h2>Type Definitions</h2>
 
         <h3>TypeScript Interfaces</h3>
-        <code className="language-typescript">{`// Core Keeta Wallet API interface
+        <CodeBlock
+          language="typescript"
+          code={`// Core Keeta Wallet API interface
 interface KeetaWallet {
   request(args: {
     method: string;
@@ -347,7 +408,8 @@ interface NetworkConfig {
     decimals: number;
   };
   blockExplorerUrls?: string[];
-}`}</code>
+}`}
+        />
 
         <h2>Best Practices</h2>
 

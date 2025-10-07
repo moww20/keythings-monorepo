@@ -1,3 +1,5 @@
+import CodeBlock from "@/app/components/CodeBlock"
+
 export const metadata = {
   title: "Integration Guide — Keythings Wallet Docs",
   description: "How to integrate your dApp with Keythings Wallet.",
@@ -12,26 +14,38 @@ export default function IntegrationGuidePage() {
         <p><em>Use this guide to connect your dApp to Keythings Wallet with minimal setup.</em></p>
 
         <h2>Detect Wallet</h2>
-        <code className="language-javascript">{`if (typeof window.keeta === 'undefined') {
+        <CodeBlock
+          language="javascript"
+          code={`if (typeof window.keeta === 'undefined') {
   throw new Error('Keythings Wallet not found');
-}`}</code>
+}`}
+        />
 
         <h2>Request Accounts</h2>
-        <code className="language-javascript">{`const accounts = await window.keeta.request({ method: 'eth_requestAccounts' });`}</code>
+        <CodeBlock
+          language="javascript"
+          code={`const accounts = await window.keeta.request({ method: 'eth_requestAccounts' });`}
+        />
 
         <h2>Listen for Changes</h2>
-        <code className="language-javascript">{`window.keeta.on('accountsChanged', (accounts) => {
+        <CodeBlock
+          language="javascript"
+          code={`window.keeta.on('accountsChanged', (accounts) => {
   // handle account switch
 });
 window.keeta.on('chainChanged', (chainId) => {
   // handle network switched
-});`}</code>
+});`}
+        />
 
         <h2>Send Transaction</h2>
-        <code className="language-javascript">{`await window.keeta.request({
+        <CodeBlock
+          language="javascript"
+          code={`await window.keeta.request({
   method: 'eth_sendTransaction',
   params: [{ from, to, value }]
-});`}</code>
+});`}
+        />
 
         <h2>Best Practices</h2>
         <ul>
