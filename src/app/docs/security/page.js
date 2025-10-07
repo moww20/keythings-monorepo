@@ -1,6 +1,9 @@
+import CodeBlock from "@/app/components/CodeBlock"
+
 export const metadata = {
   title: "Security — Keythings Wallet Docs",
-  description: "Comprehensive security overview and best practices for Keythings Wallet users and developers.",
+  description:
+    "Comprehensive security overview, lifecycle documentation, and audit guidance for the Keythings Extension Wallet.",
   alternates: { canonical: "/docs/security" },
 }
 
@@ -9,369 +12,229 @@ export default function SecurityPage() {
     <div className="rounded-2xl p-6">
       <h1 className="text-2xl font-semibold tracking-tight mb-3">Security Overview</h1>
       <div className="docs-prose">
-        <p><em>Security-first design with industry-leading cryptographic implementations and user protection mechanisms.</em></p>
+        <p>
+          <em>
+            Security-first design backed by transparent engineering practices. This page documents the controls that ship
+            with Keythings Wallet and how to audit them effectively.
+          </em>
+        </p>
 
         <h2>Security Philosophy</h2>
         <p>
-          Keythings Wallet is built with security as the foundational principle. Every feature, implementation,
-          and interaction is designed to protect your digital assets while maintaining the highest standards
-          of user experience and privacy.
+          Keythings Wallet is architected as a non-custodial wallet. Secrets never leave the user&rsquo;s device, operations are
+          explicit, and every security-relevant subsystem is covered by automated tests. The following sections capture the
+          protections in place today and highlight where to inspect the implementation inside the
+          <code>keythings-extension-wallet</code> codebase.
         </p>
 
-        <h2>Core Security Features</h2>
-
-        <h3>🔐 Non-Custodial Architecture</h3>
+        <h2>Key Lifecycle</h2>
         <p>
-          Your private keys never leave your device. Keythings Wallet operates as a true non-custodial wallet,
-          meaning you maintain complete control and ownership of your cryptographic keys and digital assets.
+          Understanding how secrets are generated, stored, and destroyed is central to any audit. The wallet&rsquo;s key lifecycle
+          follows the sequence below.
         </p>
+        <ol>
+          <li><strong>Generation:</strong> A 256-bit entropy buffer produced via <code>crypto.getRandomValues</code> is mapped to
+            a BIP-39 mnemonic. Optional imports validate checksum and wordlist membership.</li>
+          <li><strong>Derivation:</strong> User-provided passwords are stretched with Argon2id (64&nbsp;MiB memory, 6 iterations,
+            parallelism 2) to yield an encryption key.</li>
+          <li><strong>Encryption at Rest:</strong> The mnemonic/seed is wrapped with AES-GCM (96-bit nonce, 256-bit key) and
+            persisted to extension storage alongside metadata (salt, iterations, version).</li>
+          <li><strong>Unlock:</strong> On unlock, the encrypted blob is decrypted inside the service worker and loaded into
+            volatile memory that is cleared on lock, timeout, or process exit.</li>
+          <li><strong>Derivation for Use:</strong> Child keys follow hardened derivation paths (BIP-32/BIP-44) scoped to the active
+            network.</li>
+          <li><strong>Lock/Destroy:</strong> Secrets are wiped from memory using explicit zeroisation before the vault is
+            considered locked.</li>
+        </ol>
+        <CodeBlock
+          language="ts"
+          code={`// Key lifecycle (conceptual excerpt)
+async function createVault(password: string, mnemonic = generateMnemonic(256)) {
+  const salt = crypto.getRandomValues(new Uint8Array(16))
+  const masterKey = await argon2id(password, { salt, memoryMiB: 64, iterations: 6, parallelism: 2 })
+  const encrypted = await aesGcmEncrypt(masterKey, mnemonic)
+  await storage.set({ encrypted, salt, version: VAULT_VERSION })
+  return unlock(password)
+}
+
+async function unlock(password: string) {
+  const vault = await storage.get()
+  const masterKey = await argon2id(password, vault.kdf)
+  const mnemonic = await aesGcmDecrypt(masterKey, vault.encrypted)
+  memory.load(bip39.mnemonicToSeed(mnemonic))
+}
+
+function lock() {
+  memory.zero() // explicit zeroisation of seeds & derived keys
+}`}
+        />
+        <p>
+          <strong>Audit checklist:</strong> verify Argon2id parameters, nonce uniqueness, mnemonic checksum validation, and
+          zeroisation routines. Confirm unit tests fail on parameter regression.
+        </p>
+
+        <h2>Defense-in-Depth Controls</h2>
+
+        <h3>Cryptography</h3>
         <ul>
-          <li>Private keys generated and stored locally in your browser extension</li>
-          <li>Seeds stored only in volatile service worker memory</li>
-          <li>No server-side key storage or backup capabilities</li>
-          <li>You control your keys, your crypto, your responsibility</li>
+          <li><strong>AES-GCM sealed storage:</strong> Encrypted vault payloads include authentication tags to detect tampering.</li>
+          <li><strong>Argon2id key stretching:</strong> Memory-hard derivation mitigates GPU/ASIC brute force attacks.</li>
+          <li><strong>HD Wallet derivation:</strong> Hardened derivation paths isolate accounts; account discovery obeys
+            BIP-44 gap limits.</li>
+          <li><strong>Entropy hygiene:</strong> All randomness is sourced from the Web Crypto API; no deterministic PRNGs are used.</li>
         </ul>
 
-        <h3>🛡️ Advanced Cryptography</h3>
+        <h3>Capability-Based Authorization</h3>
         <p>
-          Industry-standard cryptographic implementations ensure your data remains secure against sophisticated attacks:
+          The wallet mediates dApp access through per-origin capability grants. Requests enumerate scopes (e.g.,
+          <code>eth_accounts</code>, <code>keeta_signTypedData</code>) and receive expiring tokens tied to both origin and account.
+          Revocation propagates instantly to content scripts and inpage contexts.
         </p>
+        <CodeBlock
+          language="ts"
+          code={`// Capability grant outline
+const capability = {
+  origin,
+  scopes,
+  issuedAt: Date.now(),
+  expiresAt: Date.now() + resolveTtl(scopes),
+}
+registry.set(origin, capability)
+
+if (!rateLimiter.allow(origin)) {
+  throw new Error('RATE_LIMITED')
+}`}
+        />
+
+        <h3>Context Isolation</h3>
         <ul>
-          <li><strong>AES-GCM</strong>: Authenticated encryption for stored secrets</li>
-          <li><strong>Argon2id</strong>: Memory-hard key derivation with secure parameters (64 MiB, 6 iterations)</li>
-          <li><strong>WebCrypto API</strong>: Secure random number generation and cryptographic operations</li>
-          <li><strong>Secure memory management</strong>: Explicit zeroing of sensitive data</li>
+          <li>Content scripts validate <code>sender.origin</code>, enforce top-level frame execution, and use structured cloning to
+            avoid prototype pollution.</li>
+          <li>Inpage provider messages pass through schema validation (Zod) before reaching the service worker.</li>
+          <li>Service worker ports authenticate the extension ID to mitigate spoofed messages.</li>
         </ul>
 
-        <h3>🔑 Capability-Based Authorization</h3>
-        <p>
-          OAuth2-like capability system provides granular permissions and origin isolation:
-        </p>
+        <h3>Runtime Guardrails</h3>
         <ul>
-          <li>Per-origin, per-capability access control</li>
-          <li>Automatic token expiration and refresh mechanisms</li>
-          <li>Secure token generation using crypto.randomUUID()</li>
-          <li>Multi-layer permission validation</li>
+          <li><strong>Approval workflow:</strong> Each signing or transaction request requires explicit confirmation via modal with
+            human-readable payloads and risk scoring.</li>
+          <li><strong>Session hygiene:</strong> Auto-lock defaults to 5 minutes of inactivity; unlock attempts incur exponential
+            backoff with progressive delays.</li>
+          <li><strong>Input validation:</strong> Addresses, chain IDs, amounts, and message lengths undergo strict validation before
+            being forwarded to signing routines.</li>
+          <li><strong>Rate limiting:</strong> Origin-scoped token buckets cap JSON-RPC throughput and pending approval counts.</li>
         </ul>
 
-        <h3>🌐 Origin Isolation</h3>
-        <p>
-          Strict isolation between extension and web page contexts prevents cross-site attacks:
-        </p>
+        <h3>Network Security</h3>
         <ul>
-          <li>Content script properly isolated from page JavaScript</li>
-          <li>Same-origin message validation</li>
-          <li>Extension ID verification for all communications</li>
-          <li>Top-level frame enforcement</li>
+          <li>HTTPS-only RPC endpoints with certificate pinning/allowlisting per network configuration.</li>
+          <li>WebSocket subscriptions verify TLS state and origin allowlists.</li>
+          <li>Build pipelines lint manifests to ensure no extra host permissions are shipped.</li>
         </ul>
 
-        <h2>User Protection Mechanisms</h2>
-
-        <h3>Approval Workflows</h3>
+        <h2>Audit Readiness</h2>
         <p>
-          Every sensitive operation requires explicit user confirmation:
+          The documentation below is intended to make third-party audits efficient once the repository is open sourced.
         </p>
         <ul>
-          <li>Transaction signing requests with clear risk assessment</li>
-          <li>Origin display for transparency</li>
-          <li>Timeout protection (30 seconds default)</li>
-          <li>Progressive security delays on failed attempts</li>
+          <li><strong>Threat model:</strong> Review the architecture and threat model documents under <code>docs/</code> in the wallet
+            repository. They outline trust boundaries, attacker assumptions, and mitigations.</li>
+          <li><strong>Test evidence:</strong> Automated suites cover crypto helpers, permission guards, and session policies. Run
+            <code>pnpm test</code> (or <code>pnpm test --filter extension</code>) to view coverage reports.</li>
+          <li><strong>Static analysis:</strong> ESLint security rules and TypeScript strict mode execute via <code>pnpm lint</code>.
+            Review CI logs for enforcement details.</li>
+          <li><strong>Configuration review:</strong> Inspect Manifest V3 permissions, CSP, and host allowlists in the build output
+            directory before releasing.</li>
+          <li><strong>Logging:</strong> Sensitive data is redacted before writing to diagnostic logs; redaction helpers include unit
+            tests that fail if new fields bypass scrubbing.</li>
         </ul>
 
-        <h3>Session Management</h3>
+        <h2>Compliance &amp; Standards Alignment</h2>
         <p>
-          Secure session handling with automatic protection:
+          Keythings Wallet targets alignment with industry standards to simplify organisational governance.
         </p>
         <ul>
-          <li>Auto-lock after inactivity (5 minutes default)</li>
-          <li>Progressive delays on unlock attempts (exponential backoff)</li>
-          <li>Strong password requirements (12+ characters, complexity)</li>
-          <li>Secure logout with memory cleanup</li>
+          <li><strong>OWASP MASVS:</strong> Architecture (MASVS-ARCH), authentication (MASVS-AUTH), and cryptography
+            (MASVS-CRYPTO) requirements are mapped to wallet controls such as isolated execution contexts, unlock gating, and
+            audited encryption routines.</li>
+          <li><strong>OWASP ASVS:</strong> Level 2 controls are used as a benchmark for secure storage (V7), communication (V10), and
+            error handling (V9). Documentation annotates which modules satisfy each control.</li>
+          <li><strong>SOC 2 readiness:</strong> CI/CD hardening, dependency review, and access controls support eventual SOC 2 Type
+            1/Type 2 assessments.</li>
+          <li><strong>Privacy obligations:</strong> The wallet collects no personal data or telemetry by default, aligning with GDPR
+            data minimisation principles.</li>
         </ul>
 
-        <h3>Input Validation</h3>
-        <p>
-          Comprehensive validation prevents malicious inputs:
-        </p>
-        <ul>
-          <li>Address format validation (hex, checksum)</li>
-          <li>Amount bounds checking</li>
-          <li>Message length limits</li>
-          <li>Transaction data validation</li>
-        </ul>
-
-        <h2>Developer Security</h2>
-
-        <h3>Rate Limiting</h3>
-        <p>
-          Protection against denial-of-service and abuse:
-        </p>
-        <ul>
-          <li>API request rate limiting (100 requests/minute)</li>
-          <li>Balance query throttling (1/second)</li>
-          <li>Pending request queue limits (10 max)</li>
-          <li>Progressive backoff for violations</li>
-        </ul>
-
-        <h3>Error Handling</h3>
-        <p>
-          Secure error handling prevents information leakage:
-        </p>
-        <ul>
-          <li>No sensitive data in error messages</li>
-          <li>Secure logger with data redaction</li>
-          <li>Proper timeout handling for all operations</li>
-          <li>Error recovery mechanisms</li>
-        </ul>
-
-        <h2>Network Security</h2>
-
-        <h3>HTTPS-Only</h3>
-        <p>
-          All communications use secure protocols:
-        </p>
-        <ul>
-          <li>HTTPS-only for production environments</li>
-          <li>Certificate pinning for RPC endpoints</li>
-          <li>Secure WebSocket connections</li>
-          <li>Origin allowlisting for development</li>
-        </ul>
-
-        <h2>Security Best Practices</h2>
+        <h2>User &amp; Developer Best Practices</h2>
 
         <h3>For Users</h3>
-
         <h4>Seed Phrase Security</h4>
         <ul>
-          <li>Never share your seed phrase with anyone</li>
-          <li>Store offline in a secure location (not on digital devices)</li>
-          <li>Use a hardware wallet for large amounts</li>
-          <li>Test recovery on a separate device first</li>
+          <li>Never share your seed phrase with anyone.</li>
+          <li>Store mnemonics offline in tamper-evident, redundant locations.</li>
+          <li>Perform recovery drills on a secondary device in a safe environment.</li>
+          <li>Use hardware signing for large balances or institutional custody requirements.</li>
         </ul>
 
-        <h4>Password Security</h4>
+        <h4>Password &amp; Biometric Hygiene</h4>
         <ul>
-          <li>Use strong, unique passwords (12+ characters)</li>
-          <li>Enable biometric authentication when available</li>
-          <li>Set auto-lock timeout appropriately</li>
-          <li>Never reuse passwords across services</li>
+          <li>Use strong, unique passwords (12+ characters, varied character classes).</li>
+          <li>Enable biometric unlock where available.</li>
+          <li>Configure auto-lock timers to match personal or organisational risk tolerance.</li>
+          <li>Protect password managers with MFA.</li>
         </ul>
 
         <h4>Browser Security</h4>
         <ul>
-          <li>Keep browser and extensions updated</li>
-          <li>Use HTTPS-only mode</li>
-          <li>Review connected dApps regularly</li>
-          <li>Revoke unused permissions</li>
+          <li>Keep the browser and Keythings extension patched.</li>
+          <li>Only interact with trusted networks and verified URLs.</li>
+          <li>Beware of screen-sharing or remote-assistance attacks during signing.</li>
         </ul>
 
         <h3>For Developers</h3>
-
-        <h4>dApp Integration</h4>
+        <h4>Secure Integration</h4>
         <ul>
-          <li>Always validate inputs before sending to wallet</li>
-          <li>Request minimum necessary permissions</li>
-          <li>Handle errors gracefully with user feedback</li>
-          <li>Use HTTPS for all communications</li>
+          <li>Validate all inputs before sending requests to <code>window.keeta</code>.</li>
+          <li>Display complete transaction payloads to users to maintain transparency.</li>
+          <li>Leverage <code>keeta_simulateTransaction</code> to preflight complex interactions.</li>
+          <li>Keep dependencies patched and monitor upstream advisories.</li>
         </ul>
 
-        <h4>Testing Security</h4>
+        <h4>Security Reviews</h4>
         <ul>
-          <li>Test with both mainnet and testnet</li>
-          <li>Validate error handling for edge cases</li>
-          <li>Test rate limiting and abuse scenarios</li>
-          <li>Regular security audits of integrations</li>
+          <li>Perform peer review on wallet integration code paths.</li>
+          <li>Use static analysis tooling and run <code>pnpm lint</code> before release.</li>
+          <li>Document assumptions and edge cases in the integration runbooks.</li>
+          <li>Engage with the Keythings security team for coordinated audits.</li>
         </ul>
 
-        <h2>Security Monitoring</h2>
+        <h2>Incident Response</h2>
 
-        <h3>Audit Trail</h3>
-        <p>
-          Comprehensive logging for security analysis:
-        </p>
+        <h3>Security Contact</h3>
+        <p>If you discover a potential security issue, contact the security team:</p>
         <ul>
-          <li>Origin tracking (approvedAt, lastUsed)</li>
-          <li>Request logging with sensitive data redaction</li>
-          <li>Transaction risk scoring</li>
-          <li>Approval/rejection tracking</li>
-        </ul>
-
-        <h3>Incident Response</h3>
-        <p>
-          Prepared response procedures for security incidents:
-        </p>
-        <ul>
-          <li>Immediate patch deployment for critical issues</li>
-          <li>User notification for affected users</li>
-          <li>Coordinated disclosure with security community</li>
-          <li>Post-incident analysis and improvements</li>
-        </ul>
-
-        <h2>Compliance & Standards</h2>
-
-        <div className="overflow-x-auto">
-          <table className="w-full border-collapse border border-gray-300">
-            <thead>
-              <tr className="bg-gray-100">
-                <th className="border border-gray-300 px-4 py-2 text-left">Standard</th>
-                <th className="border border-gray-300 px-4 py-2 text-left">Compliance</th>
-                <th className="border border-gray-300 px-4 py-2 text-left">Notes</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td className="border border-gray-300 px-4 py-2">OWASP Top 10</td>
-                <td className="border border-gray-300 px-4 py-2">✅ Good</td>
-                <td className="border border-gray-300 px-4 py-2">No major vulnerabilities identified</td>
-              </tr>
-              <tr>
-                <td className="border border-gray-300 px-4 py-2">OWASP ASVS Level 2</td>
-                <td className="border border-gray-300 px-4 py-2">✅ Good</td>
-                <td className="border border-gray-300 px-4 py-2">Most requirements met</td>
-              </tr>
-              <tr>
-                <td className="border border-gray-300 px-4 py-2">NIST SP 800-63B</td>
-                <td className="border border-gray-300 px-4 py-2">✅ Good</td>
-                <td className="border border-gray-300 px-4 py-2">Password & auth compliant</td>
-              </tr>
-              <tr>
-                <td className="border border-gray-300 px-4 py-2">Web Extension Security</td>
-                <td className="border border-gray-300 px-4 py-2">✅ Excellent</td>
-                <td className="border border-gray-300 px-4 py-2">MV3 best practices followed</td>
-              </tr>
-              <tr>
-                <td className="border border-gray-300 px-4 py-2">Chrome Store Policies</td>
-                <td className="border border-gray-300 px-4 py-2">✅ Good</td>
-                <td className="border border-gray-300 px-4 py-2">No violations identified</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-
-        <h2>Security Features Comparison</h2>
-
-        <div className="overflow-x-auto">
-          <table className="w-full border-collapse border border-gray-300">
-            <thead>
-              <tr className="bg-gray-100">
-                <th className="border border-gray-300 px-4 py-2 text-left">Feature</th>
-                <th className="border border-gray-300 px-4 py-2 text-left">Keythings Wallet</th>
-                <th className="border border-gray-300 px-4 py-2 text-left">MetaMask</th>
-                <th className="border border-gray-300 px-4 py-2 text-left">Phantom</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td className="border border-gray-300 px-4 py-2">Seed Security</td>
-                <td className="border border-gray-300 px-4 py-2">✅ RAM-only</td>
-                <td className="border border-gray-300 px-4 py-2">✅ Encrypted</td>
-                <td className="border border-gray-300 px-4 py-2">✅ Encrypted</td>
-              </tr>
-              <tr>
-                <td className="border border-gray-300 px-4 py-2">Capability System</td>
-                <td className="border border-gray-300 px-4 py-2">✅ Advanced</td>
-                <td className="border border-gray-300 px-4 py-2">⚠️ Basic</td>
-                <td className="border border-gray-300 px-4 py-2">⚠️ Basic</td>
-              </tr>
-              <tr>
-                <td className="border border-gray-300 px-4 py-2">Input Validation</td>
-                <td className="border border-gray-300 px-4 py-2">✅ Comprehensive</td>
-                <td className="border border-gray-300 px-4 py-2">✅ Good</td>
-                <td className="border border-gray-300 px-4 py-2">✅ Good</td>
-              </tr>
-              <tr>
-                <td className="border border-gray-300 px-4 py-2">Rate Limiting</td>
-                <td className="border border-gray-300 px-4 py-2">✅ Advanced</td>
-                <td className="border border-gray-300 px-4 py-2">✅ Good</td>
-                <td className="border border-gray-300 px-4 py-2">⚠️ Limited</td>
-              </tr>
-              <tr>
-                <td className="border border-gray-300 px-4 py-2">Origin Isolation</td>
-                <td className="border border-gray-300 px-4 py-2">✅ Strict</td>
-                <td className="border border-gray-300 px-4 py-2">✅ Good</td>
-                <td className="border border-gray-300 px-4 py-2">✅ Good</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-
-        <h2>Common Attack Vectors (Mitigated)</h2>
-
-        <h3>Cross-Site Scripting (XSS)</h3>
-        <p>
-          <strong>Mitigation:</strong> Strict content script isolation and input validation prevent XSS attacks.
-        </p>
-
-        <h3>Cross-Site Request Forgery (CSRF)</h3>
-        <p>
-          <strong>Mitigation:</strong> Origin validation and capability tokens prevent unauthorized requests.
-        </p>
-
-        <h3>Phishing Attacks</h3>
-        <p>
-          <strong>Mitigation:</strong> Origin display, user approval workflows, and domain verification.
-        </p>
-
-        <h3>Brute Force Attacks</h3>
-        <p>
-          <strong>Mitigation:</strong> Progressive delays and secure password requirements.
-        </p>
-
-        <h3>Session Hijacking</h3>
-        <p>
-          <strong>Mitigation:</strong> Extension-only storage and secure session management.
-        </p>
-
-        <h2>Reporting Security Issues</h2>
-
-        <h3>For Users</h3>
-        <p>
-          If you discover a security issue, please report it responsibly:
-        </p>
-        <ul>
-          <li><strong>GitHub Issues:</strong> Create a security report in the repository</li>
           <li><strong>Email:</strong> security@keeta.network</li>
-          <li><strong>Discord:</strong> Message a maintainer in the official server</li>
+          <li><strong>PGP:</strong> Public key fingerprint published in <code>SECURITY.md</code> (rotate annually).</li>
+          <li><strong>Response target:</strong> Initial acknowledgment within 24 hours, mitigation updates within 72 hours.</li>
         </ul>
 
-        <h3>For Developers</h3>
-        <p>
-          Security researchers and developers can contribute to security:
-        </p>
+        <h3>Disclosure Policy</h3>
         <ul>
-          <li>Submit security improvements via pull requests</li>
-          <li>Report vulnerabilities through proper channels</li>
-          <li>Participate in security audits and reviews</li>
-          <li>Join the security discussion in the community</li>
+          <li>Responsible disclosure is encouraged; coordinated releases minimise end-user risk.</li>
+          <li>Severity scoring follows CVSS v3.1 and drives remediation SLAs.</li>
+          <li>Researchers are credited in advisories and eligible for the bug bounty programme.</li>
+          <li>Impacted users receive notification via in-app banners, RSS feeds, and mailing lists.</li>
         </ul>
 
-        <h2>Security Updates</h2>
-
-        <h3>Automatic Updates</h3>
+        <h2>Continuous Improvement</h2>
         <p>
-          Keythings Wallet automatically updates to ensure you have the latest security patches:
+          Security is never &ldquo;done&rdquo;. Regression tests, dependency audits, and manual reviews run before each release cycle.
+          The team tracks industry developments (OWASP, NIST, browser security updates) and iterates on mitigations accordingly.
         </p>
-        <ul>
-          <li>Chrome Web Store updates push automatically</li>
-          <li>Critical security patches deploy within 24 hours</li>
-          <li>Users notified of major security updates</li>
-          <li>Gradual rollout to minimize disruption</li>
-        </ul>
-
-        <h3>Manual Updates</h3>
-        <p>
-          For development or custom installations:
-        </p>
-        <ul>
-          <li>Regularly update from the official repository</li>
-          <li>Review changelogs for security improvements</li>
-          <li>Test updates in a safe environment first</li>
-          <li>Backup your seed phrase before updating</li>
-        </ul>
 
         <blockquote>
-          Security is not a feature—it's the foundation. Keythings Wallet is built with security-first
-          principles to protect your digital sovereignty in the decentralized economy.
+          Maintain vigilance, keep the extension updated, and leverage the documented controls when performing audits or building
+          on top of Keythings Wallet.
         </blockquote>
       </div>
     </div>
