@@ -124,7 +124,7 @@ body {
 
 /* Docs content width + typography */
 .docs-prose {
-  max-width: min(100%, 58rem);
+  max-width: min(100%, clamp(58rem, 80vw, 90rem));
   line-height: 1.7;
 }
 .docs-prose .code-block {
@@ -302,11 +302,27 @@ html[data-theme='light'] .search-item:hover { background: rgba(0,0,0,0.06); }
 html[data-theme='light'] .search-item.is-active { background: rgba(0,0,0,0.10); }
 
 /* TOC hover/active states */
-.toc-item { background: transparent; color: var(--color-foreground); transition: background-color 120ms ease; }
-.toc-item:hover { background: rgba(255,255,255,0.08); }
-html[data-theme='light'] .toc-item:hover { background: rgba(0,0,0,0.06); }
-.toc-item.is-active { background: rgba(255,255,255,0.12); }
-html[data-theme='light'] .toc-item.is-active { background: rgba(0,0,0,0.10); }
+.toc-item { 
+  background: transparent; 
+  color: var(--color-foreground); 
+  transition: all 150ms ease; 
+  position: relative;
+}
+.toc-item:hover { 
+  background: rgba(255,255,255,0.05); 
+  transform: translateX(2px);
+}
+html[data-theme='light'] .toc-item:hover { 
+  background: rgba(0,0,0,0.06); 
+}
+.toc-item.is-active { 
+  background: rgba(255,255,255,0.10); 
+  color: var(--color-foreground);
+  font-weight: 500;
+}
+html[data-theme='light'] .toc-item.is-active { 
+  background: rgba(0,0,0,0.10); 
+}
 
 /* Force-dark wrapper for demo cards so they remain readable in light mode */
 .force-dark {

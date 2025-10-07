@@ -12,26 +12,20 @@ This repository contains the marketing and product documentation site for **Keyt
 
 ## Prerequisites
 
-- Node.js 20 or later (18+ should work, but 20 LTS is recommended for Next.js 15).
-- Optionally, [Bun](https://bun.sh) 1.1+ for faster installs and script execution. Any package manager that can run `next` scripts (npm, pnpm, yarn) will work.
+- [Bun](https://bun.sh) 1.1+ (recommended for faster installs and script execution)
+- Node.js 20 or later (18+ should work, but 20 LTS is recommended for Next.js 15)
 
 ## Installation
 
-Install dependencies with your preferred package manager. The project includes a `bun.lock` file, so Bun users can simply run:
+Install dependencies with Bun:
 
 ```bash
 bun install
 ```
 
-If you are using npm:
-
-```bash
-npm install
-```
-
 ## Available scripts
 
-All scripts are defined in `package.json` and can be executed with either `bun run <script>` or `npm run <script>`.
+All scripts are defined in `package.json` and can be executed with `bun run <script>`.
 
 | Script | Description |
 | --- | --- |
@@ -40,16 +34,10 @@ All scripts are defined in `package.json` and can be executed with either `bun r
 | `start` | Serves the previously built production assets. |
 | `lint` | Runs ESLint using the Next.js configuration. |
 
-Example using Bun:
+Example:
 
 ```bash
 bun run dev
-```
-
-Example using npm:
-
-```bash
-npm run dev
 ```
 
 ## Project structure
@@ -85,14 +73,10 @@ Theme tokens and global utilities live in `src/app/globals.css`. The `ThemeToggl
 1. Build the production bundle:
    ```bash
    bun run build
-   # or
-   npm run build
    ```
 2. Serve the output locally to verify:
    ```bash
    bun run start
-   # or
-   npm run start
    ```
 3. Deploy the `.next` production build to your hosting provider (e.g., Vercel, Netlify, or any platform that supports Next.js 15).
 

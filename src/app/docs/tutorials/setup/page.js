@@ -1,6 +1,6 @@
 export const metadata = {
-  title: "Setup Tutorial — Twatter.Army Docs",
-  description: "Complete setup guide for Twatter.Army including wallet integration and account creation.",
+  title: "Setup Tutorial — Keythings Wallet Docs",
+  description: "Complete setup guide for Keythings Wallet including installation and configuration.",
   alternates: { canonical: "/docs/tutorials/setup" },
 }
 

@@ -1,6 +1,6 @@
 export const metadata = {
-  title: "Posting Tutorial — Twatter.Army Docs",
-  description: "Master content creation on Twatter.Army with posts, media uploads, and engagement strategies.",
+  title: "Posting Tutorial — Keythings Wallet Docs",
+  description: "Master content creation on Keythings Wallet with posts, media uploads, and engagement strategies.",
   alternates: { canonical: "/docs/tutorials/posting" },
 }
 

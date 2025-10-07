@@ -15,11 +15,9 @@ export default function ApiReferencePage() {
 
         <h2>Overview</h2>
         <p>
-          Keythings Wallet exposes an{' '}
-          <code>EIP-1193</code>
-          -compatible provider through the <code>window.keythings</code> global object. It mirrors the behaviour of
-          <code>window.ethereum</code> while adding Keythings-specific polish like network presets and hardened
-          permission flows.
+          Keythings Wallet exposes a Keeta-compatible provider through the <code>window.keeta</code> global object. 
+          It provides native Keeta Network integration with secure capability-based permissions and 
+          transaction simulation features.
         </p>
 
         <h2>Connection &amp; Setup</h2>
@@ -27,7 +25,7 @@ export default function ApiReferencePage() {
         <h3>Check if Keythings Wallet is Available</h3>
         <CodeBlock
           language="javascript"
-          code={`const provider = window.keythings ?? window.ethereum;
+          code={`const provider = window.keeta;
 
 if (!provider) {
   console.error('Keythings Wallet not detected');
@@ -39,13 +37,10 @@ if (!provider) {
         <h3>Request Connection</h3>
         <CodeBlock
           language="javascript"
-          code={`const provider = window.keythings ?? window.ethereum;
+          code={`const provider = window.keeta;
 
 try {
-  const accounts = await provider.request({
-    method: 'eth_requestAccounts',
-  });
-
+  const accounts = await provider.requestAccounts();
   console.log('Connected account:', accounts[0]);
 } catch (error) {
   console.error('Connection failed:', error);
@@ -57,23 +52,19 @@ try {
         <h3>Get Connected Accounts</h3>
         <CodeBlock
           language="javascript"
-          code={`const provider = window.keythings ?? window.ethereum;
+          code={`const provider = window.keeta;
 
-const accounts = await provider.request({
-  method: 'eth_accounts',
-});
-
+const accounts = await provider.getAccounts();
 console.log('Connected accounts:', accounts);`}
         />
 
         <h3>Get Primary Account</h3>
         <CodeBlock
           language="javascript"
-          code={`const provider = window.keythings ?? window.ethereum;
+          code={`const provider = window.keeta;
 
-const [primaryAccount] = await provider.request({
-  method: 'eth_accounts',
-});
+const accounts = await provider.getAccounts();
+const primaryAccount = accounts[0];
 
 if (primaryAccount) {
   console.log('Primary account:', primaryAccount);
@@ -85,45 +76,36 @@ if (primaryAccount) {
         <h3>Get Current Network</h3>
         <CodeBlock
           language="javascript"
-          code={`const provider = window.keythings ?? window.ethereum;
+          code={`const provider = window.keeta;
 
-const chainId = await provider.request({
-  method: 'eth_chainId',
-});
-
-console.log('Connected chain ID:', chainId);`}
+const network = await provider.getNetwork();
+console.log('Connected network:', network.name);
+console.log('Chain ID:', network.chainId);`}
         />
 
         <h3>Switch Network</h3>
         <CodeBlock
           language="javascript"
-          code={`const provider = window.keythings ?? window.ethereum;
+          code={`const provider = window.keeta;
 
-await provider.request({
-  method: 'wallet_switchEthereumChain',
-  params: [{ chainId: '0x4d85' }], // 19845 in decimal
-});`}
+// Switch to testnet
+await provider.switchNetwork('test');
+
+// Switch to mainnet
+await provider.switchNetwork('main');`}
         />
 
-        <h3>Add Custom Network</h3>
+        <h3>Network Information</h3>
         <CodeBlock
           language="javascript"
-          code={`const provider = window.keythings ?? window.ethereum;
+          code={`const provider = window.keeta;
 
-await provider.request({
-  method: 'wallet_addEthereumChain',
-  params: [{
-    chainId: '0x4d86', // 19846 in hex
-    chainName: 'Keythings Testnet',
-    rpcUrls: ['https://rpc.testnet.keythings.example'],
-    nativeCurrency: {
-      name: 'Test KEY',
-      symbol: 'tKEY',
-      decimals: 18,
-    },
-    blockExplorerUrls: ['https://explorer.testnet.keythings.example'],
-  }],
-});`}
+// Get current network details
+const network = await provider.getNetwork();
+console.log('Network name:', network.name);
+console.log('RPC URL:', network.rpcUrl);
+console.log('Block explorer:', network.blockExplorerUrl);
+console.log('Chain ID:', network.chainId);`}
         />
 
         <h2>Balance &amp; State</h2>
@@ -131,34 +113,32 @@ await provider.request({
         <h3>Get Account Balance</h3>
         <CodeBlock
           language="javascript"
-          code={`const provider = window.keythings ?? window.ethereum;
-const [account] = await provider.request({ method: 'eth_requestAccounts' });
+          code={`const provider = window.keeta;
+const accounts = await provider.getAccounts();
+const account = accounts[0];
 
-const balanceHex = await provider.request({
-  method: 'eth_getBalance',
-  params: [account, 'latest'],
-});
+// Get balance for specific account
+const balance = await provider.getBalance(account);
+console.log('Account balance:', balance);
 
-const balanceInEth = Number.parseInt(balanceHex, 16) / 1e18;
-console.log('Balance (ETH):', balanceInEth);`}
+// Get all token balances
+const allBalances = await provider.getAllBalances();
+console.log('All balances:', allBalances);`}
         />
 
-        <h3>Watch an ERC-20 Asset</h3>
+        <h3>Token Management</h3>
         <CodeBlock
           language="javascript"
-          code={`const provider = window.keythings ?? window.ethereum;
+          code={`const provider = window.keeta;
 
-await provider.request({
-  method: 'wallet_watchAsset',
-  params: {
-    type: 'ERC20',
-    options: {
-      address: '0xTokenAddress',
-      symbol: 'TOK',
-      decimals: 18,
-    },
-  },
-});`}
+// Get all token balances for the connected account
+const allBalances = await provider.getAllBalances();
+console.log('Token balances:', allBalances);
+
+// Each balance entry contains:
+// - token: token address/identifier
+// - balance: current balance amount
+// - metadata: additional token information`}
         />
 
         <h2>Transaction Management</h2>
@@ -166,112 +146,84 @@ await provider.request({
         <h3>Send Transaction</h3>
         <CodeBlock
           language="javascript"
-          code={`const provider = window.keythings ?? window.ethereum;
-const [from] = await provider.request({ method: 'eth_requestAccounts' });
+          code={`const provider = window.keeta;
+const accounts = await provider.getAccounts();
+const from = accounts[0];
 
-const txHash = await provider.request({
-  method: 'eth_sendTransaction',
-  params: [{
-    from,
-    to: '0xRecipientAddress',
-    value: '0x2386f26fc10000', // 0.01 KEY in wei
-  }],
-});
+const transaction = {
+  to: 'recipient_address_here',
+  amount: '1000000', // Amount in smallest unit
+  token: 'token_address_here', // Optional: specific token
+};
 
+const txHash = await provider.sendTransaction(transaction);
 console.log('Transaction hash:', txHash);`}
         />
 
-        <h3>Sign Transaction (No Broadcast)</h3>
+        <h3>Simulate Transaction</h3>
         <CodeBlock
           language="javascript"
-          code={`const provider = window.keythings ?? window.ethereum;
-const [from] = await provider.request({ method: 'eth_requestAccounts' });
+          code={`const provider = window.keeta;
 
-const unsignedTx = {
-  from,
-  to: '0xRecipientAddress',
-  value: '0x2386f26fc10000',
-  gas: '0x5208',
+const transaction = {
+  to: 'recipient_address_here',
+  amount: '1000000',
+  token: 'token_address_here',
 };
 
-const signedTx = await provider.request({
-  method: 'eth_signTransaction',
-  params: [unsignedTx],
-});
-
-console.log('Signed transaction:', signedTx);`}
+// Simulate transaction to get fee estimates and risk assessment
+const simulation = await provider.simulateTransaction(transaction);
+console.log('Estimated fee:', simulation.estimatedFee);
+console.log('Risk level:', simulation.riskLevel);
+console.log('Risk message:', simulation.riskMessage);`}
         />
 
-        <h3>Estimate Gas</h3>
+        <h3>Transaction Simulation</h3>
         <CodeBlock
           language="javascript"
-          code={`const provider = window.keythings ?? window.ethereum;
-const [from] = await provider.request({ method: 'eth_requestAccounts' });
+          code={`const provider = window.keeta;
 
-const gasEstimate = await provider.request({
-  method: 'eth_estimateGas',
-  params: [{
-    from,
-    to: '0xRecipientAddress',
-    value: '0x2386f26fc10000',
-  }],
-});
+const transaction = {
+  to: 'recipient_address_here',
+  amount: '1000000',
+  token: 'token_address_here',
+};
 
-console.log('Estimated gas:', Number.parseInt(gasEstimate, 16));`}
+// Get detailed simulation results including fees
+const simulation = await provider.simulateTransaction(transaction);
+console.log('Estimated fee:', simulation.estimatedFee);
+console.log('Estimated fee in KTA:', simulation.estimatedFeeKta);
+console.log('Total cost:', simulation.estimatedTotal);
+console.log('Risk assessment:', simulation.riskLevel);`}
         />
 
         <h2>Message Signing</h2>
 
-        <h3>Personal Sign</h3>
+        <h3>Sign Message</h3>
         <CodeBlock
           language="javascript"
-          code={`const provider = window.keythings ?? window.ethereum;
-const [from] = await provider.request({ method: 'eth_requestAccounts' });
+          code={`const provider = window.keeta;
 
-const signature = await provider.request({
-  method: 'personal_sign',
-  params: ['Hello, Keythings!', from],
-});
+const message = 'Hello, Keythings!';
+const signature = await provider.signMessage(message);
 
-console.log('Signature:', signature);`}
+console.log('Message signature:', signature);`}
         />
 
-        <h3>Eth Sign (Structured Data)</h3>
+        <h3>Message Signing with Capabilities</h3>
         <CodeBlock
           language="javascript"
-          code={`const provider = window.keythings ?? window.ethereum;
-const [from] = await provider.request({ method: 'eth_requestAccounts' });
+          code={`const provider = window.keeta;
 
-const typedData = {
-  types: {
-    EIP712Domain: [
-      { name: 'name', type: 'string' },
-      { name: 'version', type: 'string' },
-      { name: 'chainId', type: 'uint256' },
-    ],
-    Message: [
-      { name: 'content', type: 'string' },
-      { name: 'timestamp', type: 'uint256' },
-    ],
-  },
-  primaryType: 'Message',
-  domain: {
-    name: 'My dApp',
-    version: '1.0',
-    chainId: 19845,
-  },
-  message: {
-    content: 'Hello from Keythings!',
-    timestamp: Date.now(),
-  },
-};
+// Request signing capability
+const capabilities = await provider.requestCapabilities(['sign']);
+console.log('Granted capabilities:', capabilities);
 
-const signature = await provider.request({
-  method: 'eth_signTypedData_v4',
-  params: [from, JSON.stringify(typedData)],
-});
+// Sign a message (requires 'sign' capability)
+const message = 'Hello from my Keeta dApp!';
+const signature = await provider.signMessage(message);
 
-console.log('Typed signature:', signature);`}
+console.log('Message signature:', signature);`}
         />
 
         <h2>Capabilities &amp; Permissions</h2>
@@ -279,109 +231,120 @@ console.log('Typed signature:', signature);`}
         <h3>Request Capabilities</h3>
         <CodeBlock
           language="javascript"
-          code={`const provider = window.keythings ?? window.ethereum;
+          code={`const provider = window.keeta;
 
-const permissions = await provider.request({
-  method: 'wallet_requestPermissions',
-  params: [{
-    eth_accounts: {},
-  }],
-});
+// Request specific capabilities
+const capabilities = await provider.requestCapabilities(['read', 'sign', 'transact']);
+console.log('Granted capabilities:', capabilities);
 
-console.log('Granted permissions:', permissions);`}
+// Each capability token contains:
+// - capability: the permission type ('read', 'sign', 'transact')
+// - token: the capability token for authorization
+// - grantedAt: timestamp when granted
+// - expiresAt: expiration timestamp (null if no expiration)`}
         />
 
-        <h3>Check Capabilities</h3>
+        <h3>Refresh Capabilities</h3>
         <CodeBlock
           language="javascript"
-          code={`const provider = window.keythings ?? window.ethereum;
+          code={`const provider = window.keeta;
 
-const permissions = await provider.request({
-  method: 'wallet_getPermissions',
-});
+// Refresh all capabilities
+const refreshedCapabilities = await provider.refreshCapabilities();
+console.log('Refreshed capabilities:', refreshedCapabilities);
 
-const hasAccounts = permissions.some(
-  (permission) => permission.parentCapability === 'eth_accounts',
-);
-
-console.log('Has eth_accounts:', hasAccounts);`}
+// Refresh specific capabilities
+const specificCapabilities = await provider.refreshCapabilities(['sign', 'transact']);
+console.log('Refreshed specific capabilities:', specificCapabilities);`}
         />
 
         <h2>Advanced Features</h2>
 
-        <h3>Transaction Simulation</h3>
+        <h3>Advanced Transaction Simulation</h3>
         <CodeBlock
           language="javascript"
-          code={`const provider = window.keythings ?? window.ethereum;
-const [from] = await provider.request({ method: 'eth_requestAccounts' });
+          code={`const provider = window.keeta;
 
-const simulationResult = await provider.request({
-  method: 'eth_call',
-  params: [{
-    from,
-    to: '0xContractAddress',
-    data: '0xContractCallData',
-  }, 'pending'],
-});
+const transaction = {
+  to: 'recipient_address_here',
+  amount: '1000000',
+  token: 'token_address_here',
+  operations: [
+    {
+      type: 'transfer',
+      tokenAccount: 'token_address_here',
+      amount: '500000',
+      info: { memo: 'Partial payment' }
+    }
+  ]
+};
 
-console.log('Simulation result:', simulationResult);`}
+// Get comprehensive simulation results
+const simulation = await provider.simulateTransaction(transaction);
+console.log('Simulation successful:', simulation.ok);
+console.log('Estimated fee:', simulation.estimatedFee);
+console.log('Risk assessment:', simulation.riskLevel);
+console.log('Risk message:', simulation.riskMessage);`}
         />
 
-        <h3>Batch Requests</h3>
+        <h3>Batch Operations</h3>
         <CodeBlock
           language="javascript"
-          code={`const provider = window.keythings ?? window.ethereum;
-const [account] = await provider.request({ method: 'eth_requestAccounts' });
+          code={`const provider = window.keeta;
 
-const [accounts, chainId, balance] = await Promise.all([
-  provider.request({ method: 'eth_accounts' }),
-  provider.request({ method: 'eth_chainId' }),
-  provider.request({
-    method: 'eth_getBalance',
-    params: [account, 'latest'],
-  }),
+// Perform multiple operations in parallel
+const [accounts, network, balance, allBalances] = await Promise.all([
+  provider.getAccounts(),
+  provider.getNetwork(),
+  provider.getBalance(),
+  provider.getAllBalances(),
 ]);
 
-console.log({ accounts, chainId, balance });`}
+console.log('Batch results:', { 
+  accounts, 
+  network: network.name, 
+  balance, 
+  tokenCount: allBalances.length 
+});`}
         />
 
         <h2>Error Handling</h2>
 
         <h3>Common Error Codes</h3>
         <div className="overflow-x-auto">
-          <table className="w-full border-collapse border border-gray-300">
+          <table className="w-full border-collapse border border-white/20">
             <thead>
-              <tr className="bg-gray-100">
-                <th className="border border-gray-300 px-4 py-2 text-left">Error Code</th>
-                <th className="border border-gray-300 px-4 py-2 text-left">Description</th>
-                <th className="border border-gray-300 px-4 py-2 text-left">Solution</th>
+              <tr className="bg-white/10">
+                <th className="border border-white/20 px-4 py-2 text-left text-foreground font-semibold">Error Code</th>
+                <th className="border border-white/20 px-4 py-2 text-left text-foreground font-semibold">Description</th>
+                <th className="border border-white/20 px-4 py-2 text-left text-foreground font-semibold">Solution</th>
               </tr>
             </thead>
             <tbody>
               <tr>
-                <td className="border border-gray-300 px-4 py-2">4001</td>
-                <td className="border border-gray-300 px-4 py-2">User rejected the request</td>
-                <td className="border border-gray-300 px-4 py-2">Ask user to approve the request</td>
+                <td className="border border-white/20 px-4 py-2 text-foreground/80">4001</td>
+                <td className="border border-white/20 px-4 py-2 text-foreground/80">User rejected the request</td>
+                <td className="border border-white/20 px-4 py-2 text-foreground/80">Ask user to approve the request</td>
               </tr>
               <tr>
-                <td className="border border-gray-300 px-4 py-2">4100</td>
-                <td className="border border-gray-300 px-4 py-2">Unauthorized</td>
-                <td className="border border-gray-300 px-4 py-2">Request proper permissions first</td>
+                <td className="border border-white/20 px-4 py-2 text-foreground/80">4100</td>
+                <td className="border border-white/20 px-4 py-2 text-foreground/80">Unauthorized</td>
+                <td className="border border-white/20 px-4 py-2 text-foreground/80">Request proper permissions first</td>
               </tr>
               <tr>
-                <td className="border border-gray-300 px-4 py-2">4200</td>
-                <td className="border border-gray-300 px-4 py-2">Unsupported method</td>
-                <td className="border border-gray-300 px-4 py-2">Check method name spelling</td>
+                <td className="border border-white/20 px-4 py-2 text-foreground/80">4200</td>
+                <td className="border border-white/20 px-4 py-2 text-foreground/80">Unsupported method</td>
+                <td className="border border-white/20 px-4 py-2 text-foreground/80">Check method name spelling</td>
               </tr>
               <tr>
-                <td className="border border-gray-300 px-4 py-2">4900</td>
-                <td className="border border-gray-300 px-4 py-2">Disconnected</td>
-                <td className="border border-gray-300 px-4 py-2">Reconnect to the wallet</td>
+                <td className="border border-white/20 px-4 py-2 text-foreground/80">4900</td>
+                <td className="border border-white/20 px-4 py-2 text-foreground/80">Disconnected</td>
+                <td className="border border-white/20 px-4 py-2 text-foreground/80">Reconnect to the wallet</td>
               </tr>
               <tr>
-                <td className="border border-gray-300 px-4 py-2">4901</td>
-                <td className="border border-gray-300 px-4 py-2">Chain disconnected</td>
-                <td className="border border-gray-300 px-4 py-2">Switch to correct network</td>
+                <td className="border border-white/20 px-4 py-2 text-foreground/80">4901</td>
+                <td className="border border-white/20 px-4 py-2 text-foreground/80">Chain disconnected</td>
+                <td className="border border-white/20 px-4 py-2 text-foreground/80">Switch to correct network</td>
               </tr>
             </tbody>
           </table>
@@ -390,14 +353,10 @@ console.log({ accounts, chainId, balance });`}
         <h3>Error Handling Example</h3>
         <CodeBlock
           language="javascript"
-          code={`const provider = window.keythings ?? window.ethereum;
+          code={`const provider = window.keeta;
 
 try {
-  const result = await provider.request({
-    method: 'eth_sendTransaction',
-    params: [transaction],
-  });
-
+  const result = await provider.sendTransaction(transaction);
   console.log('Success:', result);
 } catch (error) {
   console.error('Error:', error);
@@ -407,10 +366,16 @@ try {
       console.log('User rejected the request');
       break;
     case 4100:
-      console.log('Unauthorized - request permissions first');
+      console.log('Unauthorized - request capabilities first');
       break;
     case 4200:
       console.log('Unsupported method');
+      break;
+    case 4900:
+      console.log('Disconnected - reconnect to wallet');
+      break;
+    case 4901:
+      console.log('Chain disconnected - switch network');
       break;
     default:
       console.log('Unknown error:', error.message);
@@ -423,31 +388,48 @@ try {
         <h3>TypeScript Interfaces</h3>
         <CodeBlock
           language="typescript"
-          code={`interface RequestArguments {
-  readonly method: string;
-  readonly params?: readonly unknown[] | Record<string, unknown>;
+          code={`interface KeetaProvider {
+  readonly isKeeta: true;
+  readonly isAvailable: true;
+  readonly isConnected: boolean;
+  readonly selectedAddress: string | null;
+  readonly network: 'test' | 'main';
+  readonly chainId: string;
+
+  getAccounts(): Promise<string[]>;
+  getBalance(address?: string): Promise<string>;
+  getAllBalances(): Promise<BalanceEntry[]>;
+  sendTransaction(transaction: KeetaTransaction): Promise<string>;
+  signMessage(message: string): Promise<string>;
+  requestCapabilities(capabilities: KeetaCapability[]): Promise<CapabilityToken[]>;
+  refreshCapabilities(capabilities?: KeetaCapability[]): Promise<CapabilityToken[]>;
+  simulateTransaction(transaction: KeetaTransaction): Promise<TransactionSimulationResult>;
+  getNetwork(): Promise<KeetaNetwork>;
+  switchNetwork(network: 'test' | 'main'): Promise<void>;
+
+  on(event: string, listener: (...args: unknown[]) => void): void;
+  removeListener(event: string, listener: (...args: unknown[]) => void): void;
 }
 
-interface KeythingsProvider {
-  request<T = unknown>(args: RequestArguments): Promise<T>;
-  on(event: 'accountsChanged' | 'chainChanged' | 'message' | 'disconnect', listener: (...args: unknown[]) => void): void;
-  removeListener(
-    event: 'accountsChanged' | 'chainChanged' | 'message' | 'disconnect',
-    listener: (...args: unknown[]) => void,
-  ): void;
+interface KeetaTransaction {
+  to: string;
+  from?: string;
+  amount: string;
+  token?: string;
+  data?: string;
+  gasLimit?: string;
+  nonce?: string;
+  operations?: KeetaTransactionOperation[];
 }
 
-interface AddEthereumChainParameter {
+interface KeetaNetwork {
   chainId: string;
-  chainName: string;
-  rpcUrls: string[];
-  nativeCurrency: {
-    name: string;
-    symbol: string;
-    decimals: number;
-  };
-  blockExplorerUrls?: string[];
-}`}
+  name: string;
+  rpcUrl: string;
+  blockExplorerUrl: string;
+}
+
+type KeetaCapability = 'read' | 'sign' | 'transact';`}
         />
 
         <h2>Best Practices</h2>
@@ -455,10 +437,12 @@ interface AddEthereumChainParameter {
         <h3>Security Considerations</h3>
         <ul>
           <li>Always validate user input before sending to the wallet</li>
-          <li>Request only the minimum permissions needed</li>
+          <li>Request only the minimum capabilities needed ('read', 'sign', 'transact')</li>
           <li>Handle errors gracefully and provide user feedback</li>
           <li>Never store sensitive data in localStorage or sessionStorage</li>
           <li>Use HTTPS for all dApp communications</li>
+          <li>Always simulate transactions before sending to show users estimated fees and risks</li>
+          <li>Refresh capability tokens when they expire</li>
         </ul>
 
         <h3>Performance Optimization</h3>
@@ -483,8 +467,8 @@ interface AddEthereumChainParameter {
         <p>For local testing, you can use the Keythings Wallet development build:</p>
         <ol>
           <li>Clone the Keythings Wallet repository</li>
-          <li>Install dependencies with <code>bun install</code> or <code>npm install</code></li>
-          <li>Run <code>bun run dev</code> (or <code>npm run dev</code>) to start the development server</li>
+          <li>Install dependencies with <code>bun install</code></li>
+          <li>Run <code>bun run dev</code> to start the development server</li>
           <li>Load the unpacked extension in Chrome</li>
           <li>Set your dApp to development mode</li>
           <li>Test wallet interactions with your dApp</li>

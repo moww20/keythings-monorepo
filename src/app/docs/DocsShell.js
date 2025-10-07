@@ -23,9 +23,9 @@ export default function DocsShell({ children }) {
   return (
     <div>
       <ScrollRestorer />
-      <div className="flex flex-col gap-8 xl:grid xl:grid-cols-[12rem_minmax(0,72rem)_12rem] xl:h-[calc(100vh-9rem)] xl:overflow-hidden">
+      <div className="flex flex-col gap-8 xl:grid xl:grid-cols-[12rem_minmax(0,1fr)_12rem] xl:h-[calc(100vh-9rem)] xl:overflow-hidden">
         <div className="hidden xl:block sticky top-[9rem] h-[calc(100vh-9rem)] w-48 flex-shrink-0 overflow-auto"><DocsSidebar /></div>
-        <div className="flex-1 min-w-0 h-full overflow-auto xl:max-w-[72rem] xl:w-full">
+        <div className="flex-1 min-w-0 h-full overflow-auto xl:w-full">
           <div className="xl:hidden mb-4 hidden">
             <button className="px-3 py-2 rounded-full hairline hover:bg-white/5" onClick={() => setMobileOpen(true)}>Docs menu</button>
           </div>

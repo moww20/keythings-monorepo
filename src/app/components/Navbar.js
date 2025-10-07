@@ -43,7 +43,9 @@ export default function Navbar() {
     >
       <div className="max-w-7xl mx-auto px-6 py-4 grid grid-cols-3 items-center">
         <div className="flex items-center gap-6">
-          <span className="text-lg tracking-tight font-semibold text-accent-gradient">Keythings Wallet</span>
+          <Link href="/" className="flex items-center gap-3">
+            <span className="text-lg tracking-tight font-semibold text-foreground">Keythings Wallet</span>
+          </Link>
         </div>
         <div className="flex items-center justify-center">
           <SearchBar />

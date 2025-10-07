@@ -2,19 +2,19 @@ import "./globals.css";
 import Navbar from "./components/Navbar";
 
 export const metadata = {
-  title: "Twatter.Army Docs",
-  description: "The world's most advanced Nostr client. Modern social networking powered by censorship-resistant protocols.",
-  metadataBase: new URL("https://twatter.army"),
+  title: "Keythings Wallet Docs",
+  description: "Secure non-custodial browser extension for the Keeta Network. Complete documentation and developer guides.",
+  metadataBase: new URL("https://docs.keythings.wallet"),
   icons: {
-    icon: "/pixelmonsters.png",
-    shortcut: "/pixelmonsters.png",
-    apple: "/pixelmonsters.png",
+    icon: "/icons/keythingslogo.ico",
+    shortcut: "/icons/keythingslogo.ico",
+    apple: "/icons/keythings-logo.PNG",
   },
   openGraph: {
-    title: "Twatter.Army Documentation",
-    description: "The world's most advanced Nostr client. Modern social networking powered by censorship-resistant protocols.",
-    url: "https://twatter.army",
-    images: [{ url: "/pixelmonsters.png" }]
+    title: "Keythings Wallet Documentation",
+    description: "Secure non-custodial browser extension for the Keeta Network. Complete documentation and developer guides.",
+    url: "https://docs.keythings.wallet",
+    images: [{ url: "/icons/keythings-logo.PNG" }]
   }
 };
 

@@ -21,7 +21,7 @@ export default function IntegrationGuidePage() {
         <h2>Detect Wallet</h2>
         <CodeBlock
           language="javascript"
-          code={`const provider = window.keythings ?? window.ethereum;
+          code={`const provider = window.keeta;
 
 if (!provider) {
   throw new Error('Keythings Wallet not found');
@@ -30,37 +30,36 @@ if (!provider) {
 
         <h2>Request Capabilities</h2>
         <p>
-          Keythings Wallet uses a capability-based permission model. Always request only the scopes you need and surface
+          Keythings Wallet uses a capability-based permission model. Always request only the capabilities you need and surface
           clear context to the user before invoking the wallet prompt.
         </p>
         <CodeBlock
           language="javascript"
-          code={`const provider = window.keythings ?? window.ethereum;
+          code={`const provider = window.keeta;
 
-const permissions = await provider.request({
-  method: 'wallet_requestPermissions',
-  params: [{
-    eth_accounts: {},
-  }],
-});`}
+// Request specific capabilities
+const capabilities = await provider.requestCapabilities(['read', 'sign', 'transact']);
+
+// Each capability token contains:
+// - capability: the permission type
+// - token: authorization token
+// - grantedAt: timestamp
+// - expiresAt: expiration (null if no expiration)`}
         />
 
         <h2>Request Accounts</h2>
         <CodeBlock
           language="javascript"
-          code={`const provider = window.keythings ?? window.ethereum;
+          code={`const provider = window.keeta;
 
-const [account] = await provider.request({
-  method: 'eth_requestAccounts',
-});
-
-console.log('Connected account:', account);`}
+const accounts = await provider.requestAccounts();
+console.log('Connected accounts:', accounts);`}
         />
 
         <h2>Listen for Changes</h2>
         <CodeBlock
           language="javascript"
-          code={`const provider = window.keythings ?? window.ethereum;
+          code={`const provider = window.keeta;
 
 provider?.on('accountsChanged', (accounts) => {
   // handle account switch
@@ -68,19 +67,27 @@ provider?.on('accountsChanged', (accounts) => {
 
 provider?.on('chainChanged', (chainId) => {
   // handle network switch
+});
+
+provider?.on('disconnect', () => {
+  // handle wallet disconnect
 });`}
         />
 
         <h2>Send Transaction</h2>
         <CodeBlock
           language="javascript"
-          code={`const provider = window.keythings ?? window.ethereum;
-const [from] = await provider.request({ method: 'eth_requestAccounts' });
+          code={`const provider = window.keeta;
+const accounts = await provider.getAccounts();
 
-await provider.request({
-  method: 'eth_sendTransaction',
-  params: [{ from, to, value }],
-});`}
+const transaction = {
+  to: 'recipient_address_here',
+  amount: '1000000', // Amount in smallest unit
+  token: 'token_address_here', // Optional: specific token
+};
+
+const txHash = await provider.sendTransaction(transaction);
+console.log('Transaction hash:', txHash);`}
         />
 
         <h2>Surface Risk Feedback</h2>
@@ -90,64 +97,68 @@ await provider.request({
         </p>
         <CodeBlock
           language="javascript"
-          code={`const provider = window.keythings ?? window.ethereum;
-const [from] = await provider.request({ method: 'eth_requestAccounts' });
+          code={`const provider = window.keeta;
 
-const simulation = await provider.request({
-  method: 'eth_call',
-  params: [{ from, to, value, data }, 'pending'],
-});
+const transaction = {
+  to: 'recipient_address_here',
+  amount: '1000000',
+  token: 'token_address_here',
+};
 
-if (simulation === '0x') {
+// Simulate transaction to get risk assessment
+const simulation = await provider.simulateTransaction(transaction);
+
+console.log('Risk level:', simulation.riskLevel);
+console.log('Risk message:', simulation.riskMessage);
+console.log('Estimated fee:', simulation.estimatedFee);
+
+if (simulation.riskLevel === 'high') {
   // Display an explicit warning before asking the user to confirm in the wallet UI
+  alert('High risk transaction: ' + simulation.riskMessage);
 }`}
         />
 
         <h2>Handle Revocations</h2>
         <p>
-          Capabilities can expire or be revoked manually. Subscribe to provider changes and re-fetch permissions to
+          Capabilities can expire or be revoked manually. Subscribe to provider changes and re-fetch capabilities to
           downgrade your UI gracefully.
         </p>
         <CodeBlock
           language="javascript"
-          code={`const provider = window.keythings ?? window.ethereum;
+          code={`const provider = window.keeta;
 
-async function refreshPermissions() {
-  const permissions = await provider.request({ method: 'wallet_getPermissions' });
-  const hasAccounts = permissions.some((permission) => permission.parentCapability === 'eth_accounts');
-  updateConnectionState({ connected: hasAccounts });
+async function refreshCapabilities() {
+  try {
+    const capabilities = await provider.refreshCapabilities();
+    const hasRead = capabilities.some(cap => cap.capability === 'read');
+    const hasSign = capabilities.some(cap => cap.capability === 'sign');
+    const hasTransact = capabilities.some(cap => cap.capability === 'transact');
+    
+    updateConnectionState({ 
+      connected: hasRead, 
+      canSign: hasSign, 
+      canTransact: hasTransact 
+    });
+  } catch (error) {
+    // Capabilities expired or revoked
+    updateConnectionState({ connected: false, canSign: false, canTransact: false });
+  }
 }
 
-provider?.on('accountsChanged', refreshPermissions);
-provider?.on('chainChanged', refreshPermissions);`}
+provider?.on('accountsChanged', refreshCapabilities);
+provider?.on('chainChanged', refreshCapabilities);
+provider?.on('disconnect', () => {
+  updateConnectionState({ connected: false, canSign: false, canTransact: false });
+});`}
         />
 
         <h2>Recommended UX Patterns</h2>
         <ul>
-          <li>Preflight transactions with <code>eth_call</code> to show gas impact and risk.</li>
-          <li>Persist the latest approved account + chain locally so users return to a coherent state on reload.</li>
+          <li>Preflight transactions with <code>simulateTransaction</code> to show fee impact and risk.</li>
+          <li>Persist the latest approved account + network locally so users return to a coherent state on reload.</li>
           <li>Offer a prominent “Reconnect” call-to-action after capability loss.</li>
           <li>Throttle repeated permission prompts—wait for explicit user action before requesting capabilities again.</li>
         </ul>
-
-        <h2>Local Development Setup</h2>
-        <p>
-          For deeper testing, run the extension locally and point your dApp to a development RPC endpoint:
-        </p>
-        <CodeBlock
-          language="bash"
-          code={`# Clone and bootstrap the wallet
-git clone https://github.com/moww20/keythings-extension-wallet.git
-cd keythings-extension-wallet
-bun install   # or: npm install
-bun run dev   # or: npm run dev
-
-# In Chrome, load apps/extension/dist as an unpacked extension.`}
-        />
-        <p>
-          When sideloaded, the extension exposes verbose logs in the <em>service worker</em> console. Use them to validate
-          the full lifecycle of requests originating from your integration.
-        </p>
 
         <h2>Troubleshooting Checklist</h2>
         <ul>

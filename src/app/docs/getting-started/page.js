@@ -15,32 +15,16 @@ export default function GettingStartedPage() {
         <p>Before you begin, make sure you have:</p>
         <ul>
           <li>A modern Chromium-based browser (Chrome, Edge, Brave, Opera)</li>
-          <li>Node.js 18 or later (for development)</li>
-          <li>Bun package manager (recommended)</li>
           <li>An internet connection</li>
         </ul>
 
         <h2>Step 1: Install Keythings Wallet</h2>
-        <p>The easiest way to get started is to install the pre-built extension from the Chrome Web Store:</p>
-
-        <h3>Option A: Chrome Web Store (Recommended)</h3>
+        <p>Install the Keythings Wallet extension from the Chrome Web Store:</p>
         <ol>
           <li>Navigate to the <a href="#" className="text-accent-gradient hover:underline">Keythings Wallet Chrome Web Store page</a></li>
           <li>Click "Add to Chrome"</li>
           <li>Confirm the installation when prompted</li>
           <li>The Keythings Wallet icon will appear in your browser toolbar</li>
-        </ol>
-
-        <h3>Option B: Load Unpacked Extension (Development)</h3>
-        <p>For developers or if you want to build from source:</p>
-        <ol>
-          <li>Clone or download the Keythings Wallet repository</li>
-          <li>Navigate to the project directory in your terminal</li>
-          <li>Install dependencies: <code>bun install</code></li>
-          <li>Build the extension: <code>bun run build</code></li>
-          <li>Open Chrome and navigate to <code>chrome://extensions</code></li>
-          <li>Enable "Developer mode" in the top right</li>
-          <li>Click "Load unpacked" and select the <code>dist/</code> directory</li>
         </ol>
 
         <h2>Step 2: Set Up Your Wallet</h2>
@@ -87,26 +71,6 @@ export default function GettingStartedPage() {
           <li>Enter the dApp's URL</li>
           <li>Approve the connection</li>
         </ol>
-
-        <h2>Development Workflow</h2>
-        <p>For developers working with Keythings Wallet:</p>
-
-        <h3>Start Development Server</h3>
-        <code className="language-bash">bun run dev</code>
-        <p>This starts the Vite development server and rebuilds the extension on file changes.</p>
-
-        <h3>Build for Production</h3>
-        <code className="language-bash">bun run build</code>
-        <p>Creates a production build in the <code>dist/</code> directory.</p>
-
-        <h3>Validate Extension</h3>
-        <code className="language-bash">node scripts/validate-manifest.js</code>
-        <p>Validates the manifest.json for MV3 compatibility.</p>
-
-        <h3>Security Checks</h3>
-        <code className="language-bash">bun run lint
-bun audit</code>
-        <p>Run these before committing to ensure code quality and security.</p>
 
         <h2>Security Best Practices</h2>
         <p>Keep your wallet secure:</p>

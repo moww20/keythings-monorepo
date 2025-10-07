@@ -44,11 +44,15 @@ export default function RightToc() {
   if (headings.length === 0) return null
 
   return (
-    <div className="w-64 max-xl:hidden">
-      <div className="mb-2 text-sm text-[--color-muted]">On this page</div>
-      <nav className="grid gap-1 text-sm">
+    <div className="w-48 max-xl:hidden">
+      <div className="mb-4 text-xs font-semibold uppercase tracking-wider text-[--color-muted]">On this page</div>
+      <nav className="grid gap-0.5">
         {headings.map((h) => (
-          <a key={h.id} href={`#${h.id}`} className={`toc-item px-2 py-1 rounded-full ${active===h.id? 'is-active' : ''}`}
+          <a key={h.id} href={`#${h.id}`} className={`toc-item px-3 py-2 rounded-md text-sm font-medium transition-all duration-150 ${
+            active === h.id 
+              ? "is-active text-foreground bg-white/10" 
+              : "text-foreground/70 hover:text-foreground hover:bg-white/5"
+          }`}
             onClick={(e) => {
               e.preventDefault()
               const el = document.getElementById(h.id)
