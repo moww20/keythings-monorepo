@@ -301,16 +301,18 @@ export default function CodeBlock({ code, language = "javascript", className = "
 
   return (
     <div className={`code-block ${className}`} data-language={languageLabel}>
-      <button
-        type="button"
-        className="code-block__copy"
-        onClick={handleCopy}
-        aria-label={`Copy ${language} code`}
-      >
-        {copied ? "Copied" : "Copy"}
-      </button>
-      <div className="code-block__language" aria-hidden="true">
-        {languageLabel}
+      <div className="code-block__header">
+        <span className="code-block__language" aria-hidden="true">
+          {languageLabel}
+        </span>
+        <button
+          type="button"
+          className={`code-block__copy ${copied ? "is-copied" : ""}`}
+          onClick={handleCopy}
+          aria-label={`Copy ${language} code`}
+        >
+          {copied ? "Copied!" : "Copy code"}
+        </button>
       </div>
       <pre className="code-block__pre">
         <code dangerouslySetInnerHTML={{ __html: highlighted }} />
