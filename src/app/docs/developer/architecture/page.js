@@ -29,16 +29,22 @@ export default function ArchitecturePage() {
           code={`keythings-extension-wallet/
 ├── apps/
 │   └── extension/           # Browser extension source (UI, background, content, inpage provider)
+│       ├── manifest.json    # Chrome Manifest V3 definition
+│       ├── public/          # Static assets bundled with the UI shell
+│       └── src/
+│           ├── background/  # Service worker runtime and state orchestration
+│           ├── content/     # Content script bridge that injects the provider
+│           ├── inpage/      # Provider exposed as window.keythings for dApps
+│           └── ui/          # React popup + full-page interface
 ├── packages/
 │   ├── core/                # Domain logic, key management, transaction builders
 │   ├── shared/              # Cross-context utilities, constants, and schema definitions
-│   ├── keeta-sdk/           # Typed client wrappers around the Keeta RPC interface
+│   ├── provider/            # Standalone provider package for external integrations
 │   └── testing/             # Test helpers, fixtures, and security harnesses
 ├── scripts/                 # Release automation, manifest builders, lint helpers
 ├── configs/                 # Shared ESLint, TypeScript, Tailwind, and Vite configuration
-├── pnpm-workspace.yaml      # Workspace definition for pnpm
 ├── package.json             # Root scripts for linting, testing, building, and formatting
-└── turbo.json               # Task graph configuration for deterministic builds`}
+└── pnpm-workspace.yaml      # Workspace definition for workspace tooling`}
         />
         <p>
           Each workspace exposes its own <code>package.json</code> with precise build steps, enabling reproducible
@@ -53,7 +59,7 @@ export default function ArchitecturePage() {
             the inpage provider, emitting production-ready bundles compliant with Chrome Manifest V3.
           </li>
           <li>
-            <strong>Package Manager:</strong> pnpm workspaces orchestrate dependency hoisting while keeping package
+            <strong>Package Manager:</strong> workspace tooling (Bun, pnpm, or npm workspaces) orchestrates dependency hoisting while keeping package
             boundaries explicit.
           </li>
           <li>
@@ -109,9 +115,9 @@ export default function ArchitecturePage() {
 
         <h3>4. Inpage Provider</h3>
         <ul>
-          <li>Implements the <code>window.keeta</code> API surface compatible with EIP-1193 and the Keeta-specific extensions.</li>
+          <li>Implements the <code>window.keythings</code> API surface compatible with EIP-1193 and the Keeta-specific extensions.</li>
           <li>Queues JSON-RPC requests, multiplexes responses, and exposes event emitters for account and network changes.</li>
-          <li>Negotiates capability tokens during the initial <code>keeta_requestPermissions</code> handshake.</li>
+          <li>Negotiates capability tokens during the initial <code>wallet_requestPermissions</code> handshake.</li>
         </ul>
 
         <h2>State & Data Flow</h2>
@@ -137,7 +143,7 @@ export default function ArchitecturePage() {
         <ul>
           <li>
             During onboarding, dApps request capabilities such as <code>eth_accounts</code>,
-            <code>keeta_signTypedData</code>, or <code>keeta_watchAsset</code>. The service worker persists approvals with
+            <code>eth_signTypedData_v4</code>, or <code>wallet_watchAsset</code>. The service worker persists approvals with
             expiration timestamps and per-origin metadata (<code>approvedAt</code>, <code>lastUsed</code>, scopes).
           </li>
           <li>
@@ -167,15 +173,15 @@ export default function ArchitecturePage() {
         </ul>
 
         <h2>Local Development Recipes</h2>
-        <p>Common workflows are exposed through pnpm scripts:</p>
+        <p>Common workflows are exposed through shared workspace scripts:</p>
         <CodeBlock
           language="bash"
-          code={`pnpm install              # Install workspace dependencies
-pnpm dev                  # Run vite in watch mode for all extension entries
-pnpm lint                 # ESLint + TypeScript project references
-pnpm test                 # Vitest unit/integration suites
-pnpm build                # Production bundles + manifest validation
-pnpm build --filter ui    # Build only the popup UI bundle`}
+          code={`bun install              # Install workspace dependencies
+bun run dev             # Run Vite in watch mode for all extension entries
+bun run lint            # ESLint + TypeScript project references
+bun run test            # Vitest unit/integration suites
+bun run build           # Production bundles + manifest validation
+# npm or pnpm equivalents expose the same scripts`}
         />
         <p>
           Development builds emit artifacts into <code>apps/extension/dist</code> with source maps enabled. Load the
