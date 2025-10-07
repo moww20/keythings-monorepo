@@ -12,6 +12,7 @@ export const docsItems = [
   {
     label: "Developer Documentation",
     children: [
+      { href: "/docs/developer/architecture", label: "Architecture", description: "Deep dive into the extension's runtime and code structure." },
       { href: "/docs/developer/api-reference", label: "API Reference", description: "Complete API documentation for dApp integration." },
       { href: "/docs/developer/integration", label: "Integration Guide", description: "Build dApps that work with Keythings Wallet." },
       { href: "/docs/developer/security", label: "Security for Developers", description: "Security considerations for dApp development." },
