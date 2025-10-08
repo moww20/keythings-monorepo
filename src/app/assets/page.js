@@ -219,45 +219,45 @@ export default function AssetsPage() {
           <aside className="hidden xl:block sticky top-[8rem] h-[calc(100vh-8rem)] w-64 flex-shrink-0 overflow-auto glass border border-hairline rounded-2xl">
             <div className="p-4">
               <nav className="space-y-1">
-                <button
-                  onClick={() => router.push('/home')}
-                  className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-muted hover:text-foreground hover:bg-surface-strong hover:border hover:border-hairline-strong rounded-lg w-full text-left group"
-                >
-                  <LayoutDashboard className="h-4 w-4 flex-shrink-0 group-hover:text-foreground" />
-                  <span className="truncate">Dashboard</span>
-                </button>
-                
-                <a
-                  href="#assets"
-                  className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-foreground bg-surface-strong rounded-lg transition-all duration-200 hover:bg-surface-strong/80"
-                >
-                  <Wallet className="h-4 w-4 flex-shrink-0" />
-                  <span className="truncate">Assets</span>
-                </a>
+                        <button
+                          onClick={() => router.push('/home')}
+                          className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-muted hover:text-foreground hover:bg-surface-strong hover:border hover:border-hairline-strong rounded-lg w-full text-left group transition-none"
+                        >
+                          <LayoutDashboard className="h-4 w-4 flex-shrink-0 group-hover:text-foreground transition-none" />
+                          <span className="truncate">Dashboard</span>
+                        </button>
+                        
+                        <a
+                          href="#assets"
+                          className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-foreground bg-surface-strong rounded-lg w-full text-left transition-none"
+                        >
+                          <Wallet className="h-4 w-4 flex-shrink-0" />
+                          <span className="truncate">Assets</span>
+                        </a>
 
-                <button
-                  onClick={() => console.log('Orders clicked - TODO: implement')}
-                  className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-muted hover:text-foreground hover:bg-surface-strong hover:border hover:border-hairline-strong rounded-lg w-full text-left group"
-                >
-                  <ShoppingCart className="h-4 w-4 flex-shrink-0 group-hover:text-foreground" />
-                  <span className="truncate">Orders</span>
-                </button>
+                        <button
+                          onClick={() => console.log('Orders clicked - TODO: implement')}
+                          className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-muted hover:text-foreground hover:bg-surface-strong hover:border hover:border-hairline-strong rounded-lg w-full text-left group transition-none"
+                        >
+                          <ShoppingCart className="h-4 w-4 flex-shrink-0 group-hover:text-foreground transition-none" />
+                          <span className="truncate">Orders</span>
+                        </button>
 
-                <button
-                  onClick={() => console.log('Account clicked - TODO: implement')}
-                  className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-muted hover:text-foreground hover:bg-surface-strong hover:border hover:border-hairline-strong rounded-lg w-full text-left group"
-                >
-                  <UserCircle className="h-4 w-4 flex-shrink-0 group-hover:text-foreground" />
-                  <span className="truncate">Account</span>
-                </button>
+                        <button
+                          onClick={() => console.log('Account clicked - TODO: implement')}
+                          className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-muted hover:text-foreground hover:bg-surface-strong hover:border hover:border-hairline-strong rounded-lg w-full text-left group transition-none"
+                        >
+                          <UserCircle className="h-4 w-4 flex-shrink-0 group-hover:text-foreground transition-none" />
+                          <span className="truncate">Account</span>
+                        </button>
 
-                <button
-                  onClick={() => router.push('/settings')}
-                  className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-muted hover:text-foreground hover:bg-surface-strong hover:border hover:border-hairline-strong rounded-lg w-full text-left group"
-                >
-                  <Settings className="h-4 w-4 flex-shrink-0 group-hover:text-foreground" />
-                  <span className="truncate">Settings</span>
-                </button>
+                        <button
+                          onClick={() => router.push('/settings')}
+                          className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-muted hover:text-foreground hover:bg-surface-strong hover:border hover:border-hairline-strong rounded-lg w-full text-left group transition-none"
+                        >
+                          <Settings className="h-4 w-4 flex-shrink-0 group-hover:text-foreground transition-none" />
+                          <span className="truncate">Settings</span>
+                        </button>
               </nav>
             </div>
           </aside>
@@ -299,16 +299,16 @@ export default function AssetsPage() {
                     <nav className="space-y-1">
                       <button
                         onClick={() => { router.push('/home'); setIsMobileMenuOpen(false); }}
-                        className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-muted hover:text-foreground hover:bg-surface-strong hover:border hover:border-hairline-strong rounded-lg w-full text-left group"
+                        className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-muted hover:text-foreground hover:bg-surface-strong hover:border hover:border-hairline-strong rounded-lg w-full text-left group transition-none"
                       >
-                        <LayoutDashboard className="h-4 w-4 flex-shrink-0 group-hover:text-foreground" />
+                        <LayoutDashboard className="h-4 w-4 flex-shrink-0 group-hover:text-foreground transition-none" />
                         <span className="truncate">Dashboard</span>
                       </button>
                       
                       <a
                         href="#assets"
                         onClick={() => setIsMobileMenuOpen(false)}
-                        className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-foreground bg-surface-strong rounded-lg transition-all duration-200 hover:bg-surface-strong/80"
+                        className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-foreground bg-surface-strong rounded-lg w-full text-left transition-none"
                       >
                         <Wallet className="h-4 w-4 flex-shrink-0" />
                         <span className="truncate">Assets</span>
@@ -316,25 +316,25 @@ export default function AssetsPage() {
 
                       <button
                         onClick={() => { console.log('Orders clicked - TODO: implement'); setIsMobileMenuOpen(false); }}
-                        className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-muted hover:text-foreground hover:bg-surface-strong hover:border hover:border-hairline-strong rounded-lg w-full text-left group"
+                        className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-muted hover:text-foreground hover:bg-surface-strong hover:border hover:border-hairline-strong rounded-lg w-full text-left group transition-none"
                       >
-                        <ShoppingCart className="h-4 w-4 flex-shrink-0 group-hover:text-foreground" />
+                        <ShoppingCart className="h-4 w-4 flex-shrink-0 group-hover:text-foreground transition-none" />
                         <span className="truncate">Orders</span>
                       </button>
 
                       <button
                         onClick={() => { console.log('Account clicked - TODO: implement'); setIsMobileMenuOpen(false); }}
-                        className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-muted hover:text-foreground hover:bg-surface-strong hover:border hover:border-hairline-strong rounded-lg w-full text-left group"
+                        className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-muted hover:text-foreground hover:bg-surface-strong hover:border hover:border-hairline-strong rounded-lg w-full text-left group transition-none"
                       >
-                        <UserCircle className="h-4 w-4 flex-shrink-0 group-hover:text-foreground" />
+                        <UserCircle className="h-4 w-4 flex-shrink-0 group-hover:text-foreground transition-none" />
                         <span className="truncate">Account</span>
                       </button>
 
                       <button
                         onClick={() => { router.push('/settings'); setIsMobileMenuOpen(false); }}
-                        className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-muted hover:text-foreground hover:bg-surface-strong hover:border hover:border-hairline-strong rounded-lg w-full text-left group"
+                        className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-muted hover:text-foreground hover:bg-surface-strong hover:border hover:border-hairline-strong rounded-lg w-full text-left group transition-none"
                       >
-                        <Settings className="h-4 w-4 flex-shrink-0 group-hover:text-foreground" />
+                        <Settings className="h-4 w-4 flex-shrink-0 group-hover:text-foreground transition-none" />
                         <span className="truncate">Settings</span>
                       </button>
                     </nav>
