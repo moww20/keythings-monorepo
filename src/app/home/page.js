@@ -188,13 +188,12 @@ export default function HomePage() {
   }
 
   return (
-    <main className="relative overflow-hidden min-h-screen bg-[color:var(--background)]">
+    <main className="relative min-h-screen bg-[color:var(--background)]">
       <div className="absolute inset-0 -z-10 bg-[color:var(--background)]" />
       <div className="pointer-events-none absolute inset-x-0 top-[-20%] z-0 h-[480px] bg-gradient-to-b from-[color:color-mix(in_oklab,var(--foreground)_18%,transparent)] via-transparent to-transparent blur-3xl" />
       
-      <div className="relative z-10 max-w-7xl mx-auto px-6 py-8">
-        <div className="flex flex-col gap-8 xl:grid xl:grid-cols-[12rem_minmax(0,1fr)] xl:h-[calc(100vh-8rem)] xl:overflow-hidden">
-          <aside className="hidden xl:block sticky top-[8rem] h-[calc(100vh-8rem)] w-48 flex-shrink-0 overflow-auto glass border-r border-hairline">
+      <div className="flex xl:grid xl:grid-cols-[12rem_minmax(0,1fr)]">
+        <aside className="hidden xl:block fixed left-0 top-16 bottom-0 w-48 glass border-r border-hairline overflow-y-auto">
           <div className="p-4">
             <nav className="space-y-1">
               <a
@@ -290,7 +289,8 @@ export default function HomePage() {
           </div>
         </aside>
 
-        <div className="flex-1 min-w-0 h-full overflow-auto xl:w-full">
+        <div className="flex-1 xl:ml-48">
+          <div className="max-w-7xl mx-auto px-6 py-8">
           <div className="xl:hidden mb-4">
               <button className="glass rounded-lg border border-hairline p-3 text-foreground hover:bg-surface transition-colors">
                 <svg className="h-6 w-6" fill="currentColor" viewBox="0 0 24 24">
@@ -555,6 +555,7 @@ export default function HomePage() {
                 </tbody>
               </table>
             </div>
+          </div>
           </div>
           </div>
         </div>
