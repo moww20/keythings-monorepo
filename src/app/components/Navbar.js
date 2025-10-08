@@ -61,26 +61,7 @@ export default function Navbar() {
   useEffect(() => {
     setMounted(true)
 
-    // Debug: Check what's available on window immediately
-    console.log('🔍 Debug - window.keeta:', typeof window.keeta)
-    if (typeof window.keeta !== 'undefined') {
-      console.log('🔍 Debug - window.keeta properties:', Object.keys(window.keeta))
-    }
-
-    // Debug: Check for other common wallet providers
-    console.log('🔍 Debug - window.ethereum:', typeof window.ethereum)
-    console.log('🔍 Debug - window.solana:', typeof window.solana)
-
-    // Debug: Check if extension context is available
-    if (typeof window.chrome !== 'undefined') {
-      console.log('🔍 Debug - Chrome extension APIs available')
-    }
-
     const timeoutId = setTimeout(() => {
-      console.log('🔍 Debug - Delayed check - window.keeta:', typeof window.keeta)
-      if (typeof window.keeta !== 'undefined') {
-        console.log('🔍 Debug - Delayed check - window.keeta properties:', Object.keys(window.keeta))
-      }
       void checkWalletConnection()
     }, 1000)
 
