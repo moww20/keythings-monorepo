@@ -26,6 +26,25 @@ export default function Navbar() {
     }
   }, [router])
 
+  const checkWalletConnection = useCallback(async () => {
+    if (typeof window === 'undefined') return
+
+    // Simple detection like test-api.html
+    if (typeof window.keeta !== 'undefined') {
+      const provider = window.keeta
+      try {
+        const accounts = await provider.getAccounts()
+        if (accounts && accounts.length > 0) {
+          setWalletConnected(true)
+          setWalletAddress(accounts[0])
+          redirectToHome()
+        }
+      } catch (error) {
+        console.log('No wallet connected')
+      }
+    }
+  }, [redirectToHome])
+
   useEffect(() => {
     // Close mobile menu on route change
     setMobileOpen(false)
@@ -103,25 +122,6 @@ export default function Navbar() {
       detachListeners?.()
     }
   }, [checkWalletConnection, redirectToHome])
-
-  const checkWalletConnection = useCallback(async () => {
-    if (typeof window === 'undefined') return
-
-    // Simple detection like test-api.html
-    if (typeof window.keeta !== 'undefined') {
-      const provider = window.keeta
-      try {
-        const accounts = await provider.getAccounts()
-        if (accounts && accounts.length > 0) {
-          setWalletConnected(true)
-          setWalletAddress(accounts[0])
-          redirectToHome()
-        }
-      } catch (error) {
-        console.log('No wallet connected')
-      }
-    }
-  }, [redirectToHome])
 
   const waitForWallet = async (maxAttempts = 20) => {
     for (let i = 0; i < maxAttempts; i++) {
