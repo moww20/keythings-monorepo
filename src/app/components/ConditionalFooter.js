@@ -10,6 +10,7 @@ export default function ConditionalFooter() {
   const noFooterPages = [
     '/home',
     '/assets',
+    '/settings',
     // Add other dashboard/admin pages here if needed
   ]
   

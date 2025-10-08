@@ -3,7 +3,6 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { LayoutDashboard, Wallet, ShoppingCart, UserCircle, Settings, User, Bell, Palette, Globe, Clock, Zap, Moon, Sun } from 'lucide-react';
-import EstimatedBalance from '../components/EstimatedBalance';
 import { throttleBalanceCheck } from '../lib/wallet-throttle';
 
 export default function SettingsPage() {
@@ -93,21 +92,6 @@ export default function SettingsPage() {
     }
   }, []);
 
-  // Action handlers for EstimatedBalance component
-  const handleDeposit = () => {
-    console.log('Deposit clicked');
-    // TODO: Implement deposit functionality
-  };
-
-  const handleWithdraw = () => {
-    console.log('Withdraw clicked');
-    // TODO: Implement withdraw functionality
-  };
-
-  const handleCashIn = () => {
-    console.log('Cash In clicked');
-    // TODO: Implement cash in functionality
-  };
 
   useEffect(() => {
     checkWalletConnection(true);
@@ -326,16 +310,6 @@ export default function SettingsPage() {
                 </div>
               </>
             )}
-
-            {/* Estimated Balance Component */}
-            <EstimatedBalance 
-              balance={walletState.balance}
-              isConnecting={isConnecting}
-              onConnect={connectWallet}
-              onDeposit={handleDeposit}
-              onWithdraw={handleWithdraw}
-              onCashIn={handleCashIn}
-            />
 
             {/* Settings Content */}
             <div className="space-y-8">
