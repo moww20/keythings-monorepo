@@ -236,14 +236,14 @@ export default function HomePage() {
   return (
     <main className="min-h-screen bg-[color:var(--background)]">
       <div className="flex min-h-screen">
-        {/* Left Sidebar - Binance Style */}
-        <aside className="w-64 bg-[#1e2329] border-r border-[#2b3139]">
+        {/* Left Sidebar - Glassmorphism Style */}
+        <aside className="w-64 glass border-r border-hairline">
           <div className="p-4">
             {/* Navigation */}
             <nav className="space-y-1">
               <a
                 href="#dashboard"
-                className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-white bg-[#fcd535] rounded-lg"
+                className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-foreground bg-surface-strong rounded-lg"
               >
                 <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 24 24">
                   <path d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
@@ -253,7 +253,7 @@ export default function HomePage() {
               
               <a
                 href="#assets"
-                className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-[#b7bdc6] hover:text-white hover:bg-[#2b3139] rounded-lg transition-colors"
+                className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-muted hover:text-foreground hover:bg-surface rounded-lg transition-colors"
               >
                 <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 24 24">
                   <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
@@ -266,7 +266,7 @@ export default function HomePage() {
 
               <a
                 href="#orders"
-                className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-[#b7bdc6] hover:text-white hover:bg-[#2b3139] rounded-lg transition-colors"
+                className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-muted hover:text-foreground hover:bg-surface rounded-lg transition-colors"
               >
                 <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 24 24">
                   <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -279,7 +279,7 @@ export default function HomePage() {
 
               <a
                 href="#rewards"
-                className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-[#b7bdc6] hover:text-white hover:bg-[#2b3139] rounded-lg transition-colors"
+                className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-muted hover:text-foreground hover:bg-surface rounded-lg transition-colors"
               >
                 <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 24 24">
                   <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
@@ -289,7 +289,7 @@ export default function HomePage() {
 
               <a
                 href="#referral"
-                className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-[#b7bdc6] hover:text-white hover:bg-[#2b3139] rounded-lg transition-colors"
+                className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-muted hover:text-foreground hover:bg-surface rounded-lg transition-colors"
               >
                 <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 24 24">
                   <path d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
@@ -299,7 +299,7 @@ export default function HomePage() {
 
               <a
                 href="#account"
-                className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-[#b7bdc6] hover:text-white hover:bg-[#2b3139] rounded-lg transition-colors"
+                className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-muted hover:text-foreground hover:bg-surface rounded-lg transition-colors"
               >
                 <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 24 24">
                   <path d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
@@ -312,7 +312,7 @@ export default function HomePage() {
 
               <a
                 href="#subaccounts"
-                className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-[#b7bdc6] hover:text-white hover:bg-[#2b3139] rounded-lg transition-colors"
+                className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-muted hover:text-foreground hover:bg-surface rounded-lg transition-colors"
               >
                 <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 24 24">
                   <path d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
@@ -322,7 +322,7 @@ export default function HomePage() {
 
               <a
                 href="#settings"
-                className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-[#b7bdc6] hover:text-white hover:bg-[#2b3139] rounded-lg transition-colors"
+                className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-muted hover:text-foreground hover:bg-surface rounded-lg transition-colors"
               >
                 <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 24 24">
                   <path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 00-1.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
@@ -334,15 +334,15 @@ export default function HomePage() {
           </div>
         </aside>
 
-        {/* Main Content - Binance Style */}
-        <div className="flex-1 bg-[#0b0e11] py-8 px-8">
+        {/* Main Content - Glassmorphism Style */}
+        <div className="flex-1 bg-[color:var(--background)] py-8 px-8">
           {/* Estimated Balance Section */}
-          <div className="mb-8 bg-[#1e2329] rounded-lg p-6 border border-[#2b3139]">
+          <div className="mb-8 glass rounded-lg p-6 border border-hairline">
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">
-                <h2 className="text-lg font-semibold text-white">Estimated Balance</h2>
+                <h2 className="text-lg font-semibold text-foreground">Estimated Balance</h2>
                 <button className="p-1">
-                  <svg className="h-5 w-5 text-[#b7bdc6]" fill="currentColor" viewBox="0 0 24 24">
+                  <svg className="h-5 w-5 text-muted" fill="currentColor" viewBox="0 0 24 24">
                     <path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                     <path d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                   </svg>
@@ -353,46 +353,46 @@ export default function HomePage() {
             <div className="flex items-end justify-between">
               <div>
                 <div className="flex items-baseline gap-2 mb-2">
-                  <span className="text-3xl font-bold text-white">
+                  <span className="text-3xl font-bold text-foreground">
                     {formatBalance(walletState.balance)}
                   </span>
-                  <span className="text-lg text-[#b7bdc6]">KTA</span>
-                  <svg className="h-4 w-4 text-[#b7bdc6]" fill="currentColor" viewBox="0 0 24 24">
+                  <span className="text-lg text-muted">KTA</span>
+                  <svg className="h-4 w-4 text-muted" fill="currentColor" viewBox="0 0 24 24">
                     <path d="M7 10l5 5 5-5z" />
                   </svg>
                 </div>
-                <div className="text-sm text-[#b7bdc6] mb-2">
+                <div className="text-sm text-muted mb-2">
                   ≈ $237.65
                 </div>
                 <div className="flex items-center gap-1 text-sm">
-                  <span className="text-[#b7bdc6]">Today&apos;s PnL</span>
+                  <span className="text-muted">Today&apos;s PnL</span>
                   <span className="text-red-500">-$0.18(0.02%)</span>
-                  <svg className="h-4 w-4 text-[#b7bdc6]" fill="currentColor" viewBox="0 0 24 24">
+                  <svg className="h-4 w-4 text-muted" fill="currentColor" viewBox="0 0 24 24">
                     <path d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
                 </div>
               </div>
 
               <div className="flex gap-3">
-                <button className="bg-[#fcd535] text-black px-6 py-2 rounded-md font-medium hover:bg-[#f5d536] transition-colors">
+                <button className="bg-accent text-white px-6 py-2 rounded-md font-medium hover:bg-accent/90 transition-colors">
                   Deposit
                 </button>
-                <button className="bg-[#2b3139] text-white px-6 py-2 rounded-md font-medium hover:bg-[#3c434a] transition-colors">
+                <button className="bg-surface border border-hairline text-foreground px-6 py-2 rounded-md font-medium hover:bg-surface-strong transition-colors">
                   Withdraw
                 </button>
-                <button className="bg-[#2b3139] text-white px-6 py-2 rounded-md font-medium hover:bg-[#3c434a] transition-colors">
+                <button className="bg-surface border border-hairline text-foreground px-6 py-2 rounded-md font-medium hover:bg-surface-strong transition-colors">
                   Cash In
                 </button>
               </div>
             </div>
 
             {/* Mini Chart Placeholder */}
-            <div className="mt-4 h-12 bg-[#2b3139] rounded flex items-center justify-center">
+            <div className="mt-4 h-12 bg-surface rounded border border-hairline flex items-center justify-center">
               <div className="flex items-end gap-1 h-8">
                 {[2, 4, 3, 6, 4, 7, 5, 8, 6, 4, 7, 9, 8, 6, 9, 7, 8, 10, 9, 7].map((height, i) => (
                   <div
                     key={i}
-                    className="w-1 bg-[#fcd535] rounded-t"
+                    className="w-1 bg-accent rounded-t"
                     style={{ height: `${height * 4}px` }}
                   />
                 ))}
@@ -401,33 +401,33 @@ export default function HomePage() {
           </div>
 
           {/* Markets Section */}
-          <div className="bg-[#1e2329] rounded-lg border border-[#2b3139]">
-            <div className="p-6 border-b border-[#2b3139]">
-              <h2 className="text-xl font-bold text-white">Markets</h2>
+          <div className="glass rounded-lg border border-hairline">
+            <div className="p-6 border-b border-hairline">
+              <h2 className="text-xl font-bold text-foreground">Markets</h2>
             </div>
 
             {/* Market Tabs */}
-            <div className="px-6 py-4 border-b border-[#2b3139]">
+            <div className="px-6 py-4 border-b border-hairline">
               <div className="flex gap-8">
-                <button className="text-[#fcd535] font-medium border-b-2 border-[#fcd535] pb-2">
+                <button className="text-accent font-medium border-b-2 border-accent pb-2">
                   Holding
                 </button>
-                <button className="text-[#b7bdc6] hover:text-white transition-colors">
+                <button className="text-muted hover:text-foreground transition-colors">
                   Hot
                 </button>
-                <button className="text-[#b7bdc6] hover:text-white transition-colors">
+                <button className="text-muted hover:text-foreground transition-colors">
                   New Listing
                 </button>
-                <button className="text-[#b7bdc6] hover:text-white transition-colors">
+                <button className="text-muted hover:text-foreground transition-colors">
                   Favorite
                 </button>
-                <button className="text-[#b7bdc6] hover:text-white transition-colors">
+                <button className="text-muted hover:text-foreground transition-colors">
                   Top Gainers
                 </button>
-                <button className="text-[#b7bdc6] hover:text-white transition-colors">
+                <button className="text-muted hover:text-foreground transition-colors">
                   24h Volume
                 </button>
-                <button className="text-[#b7bdc6] hover:text-white transition-colors ml-auto">
+                <button className="text-muted hover:text-foreground transition-colors ml-auto">
                   More &gt;
                 </button>
               </div>
@@ -437,8 +437,8 @@ export default function HomePage() {
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead>
-                  <tr className="border-b border-[#2b3139]">
-                    <th className="text-left py-4 px-6 text-[#b7bdc6] text-sm font-medium">
+                  <tr className="border-b border-hairline">
+                    <th className="text-left py-4 px-6 text-muted text-sm font-medium">
                       <div className="flex items-center gap-1">
                         Coin
                         <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
@@ -446,7 +446,7 @@ export default function HomePage() {
                         </svg>
                       </div>
                     </th>
-                    <th className="text-right py-4 px-6 text-[#b7bdc6] text-sm font-medium">
+                    <th className="text-right py-4 px-6 text-muted text-sm font-medium">
                       <div className="flex items-center justify-end gap-1">
                         Amount
                         <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
@@ -454,7 +454,7 @@ export default function HomePage() {
                         </svg>
                       </div>
                     </th>
-                    <th className="text-right py-4 px-6 text-[#b7bdc6] text-sm font-medium">
+                    <th className="text-right py-4 px-6 text-muted text-sm font-medium">
                       <div className="flex items-center justify-end gap-1">
                         Coin Price / Cost Price
                         <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
@@ -462,7 +462,7 @@ export default function HomePage() {
                         </svg>
                       </div>
                     </th>
-                    <th className="text-right py-4 px-6 text-[#b7bdc6] text-sm font-medium">
+                    <th className="text-right py-4 px-6 text-muted text-sm font-medium">
                       <div className="flex items-center justify-end gap-1">
                         24H Change
                         <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
@@ -470,131 +470,131 @@ export default function HomePage() {
                         </svg>
                       </div>
                     </th>
-                    <th className="text-right py-4 px-6 text-[#b7bdc6] text-sm font-medium">
+                    <th className="text-right py-4 px-6 text-muted text-sm font-medium">
                       Trade
                     </th>
                   </tr>
                 </thead>
                 <tbody>
                   {/* USDT Row */}
-                  <tr className="border-b border-[#2b3139] hover:bg-[#2b3139]/50 transition-colors">
+                  <tr className="border-b border-hairline hover:bg-surface/50 transition-colors">
                     <td className="py-4 px-6">
                       <div className="flex items-center gap-3">
                         <div className="w-8 h-8 rounded-full bg-green-500 flex items-center justify-center">
                           <span className="text-white text-xs font-bold">U</span>
                         </div>
                         <div>
-                          <div className="text-white font-medium">USDT</div>
-                          <div className="text-[#b7bdc6] text-sm">TetherUS</div>
+                          <div className="text-foreground font-medium">USDT</div>
+                          <div className="text-muted text-sm">TetherUS</div>
                         </div>
                       </div>
                     </td>
                     <td className="py-4 px-6 text-right">
-                      <div className="text-white font-medium">1,000.00</div>
-                      <div className="text-[#b7bdc6] text-sm">$1,000.00</div>
+                      <div className="text-foreground font-medium">1,000.00</div>
+                      <div className="text-muted text-sm">$1,000.00</div>
                     </td>
                     <td className="py-4 px-6 text-right">
-                      <div className="text-white font-medium">$1.0000</div>
-                      <div className="text-[#b7bdc6] text-sm">$1.0000</div>
+                      <div className="text-foreground font-medium">$1.0000</div>
+                      <div className="text-muted text-sm">$1.0000</div>
                     </td>
                     <td className="py-4 px-6 text-right text-red-500 font-medium">
                       -0.02%
                     </td>
                     <td className="py-4 px-6 text-right">
-                      <button className="text-[#fcd535] hover:text-white transition-colors">
+                      <button className="text-accent hover:text-foreground transition-colors">
                         Trade
                       </button>
                     </td>
                   </tr>
 
                   {/* SUI Row */}
-                  <tr className="border-b border-[#2b3139] hover:bg-[#2b3139]/50 transition-colors">
+                  <tr className="border-b border-hairline hover:bg-surface/50 transition-colors">
                     <td className="py-4 px-6">
                       <div className="flex items-center gap-3">
                         <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center">
                           <span className="text-white text-xs font-bold">S</span>
                         </div>
                         <div>
-                          <div className="text-white font-medium">SUI</div>
-                          <div className="text-[#b7bdc6] text-sm">Sui</div>
+                          <div className="text-foreground font-medium">SUI</div>
+                          <div className="text-muted text-sm">Sui</div>
                         </div>
                       </div>
                     </td>
                     <td className="py-4 px-6 text-right">
-                      <div className="text-white font-medium">500.00</div>
-                      <div className="text-[#b7bdc6] text-sm">$500.00</div>
+                      <div className="text-foreground font-medium">500.00</div>
+                      <div className="text-muted text-sm">$500.00</div>
                     </td>
                     <td className="py-4 px-6 text-right">
-                      <div className="text-white font-medium">$1.0000</div>
-                      <div className="text-[#b7bdc6] text-sm">$0.9800</div>
+                      <div className="text-foreground font-medium">$1.0000</div>
+                      <div className="text-muted text-sm">$0.9800</div>
                     </td>
                     <td className="py-4 px-6 text-right text-green-500 font-medium">
                       +2.42%
                     </td>
                     <td className="py-4 px-6 text-right">
-                      <button className="text-[#fcd535] hover:text-white transition-colors">
+                      <button className="text-accent hover:text-foreground transition-colors">
                         Trade
                       </button>
                     </td>
                   </tr>
 
                   {/* GLMR Row */}
-                  <tr className="border-b border-[#2b3139] hover:bg-[#2b3139]/50 transition-colors">
+                  <tr className="border-b border-hairline hover:bg-surface/50 transition-colors">
                     <td className="py-4 px-6">
                       <div className="flex items-center gap-3">
                         <div className="w-8 h-8 rounded-full bg-purple-500 flex items-center justify-center">
                           <span className="text-white text-xs font-bold">G</span>
                         </div>
                         <div>
-                          <div className="text-white font-medium">GLMR</div>
-                          <div className="text-[#b7bdc6] text-sm">Moonbeam</div>
+                          <div className="text-foreground font-medium">GLMR</div>
+                          <div className="text-muted text-sm">Moonbeam</div>
                         </div>
                       </div>
                     </td>
                     <td className="py-4 px-6 text-right">
-                      <div className="text-white font-medium">2,000.00</div>
-                      <div className="text-[#b7bdc6] text-sm">$2,000.00</div>
+                      <div className="text-foreground font-medium">2,000.00</div>
+                      <div className="text-muted text-sm">$2,000.00</div>
                     </td>
                     <td className="py-4 px-6 text-right">
-                      <div className="text-white font-medium">$1.0000</div>
-                      <div className="text-[#b7bdc6] text-sm">$0.9800</div>
+                      <div className="text-foreground font-medium">$1.0000</div>
+                      <div className="text-muted text-sm">$0.9800</div>
                     </td>
                     <td className="py-4 px-6 text-right text-green-500 font-medium">
                       +2.12%
                     </td>
                     <td className="py-4 px-6 text-right">
-                      <button className="text-[#fcd535] hover:text-white transition-colors">
+                      <button className="text-accent hover:text-foreground transition-colors">
                         Trade
                       </button>
                     </td>
                   </tr>
 
                   {/* ADA Row */}
-                  <tr className="hover:bg-[#2b3139]/50 transition-colors">
+                  <tr className="hover:bg-surface/50 transition-colors">
                     <td className="py-4 px-6">
                       <div className="flex items-center gap-3">
                         <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center">
                           <span className="text-white text-xs font-bold">A</span>
                         </div>
                         <div>
-                          <div className="text-white font-medium">ADA</div>
-                          <div className="text-[#b7bdc6] text-sm">Cardano</div>
+                          <div className="text-foreground font-medium">ADA</div>
+                          <div className="text-muted text-sm">Cardano</div>
                         </div>
                       </div>
                     </td>
                     <td className="py-4 px-6 text-right">
-                      <div className="text-white font-medium">3,000.00</div>
-                      <div className="text-[#b7bdc6] text-sm">$3,000.00</div>
+                      <div className="text-foreground font-medium">3,000.00</div>
+                      <div className="text-muted text-sm">$3,000.00</div>
                     </td>
                     <td className="py-4 px-6 text-right">
-                      <div className="text-white font-medium">$1.0000</div>
-                      <div className="text-[#b7bdc6] text-sm">$0.9850</div>
+                      <div className="text-foreground font-medium">$1.0000</div>
+                      <div className="text-muted text-sm">$0.9850</div>
                     </td>
                     <td className="py-4 px-6 text-right text-green-500 font-medium">
                       +1.61%
                     </td>
                     <td className="py-4 px-6 text-right">
-                      <button className="text-[#fcd535] hover:text-white transition-colors">
+                      <button className="text-accent hover:text-foreground transition-colors">
                         Trade
                       </button>
                     </td>
