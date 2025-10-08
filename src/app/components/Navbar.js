@@ -221,7 +221,7 @@ export default function Navbar() {
           <button
             type="button"
             onClick={walletConnected ? disconnectWallet : connectWallet}
-            className="px-4 py-2 flex-shrink-0 rounded-full bg-white/10 hover:bg-white/20 hover:shadow-lg hover:shadow-white/10 text-foreground text-sm font-medium transition-all duration-200 max-[519px]:hidden [html[data-theme='light']_&]:border [html[data-theme='light']_&]:border-gray-300 [html[data-theme='light']_&]:hover:shadow-gray-300/50"
+            className="px-4 py-2 flex-shrink-0 rounded-full border border-transparent bg-white/10 hover:bg-white/20 hover:shadow-lg hover:shadow-white/10 text-foreground text-sm font-medium transition-all duration-200 max-[519px]:hidden [html[data-theme='light']_&]:border-gray-300 [html[data-theme='light']_&]:hover:shadow-gray-300/50"
           >
             {walletConnected ? formatAddress(walletAddress) : 'Connect Wallet'}
           </button>
