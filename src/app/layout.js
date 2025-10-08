@@ -3,18 +3,17 @@ import Navbar from "./components/Navbar";
 import Footer from "./components/Footer";
 
 export const metadata = {
-  title: "Keythings Wallet Docs",
+  title: "Keythings Wallet",
   description: "Secure non-custodial browser extension for the Keeta Network. Complete documentation and developer guides.",
-  metadataBase: new URL("https://docs.keythings.wallet"),
+  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || "https://keythings.vercel.app"),
   icons: {
     icon: "/icons/keythingslogo.ico",
     shortcut: "/icons/keythingslogo.ico",
     apple: "/icons/keythings-logo.PNG",
   },
   openGraph: {
-    title: "Keythings Wallet Documentation",
+    title: "Keythings Wallet",
     description: "Secure non-custodial browser extension for the Keeta Network. Complete documentation and developer guides.",
-    url: "https://docs.keythings.wallet",
     images: [{ url: "/icons/keythings-logo.PNG" }]
   }
 };
