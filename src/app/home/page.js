@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { LayoutDashboard, Wallet, ShoppingCart, Gift, Users, UserCircle, Users2, Settings } from 'lucide-react';
+import { LayoutDashboard, Wallet, ShoppingCart, UserCircle, Settings } from 'lucide-react';
 import EstimatedBalance from '../components/EstimatedBalance';
 import { throttleBalanceCheck } from '../lib/wallet-throttle';
 
@@ -234,35 +234,11 @@ export default function HomePage() {
               </button>
 
               <button
-                onClick={() => console.log('Rewards clicked - TODO: implement')}
-                className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-muted hover:text-foreground hover:bg-surface rounded-lg transition-all duration-200 w-full text-left"
-              >
-                <Gift className="h-4 w-4 flex-shrink-0" />
-                <span className="truncate">Rewards Hub</span>
-              </button>
-
-              <button
-                onClick={() => console.log('Referral clicked - TODO: implement')}
-                className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-muted hover:text-foreground hover:bg-surface rounded-lg transition-all duration-200 w-full text-left"
-              >
-                <Users className="h-4 w-4 flex-shrink-0" />
-                <span className="truncate">Referral</span>
-              </button>
-
-              <button
                 onClick={() => console.log('Account clicked - TODO: implement')}
                 className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-muted hover:text-foreground hover:bg-surface rounded-lg transition-all duration-200 w-full text-left"
               >
                 <UserCircle className="h-4 w-4 flex-shrink-0" />
                 <span className="truncate">Account</span>
-              </button>
-
-              <button
-                onClick={() => console.log('Sub Accounts clicked - TODO: implement')}
-                className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-muted hover:text-foreground hover:bg-surface rounded-lg transition-all duration-200 w-full text-left"
-              >
-                <Users2 className="h-4 w-4 flex-shrink-0" />
-                <span className="truncate">Sub Accounts</span>
               </button>
 
               <button
@@ -334,35 +310,11 @@ export default function HomePage() {
                       </button>
 
                       <button
-                        onClick={() => { console.log('Rewards clicked - TODO: implement'); setIsMobileMenuOpen(false); }}
-                        className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-muted hover:text-foreground hover:bg-surface rounded-lg transition-all duration-200 w-full text-left"
-                      >
-                        <Gift className="h-4 w-4 flex-shrink-0" />
-                        <span className="truncate">Rewards Hub</span>
-                      </button>
-
-                      <button
-                        onClick={() => { console.log('Referral clicked - TODO: implement'); setIsMobileMenuOpen(false); }}
-                        className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-muted hover:text-foreground hover:bg-surface rounded-lg transition-all duration-200 w-full text-left"
-                      >
-                        <Users className="h-4 w-4 flex-shrink-0" />
-                        <span className="truncate">Referral</span>
-                      </button>
-
-                      <button
                         onClick={() => { console.log('Account clicked - TODO: implement'); setIsMobileMenuOpen(false); }}
                         className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-muted hover:text-foreground hover:bg-surface rounded-lg transition-all duration-200 w-full text-left"
                       >
                         <UserCircle className="h-4 w-4 flex-shrink-0" />
                         <span className="truncate">Account</span>
-                      </button>
-
-                      <button
-                        onClick={() => { console.log('Sub Accounts clicked - TODO: implement'); setIsMobileMenuOpen(false); }}
-                        className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-muted hover:text-foreground hover:bg-surface rounded-lg transition-all duration-200 w-full text-left"
-                      >
-                        <Users2 className="h-4 w-4 flex-shrink-0" />
-                        <span className="truncate">Sub Accounts</span>
                       </button>
 
                       <button

@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { LayoutDashboard, Wallet, ShoppingCart, Gift, Users, UserCircle, Users2, Settings, ArrowDownToLine, ArrowUpFromLine, Banknote, Search, Eye, EyeOff } from 'lucide-react';
+import { LayoutDashboard, Wallet, ShoppingCart, UserCircle, Settings, ArrowDownToLine, ArrowUpFromLine, Banknote, Search, Eye, EyeOff } from 'lucide-react';
 import EstimatedBalance from '../components/EstimatedBalance';
 import { throttleBalanceCheck } from '../lib/wallet-throttle';
 
@@ -229,35 +229,11 @@ export default function AssetsPage() {
                 </a>
 
                 <a
-                  href="#rewards"
-                  className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-muted hover:text-foreground hover:bg-surface rounded-lg transition-all duration-200"
-                >
-                  <Gift className="h-4 w-4 flex-shrink-0" />
-                  <span className="truncate">Rewards Hub</span>
-                </a>
-
-                <a
-                  href="#referral"
-                  className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-muted hover:text-foreground hover:bg-surface rounded-lg transition-all duration-200"
-                >
-                  <Users className="h-4 w-4 flex-shrink-0" />
-                  <span className="truncate">Referral</span>
-                </a>
-
-                <a
                   href="#account"
                   className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-muted hover:text-foreground hover:bg-surface rounded-lg transition-all duration-200"
                 >
                   <UserCircle className="h-4 w-4 flex-shrink-0" />
                   <span className="truncate">Account</span>
-                </a>
-
-                <a
-                  href="#subaccounts"
-                  className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-muted hover:text-foreground hover:bg-surface rounded-lg transition-all duration-200"
-                >
-                  <Users2 className="h-4 w-4 flex-shrink-0" />
-                  <span className="truncate">Sub Accounts</span>
                 </a>
 
                 <a
@@ -333,41 +309,14 @@ export default function AssetsPage() {
                         <span className="truncate">Orders</span>
                       </a>
 
-                      <a
-                        href="#rewards"
-                        onClick={() => setIsMobileMenuOpen(false)}
-                        className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-muted hover:text-foreground hover:bg-surface rounded-lg transition-all duration-200"
-                      >
-                        <Gift className="h-4 w-4 flex-shrink-0" />
-                        <span className="truncate">Rewards Hub</span>
-                      </a>
-
-                      <a
-                        href="#referral"
-                        onClick={() => setIsMobileMenuOpen(false)}
-                        className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-muted hover:text-foreground hover:bg-surface rounded-lg transition-all duration-200"
-                      >
-                        <Users className="h-4 w-4 flex-shrink-0" />
-                        <span className="truncate">Referral</span>
-                      </a>
-
-                      <a
-                        href="#account"
-                        onClick={() => setIsMobileMenuOpen(false)}
-                        className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-muted hover:text-foreground hover:bg-surface rounded-lg transition-all duration-200"
-                      >
-                        <UserCircle className="h-4 w-4 flex-shrink-0" />
-                        <span className="truncate">Account</span>
-                      </a>
-
-                      <a
-                        href="#subaccounts"
-                        onClick={() => setIsMobileMenuOpen(false)}
-                        className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-muted hover:text-foreground hover:bg-surface rounded-lg transition-all duration-200"
-                      >
-                        <Users2 className="h-4 w-4 flex-shrink-0" />
-                        <span className="truncate">Sub Accounts</span>
-                      </a>
+                              <a
+                                href="#account"
+                                onClick={() => setIsMobileMenuOpen(false)}
+                                className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-muted hover:text-foreground hover:bg-surface rounded-lg transition-all duration-200"
+                              >
+                                <UserCircle className="h-4 w-4 flex-shrink-0" />
+                                <span className="truncate">Account</span>
+                              </a>
 
                       <a
                         href="#settings"
