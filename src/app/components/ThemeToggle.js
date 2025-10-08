@@ -46,9 +46,9 @@ export default function ThemeToggle() {
       type="button"
       aria-label="Toggle color mode"
       aria-pressed={isDark}
-      className={`relative inline-flex items-center justify-center flex-shrink-0 h-7 w-14 rounded-full hairline transition-colors ${trackClass}`}
+      className={`relative inline-flex items-center justify-center flex-shrink-0 h-7 w-14 rounded-full border border-white/10 transition-colors ${trackClass}`}
       onClick={() => setTheme(isDark ? "light" : "dark")}
-      style={{ minWidth: '3.5rem', minHeight: '1.75rem' }}
+      style={{ minWidth: '3.5rem', minHeight: '1.75rem', maxWidth: '3.5rem', maxHeight: '1.75rem' }}
     >
       {/* Sun icon - left side */}
       <span 
