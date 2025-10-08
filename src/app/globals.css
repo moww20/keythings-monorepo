@@ -13,6 +13,14 @@
   --accent-blue: #6aa8ff;
   --accent: var(--accent-blue);
   --accent-gradient: linear-gradient(90deg, var(--accent-red) 0%, var(--accent-blue) 100%);
+  --foreground-strong: var(--foreground);
+  --foreground-subtle: color-mix(in oklab, var(--foreground) 74%, transparent);
+  --foreground-muted: color-mix(in oklab, var(--foreground) 62%, transparent);
+  --foreground-faint: color-mix(in oklab, var(--foreground) 48%, transparent);
+  --surface-soft: color-mix(in oklab, var(--foreground) 6%, transparent);
+  --surface-tint: color-mix(in oklab, var(--foreground) 10%, transparent);
+  --surface-glass: color-mix(in oklab, var(--foreground) 4%, transparent);
+  --hairline-strong: color-mix(in oklab, var(--foreground) 18%, transparent);
 }
 
 /* Light theme variables override when [data-theme="light"] present on <html> */
@@ -23,6 +31,14 @@
   --hairline: rgba(0,0,0,0.08);
   --scrollbar-thumb: rgba(17,17,17,0.28);
   --scrollbar-track: transparent;
+  --foreground-strong: var(--foreground);
+  --foreground-subtle: color-mix(in oklab, var(--foreground) 74%, transparent);
+  --foreground-muted: color-mix(in oklab, var(--foreground) 62%, transparent);
+  --foreground-faint: color-mix(in oklab, var(--foreground) 48%, transparent);
+  --surface-soft: color-mix(in oklab, var(--foreground) 6%, transparent);
+  --surface-tint: color-mix(in oklab, var(--foreground) 10%, transparent);
+  --surface-glass: color-mix(in oklab, var(--foreground) 4%, transparent);
+  --hairline-strong: color-mix(in oklab, var(--foreground) 20%, transparent);
 }
 
 @theme inline {
@@ -90,7 +106,7 @@ html::-webkit-scrollbar-thumb:hover { background-color: color-mix(in oklab, var(
 
 /* Subtle card backdrop */
 .glass {
-  background: color-mix(in oklab, #ffffff 4%, transparent);
+  background: var(--surface-glass);
   -webkit-backdrop-filter: saturate(120%) blur(10px);
   backdrop-filter: saturate(120%) blur(10px);
 }
@@ -121,6 +137,17 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+.text-foreground { color: var(--foreground-strong); }
+.text-subtle { color: var(--foreground-subtle); }
+.text-muted { color: var(--foreground-muted); }
+.text-faint { color: var(--foreground-faint); }
+
+.bg-surface { background: var(--surface-soft); }
+.bg-surface-strong { background: var(--surface-tint); }
+
+.border-hairline { border-color: var(--hairline); }
+.border-soft { border-color: var(--hairline-strong); }
 
 /* Docs content width + typography */
 .docs-prose {
