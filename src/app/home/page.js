@@ -123,8 +123,9 @@ export default function HomePage() {
       <div className="absolute inset-0 -z-10 bg-[color:var(--background)]" />
       <div className="pointer-events-none absolute inset-x-0 top-[-20%] z-0 h-[480px] bg-gradient-to-b from-[color:color-mix(in_oklab,var(--foreground)_18%,transparent)] via-transparent to-transparent blur-3xl" />
       
-      <div className="relative z-10 flex min-h-screen">
-        <aside className="hidden lg:block w-64 glass border-r border-hairline">
+      <div className="relative z-10 max-w-7xl mx-auto px-6 py-8">
+        <div className="flex flex-col gap-8 xl:grid xl:grid-cols-[12rem_minmax(0,1fr)] xl:h-[calc(100vh-8rem)] xl:overflow-hidden">
+          <aside className="hidden xl:block sticky top-[8rem] h-[calc(100vh-8rem)] w-48 flex-shrink-0 overflow-auto glass border-r border-hairline">
           <div className="p-4">
             <nav className="space-y-1">
               <a
@@ -220,9 +221,8 @@ export default function HomePage() {
           </div>
         </aside>
 
-        <div className="flex-1">
-          <div className="mx-auto max-w-7xl px-6 py-8">
-            <div className="lg:hidden mb-6">
+        <div className="flex-1 min-w-0 h-full overflow-auto xl:w-full">
+          <div className="xl:hidden mb-4">
               <button className="glass rounded-lg border border-hairline p-3 text-foreground hover:bg-surface transition-colors">
                 <svg className="h-6 w-6" fill="currentColor" viewBox="0 0 24 24">
                   <path d="M3 12h18M3 6h18M3 18h18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
@@ -488,6 +488,7 @@ export default function HomePage() {
             </div>
           </div>
           </div>
+        </div>
         </div>
       </div>
     </main>
