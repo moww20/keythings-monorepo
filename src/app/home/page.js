@@ -234,10 +234,13 @@ export default function HomePage() {
 
   // Connected state - Dashboard
   return (
-    <main className="min-h-screen bg-[color:var(--background)]">
-      <div className="flex min-h-screen">
+    <main className="relative overflow-hidden min-h-screen bg-[color:var(--background)]">
+      <div className="absolute inset-0 -z-10 bg-[color:var(--background)]" />
+      <div className="pointer-events-none absolute inset-x-0 top-[-20%] z-0 h-[480px] bg-gradient-to-b from-[color:color-mix(in_oklab,var(--foreground)_18%,transparent)] via-transparent to-transparent blur-3xl" />
+      
+      <div className="relative z-10 flex min-h-screen">
         {/* Left Sidebar - Glassmorphism Style */}
-        <aside className="w-64 glass border-r border-hairline">
+        <aside className="hidden lg:block w-64 glass border-r border-hairline">
           <div className="p-4">
             {/* Navigation */}
             <nav className="space-y-1">
@@ -335,9 +338,18 @@ export default function HomePage() {
         </aside>
 
         {/* Main Content - Glassmorphism Style */}
-        <div className="flex-1 bg-[color:var(--background)] py-8 px-8">
-          {/* Estimated Balance Section */}
-          <div className="mb-8 glass rounded-lg p-6 border border-hairline">
+        <div className="flex-1">
+          <div className="mx-auto max-w-7xl px-6 py-8">
+            {/* Mobile Navigation Toggle */}
+            <div className="lg:hidden mb-6">
+              <button className="glass rounded-lg border border-hairline p-3 text-foreground hover:bg-surface transition-colors">
+                <svg className="h-6 w-6" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M3 12h18M3 6h18M3 18h18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              </button>
+            </div>
+            {/* Estimated Balance Section */}
+            <div className="mb-8 glass rounded-lg p-6 border border-hairline shadow-[0_20px_60px_rgba(6,7,10,0.45)]">
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">
                 <h2 className="text-lg font-semibold text-foreground">Estimated Balance</h2>
@@ -350,7 +362,7 @@ export default function HomePage() {
               </div>
             </div>
 
-            <div className="flex items-end justify-between">
+            <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-6">
               <div>
                 <div className="flex items-baseline gap-2 mb-2">
                   <span className="text-3xl font-bold text-foreground">
@@ -373,7 +385,7 @@ export default function HomePage() {
                 </div>
               </div>
 
-              <div className="flex gap-3">
+              <div className="flex flex-col sm:flex-row gap-3">
                 <button className="bg-accent text-white px-6 py-2 rounded-md font-medium hover:bg-accent/90 transition-colors">
                   Deposit
                 </button>
@@ -400,15 +412,15 @@ export default function HomePage() {
             </div>
           </div>
 
-          {/* Markets Section */}
-          <div className="glass rounded-lg border border-hairline">
-            <div className="p-6 border-b border-hairline">
-              <h2 className="text-xl font-bold text-foreground">Markets</h2>
-            </div>
+            {/* Markets Section */}
+            <div className="glass rounded-lg border border-hairline shadow-[0_20px_60px_rgba(6,7,10,0.45)]">
+              <div className="p-6 border-b border-hairline">
+                <h2 className="text-xl font-bold text-foreground">Markets</h2>
+              </div>
 
             {/* Market Tabs */}
             <div className="px-6 py-4 border-b border-hairline">
-              <div className="flex gap-8">
+              <div className="flex flex-wrap gap-4 lg:gap-8">
                 <button className="text-accent font-medium border-b-2 border-accent pb-2">
                   Holding
                 </button>
@@ -427,7 +439,7 @@ export default function HomePage() {
                 <button className="text-muted hover:text-foreground transition-colors">
                   24h Volume
                 </button>
-                <button className="text-muted hover:text-foreground transition-colors ml-auto">
+                <button className="text-muted hover:text-foreground transition-colors lg:ml-auto">
                   More &gt;
                 </button>
               </div>
