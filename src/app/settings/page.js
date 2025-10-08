@@ -206,7 +206,7 @@ export default function SettingsPage() {
               <nav className="space-y-1">
                 <button
                   onClick={() => router.push('/home')}
-                  className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-muted hover:text-foreground hover:bg-surface-strong hover:border hover:border-hairline-strong rounded-lg transition-all duration-200 w-full text-left group"
+                  className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-muted hover:text-foreground hover:bg-surface-strong hover:border hover:border-hairline-strong rounded-lg w-full text-left group"
                 >
                   <LayoutDashboard className="h-4 w-4 flex-shrink-0 group-hover:text-foreground" />
                   <span className="truncate">Dashboard</span>
@@ -214,7 +214,7 @@ export default function SettingsPage() {
                 
                 <button
                   onClick={() => router.push('/assets')}
-                  className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-muted hover:text-foreground hover:bg-surface-strong hover:border hover:border-hairline-strong rounded-lg transition-all duration-200 w-full text-left group"
+                  className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-muted hover:text-foreground hover:bg-surface-strong hover:border hover:border-hairline-strong rounded-lg w-full text-left group"
                 >
                   <Wallet className="h-4 w-4 flex-shrink-0 group-hover:text-foreground" />
                   <span className="truncate">Assets</span>
@@ -222,7 +222,7 @@ export default function SettingsPage() {
 
                 <button
                   onClick={() => console.log('Orders clicked - TODO: implement')}
-                  className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-muted hover:text-foreground hover:bg-surface-strong hover:border hover:border-hairline-strong rounded-lg transition-all duration-200 w-full text-left group"
+                  className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-muted hover:text-foreground hover:bg-surface-strong hover:border hover:border-hairline-strong rounded-lg w-full text-left group"
                 >
                   <ShoppingCart className="h-4 w-4 flex-shrink-0 group-hover:text-foreground" />
                   <span className="truncate">Orders</span>
@@ -230,7 +230,7 @@ export default function SettingsPage() {
 
                 <button
                   onClick={() => console.log('Account clicked - TODO: implement')}
-                  className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-muted hover:text-foreground hover:bg-surface-strong hover:border hover:border-hairline-strong rounded-lg transition-all duration-200 w-full text-left group"
+                  className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-muted hover:text-foreground hover:bg-surface-strong hover:border hover:border-hairline-strong rounded-lg w-full text-left group"
                 >
                   <UserCircle className="h-4 w-4 flex-shrink-0 group-hover:text-foreground" />
                   <span className="truncate">Account</span>
@@ -284,7 +284,7 @@ export default function SettingsPage() {
                     <nav className="space-y-1">
                       <button
                         onClick={() => { router.push('/home'); setIsMobileMenuOpen(false); }}
-                        className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-muted hover:text-foreground hover:bg-surface-strong hover:border hover:border-hairline-strong rounded-lg transition-all duration-200 w-full text-left group"
+                        className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-muted hover:text-foreground hover:bg-surface-strong hover:border hover:border-hairline-strong rounded-lg w-full text-left group"
                       >
                         <LayoutDashboard className="h-4 w-4 flex-shrink-0 group-hover:text-foreground" />
                         <span className="truncate">Dashboard</span>
@@ -292,7 +292,7 @@ export default function SettingsPage() {
                       
                       <button
                         onClick={() => { router.push('/assets'); setIsMobileMenuOpen(false); }}
-                        className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-muted hover:text-foreground hover:bg-surface-strong hover:border hover:border-hairline-strong rounded-lg transition-all duration-200 w-full text-left group"
+                        className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-muted hover:text-foreground hover:bg-surface-strong hover:border hover:border-hairline-strong rounded-lg w-full text-left group"
                       >
                         <Wallet className="h-4 w-4 flex-shrink-0 group-hover:text-foreground" />
                         <span className="truncate">Assets</span>
@@ -300,7 +300,7 @@ export default function SettingsPage() {
 
                       <button
                         onClick={() => { console.log('Orders clicked - TODO: implement'); setIsMobileMenuOpen(false); }}
-                        className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-muted hover:text-foreground hover:bg-surface-strong hover:border hover:border-hairline-strong rounded-lg transition-all duration-200 w-full text-left group"
+                        className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-muted hover:text-foreground hover:bg-surface-strong hover:border hover:border-hairline-strong rounded-lg w-full text-left group"
                       >
                         <ShoppingCart className="h-4 w-4 flex-shrink-0 group-hover:text-foreground" />
                         <span className="truncate">Orders</span>
@@ -308,7 +308,7 @@ export default function SettingsPage() {
 
                       <button
                         onClick={() => { console.log('Account clicked - TODO: implement'); setIsMobileMenuOpen(false); }}
-                        className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-muted hover:text-foreground hover:bg-surface-strong hover:border hover:border-hairline-strong rounded-lg transition-all duration-200 w-full text-left group"
+                        className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-muted hover:text-foreground hover:bg-surface-strong hover:border hover:border-hairline-strong rounded-lg w-full text-left group"
                       >
                         <UserCircle className="h-4 w-4 flex-shrink-0 group-hover:text-foreground" />
                         <span className="truncate">Account</span>
