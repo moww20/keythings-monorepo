@@ -46,7 +46,7 @@ export default function ThemeToggle() {
       type="button"
       aria-label="Toggle color mode"
       aria-pressed={isDark}
-      className={`relative inline-flex h-9 w-16 shrink-0 items-center rounded-full px-1.5 transition-colors duration-200 ${trackClass}`}
+      className={`relative inline-flex h-9 w-16 shrink-0 items-center rounded-full border border-transparent px-1.5 transition-colors duration-200 ${trackClass}`}
       onClick={() => setTheme(isDark ? "light" : "dark")}
     >
       <span className="sr-only">Toggle dark mode</span>
