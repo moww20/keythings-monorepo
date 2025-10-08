@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 
 export default function HomePage() {
@@ -14,6 +14,8 @@ export default function HomePage() {
   });
   
   const [isConnecting, setIsConnecting] = useState(false);
+  const lastBalanceCheck = useRef(0);
+  const BALANCE_CHECK_THROTTLE = 1500; // 1.5 seconds to be safe
 
   const formatAddress = (address) => {
     if (!address) return '';
@@ -25,9 +27,18 @@ export default function HomePage() {
     return (Number(balance) / 10 ** 18).toFixed(2);
   };
 
-  const checkWalletConnection = useCallback(async () => {
+  const checkWalletConnection = useCallback(async (forceCheck = false) => {
     if (typeof window === 'undefined' || !window.keeta) {
       setWalletState(prevState => ({ ...prevState, connected: false, loading: false }));
+      return;
+    }
+
+    // Throttle balance checks to avoid rate limiting
+    const now = Date.now();
+    const timeSinceLastCheck = now - lastBalanceCheck.current;
+    
+    if (!forceCheck && timeSinceLastCheck < BALANCE_CHECK_THROTTLE) {
+      console.log('Throttling balance check, waiting...', Math.ceil((BALANCE_CHECK_THROTTLE - timeSinceLastCheck) / 1000), 'seconds');
       return;
     }
 
@@ -35,6 +46,7 @@ export default function HomePage() {
     try {
       const accounts = await provider.getAccounts();
       if (accounts && accounts.length > 0) {
+        lastBalanceCheck.current = now;
         const balance = await provider.getBalance(accounts[0]);
         const network = await provider.getNetwork();
         setWalletState({
@@ -65,6 +77,7 @@ export default function HomePage() {
     try {
       const accounts = await provider.requestAccounts();
       if (accounts && accounts.length > 0) {
+        lastBalanceCheck.current = Date.now();
         const balance = await provider.getBalance(accounts[0]);
         const network = await provider.getNetwork();
         setWalletState({
@@ -88,21 +101,24 @@ export default function HomePage() {
   }, []);
 
   useEffect(() => {
-    checkWalletConnection();
+    // Initial check with force to ensure we get data on mount
+    checkWalletConnection(true);
 
     if (typeof window !== 'undefined' && window.keeta) {
       const provider = window.keeta;
 
       const handleAccountsChanged = (accounts) => {
         if (accounts && accounts.length > 0) {
-          checkWalletConnection();
+          // Use setTimeout to debounce the check
+          setTimeout(() => checkWalletConnection(true), 200);
         } else {
           setWalletState(prevState => ({ ...prevState, connected: false, accounts: [], balance: null }));
         }
       };
 
       const handleChainChanged = () => {
-        checkWalletConnection();
+        // Use setTimeout to debounce the check
+        setTimeout(() => checkWalletConnection(true), 200);
       };
 
       const handleDisconnect = () => {
