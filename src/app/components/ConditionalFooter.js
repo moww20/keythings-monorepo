@@ -9,6 +9,7 @@ export default function ConditionalFooter() {
   // Pages where footer should NOT be shown
   const noFooterPages = [
     '/home',
+    '/assets',
     // Add other dashboard/admin pages here if needed
   ]
   
