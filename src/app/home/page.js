@@ -219,33 +219,33 @@ export default function HomePage() {
               
               <button
                 onClick={() => router.push('/assets')}
-                className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-muted hover:text-foreground hover:bg-surface rounded-lg transition-all duration-200 w-full text-left"
+                className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-muted hover:text-foreground hover:bg-surface-strong rounded-lg transition-all duration-200 w-full text-left group"
               >
-                <Wallet className="h-4 w-4 flex-shrink-0" />
+                <Wallet className="h-4 w-4 flex-shrink-0 group-hover:text-foreground" />
                 <span className="truncate">Assets</span>
               </button>
 
               <button
                 onClick={() => console.log('Orders clicked - TODO: implement')}
-                className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-muted hover:text-foreground hover:bg-surface rounded-lg transition-all duration-200 w-full text-left"
+                className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-muted hover:text-foreground hover:bg-surface-strong rounded-lg transition-all duration-200 w-full text-left group"
               >
-                <ShoppingCart className="h-4 w-4 flex-shrink-0" />
+                <ShoppingCart className="h-4 w-4 flex-shrink-0 group-hover:text-foreground" />
                 <span className="truncate">Orders</span>
               </button>
 
               <button
                 onClick={() => console.log('Account clicked - TODO: implement')}
-                className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-muted hover:text-foreground hover:bg-surface rounded-lg transition-all duration-200 w-full text-left"
+                className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-muted hover:text-foreground hover:bg-surface-strong rounded-lg transition-all duration-200 w-full text-left group"
               >
-                <UserCircle className="h-4 w-4 flex-shrink-0" />
+                <UserCircle className="h-4 w-4 flex-shrink-0 group-hover:text-foreground" />
                 <span className="truncate">Account</span>
               </button>
 
               <button
                 onClick={() => router.push('/settings')}
-                className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-muted hover:text-foreground hover:bg-surface rounded-lg transition-all duration-200 w-full text-left"
+                className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-muted hover:text-foreground hover:bg-surface-strong rounded-lg transition-all duration-200 w-full text-left group"
               >
-                <Settings className="h-4 w-4 flex-shrink-0" />
+                <Settings className="h-4 w-4 flex-shrink-0 group-hover:text-foreground" />
                 <span className="truncate">Settings</span>
               </button>
             </nav>
@@ -293,37 +293,37 @@ export default function HomePage() {
                         <span className="truncate">Dashboard</span>
                       </button>
                       
-                      <button
-                        onClick={() => { router.push('/assets'); setIsMobileMenuOpen(false); }}
-                        className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-muted hover:text-foreground hover:bg-surface rounded-lg transition-all duration-200 w-full text-left"
-                      >
-                        <Wallet className="h-4 w-4 flex-shrink-0" />
-                        <span className="truncate">Assets</span>
-                      </button>
+                              <button
+                                onClick={() => { router.push('/assets'); setIsMobileMenuOpen(false); }}
+                                className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-muted hover:text-foreground hover:bg-surface-strong rounded-lg transition-all duration-200 w-full text-left group"
+                              >
+                                <Wallet className="h-4 w-4 flex-shrink-0 group-hover:text-foreground" />
+                                <span className="truncate">Assets</span>
+                              </button>
 
-                      <button
-                        onClick={() => { console.log('Orders clicked - TODO: implement'); setIsMobileMenuOpen(false); }}
-                        className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-muted hover:text-foreground hover:bg-surface rounded-lg transition-all duration-200 w-full text-left"
-                      >
-                        <ShoppingCart className="h-4 w-4 flex-shrink-0" />
-                        <span className="truncate">Orders</span>
-                      </button>
+                              <button
+                                onClick={() => { console.log('Orders clicked - TODO: implement'); setIsMobileMenuOpen(false); }}
+                                className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-muted hover:text-foreground hover:bg-surface-strong rounded-lg transition-all duration-200 w-full text-left group"
+                              >
+                                <ShoppingCart className="h-4 w-4 flex-shrink-0 group-hover:text-foreground" />
+                                <span className="truncate">Orders</span>
+                              </button>
 
-                      <button
-                        onClick={() => { console.log('Account clicked - TODO: implement'); setIsMobileMenuOpen(false); }}
-                        className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-muted hover:text-foreground hover:bg-surface rounded-lg transition-all duration-200 w-full text-left"
-                      >
-                        <UserCircle className="h-4 w-4 flex-shrink-0" />
-                        <span className="truncate">Account</span>
-                      </button>
+                              <button
+                                onClick={() => { console.log('Account clicked - TODO: implement'); setIsMobileMenuOpen(false); }}
+                                className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-muted hover:text-foreground hover:bg-surface-strong rounded-lg transition-all duration-200 w-full text-left group"
+                              >
+                                <UserCircle className="h-4 w-4 flex-shrink-0 group-hover:text-foreground" />
+                                <span className="truncate">Account</span>
+                              </button>
 
-                      <button
-                        onClick={() => { router.push('/settings'); setIsMobileMenuOpen(false); }}
-                        className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-muted hover:text-foreground hover:bg-surface rounded-lg transition-all duration-200 w-full text-left"
-                      >
-                        <Settings className="h-4 w-4 flex-shrink-0" />
-                        <span className="truncate">Settings</span>
-                      </button>
+                              <button
+                                onClick={() => { router.push('/settings'); setIsMobileMenuOpen(false); }}
+                                className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-muted hover:text-foreground hover:bg-surface-strong rounded-lg transition-all duration-200 w-full text-left group"
+                              >
+                                <Settings className="h-4 w-4 flex-shrink-0 group-hover:text-foreground" />
+                                <span className="truncate">Settings</span>
+                              </button>
                     </nav>
                   </div>
                 </div>

@@ -203,14 +203,13 @@ export default function AssetsPage() {
           <aside className="hidden xl:block sticky top-[8rem] h-[calc(100vh-8rem)] w-64 flex-shrink-0 overflow-auto glass border border-hairline rounded-2xl">
             <div className="p-4">
               <nav className="space-y-1">
-                <a
-                  href="#dashboard"
+                <button
                   onClick={() => router.push('/home')}
-                  className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-muted hover:text-foreground hover:bg-surface rounded-lg transition-all duration-200"
+                  className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-muted hover:text-foreground hover:bg-surface-strong rounded-lg transition-all duration-200 w-full text-left group"
                 >
-                  <LayoutDashboard className="h-4 w-4 flex-shrink-0" />
+                  <LayoutDashboard className="h-4 w-4 flex-shrink-0 group-hover:text-foreground" />
                   <span className="truncate">Dashboard</span>
-                </a>
+                </button>
                 
                 <a
                   href="#assets"
@@ -220,27 +219,27 @@ export default function AssetsPage() {
                   <span className="truncate">Assets</span>
                 </a>
 
-                <a
-                  href="#orders"
-                  className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-muted hover:text-foreground hover:bg-surface rounded-lg transition-all duration-200"
+                <button
+                  onClick={() => console.log('Orders clicked - TODO: implement')}
+                  className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-muted hover:text-foreground hover:bg-surface-strong rounded-lg transition-all duration-200 w-full text-left group"
                 >
-                  <ShoppingCart className="h-4 w-4 flex-shrink-0" />
+                  <ShoppingCart className="h-4 w-4 flex-shrink-0 group-hover:text-foreground" />
                   <span className="truncate">Orders</span>
-                </a>
+                </button>
 
-                <a
-                  href="#account"
-                  className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-muted hover:text-foreground hover:bg-surface rounded-lg transition-all duration-200"
+                <button
+                  onClick={() => console.log('Account clicked - TODO: implement')}
+                  className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-muted hover:text-foreground hover:bg-surface-strong rounded-lg transition-all duration-200 w-full text-left group"
                 >
-                  <UserCircle className="h-4 w-4 flex-shrink-0" />
+                  <UserCircle className="h-4 w-4 flex-shrink-0 group-hover:text-foreground" />
                   <span className="truncate">Account</span>
-                </a>
+                </button>
 
                 <button
                   onClick={() => router.push('/settings')}
-                  className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-muted hover:text-foreground hover:bg-surface rounded-lg transition-all duration-200 w-full text-left"
+                  className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-muted hover:text-foreground hover:bg-surface-strong rounded-lg transition-all duration-200 w-full text-left group"
                 >
-                  <Settings className="h-4 w-4 flex-shrink-0" />
+                  <Settings className="h-4 w-4 flex-shrink-0 group-hover:text-foreground" />
                   <span className="truncate">Settings</span>
                 </button>
               </nav>
@@ -282,14 +281,13 @@ export default function AssetsPage() {
                       </button>
                     </div>
                     <nav className="space-y-1">
-                      <a
-                        href="#dashboard"
+                      <button
                         onClick={() => { router.push('/home'); setIsMobileMenuOpen(false); }}
-                        className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-muted hover:text-foreground hover:bg-surface rounded-lg transition-all duration-200"
+                        className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-muted hover:text-foreground hover:bg-surface-strong rounded-lg transition-all duration-200 w-full text-left group"
                       >
-                        <LayoutDashboard className="h-4 w-4 flex-shrink-0" />
+                        <LayoutDashboard className="h-4 w-4 flex-shrink-0 group-hover:text-foreground" />
                         <span className="truncate">Dashboard</span>
-                      </a>
+                      </button>
                       
                       <a
                         href="#assets"
@@ -300,29 +298,27 @@ export default function AssetsPage() {
                         <span className="truncate">Assets</span>
                       </a>
 
-                      <a
-                        href="#orders"
-                        onClick={() => setIsMobileMenuOpen(false)}
-                        className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-muted hover:text-foreground hover:bg-surface rounded-lg transition-all duration-200"
+                      <button
+                        onClick={() => { console.log('Orders clicked - TODO: implement'); setIsMobileMenuOpen(false); }}
+                        className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-muted hover:text-foreground hover:bg-surface-strong rounded-lg transition-all duration-200 w-full text-left group"
                       >
-                        <ShoppingCart className="h-4 w-4 flex-shrink-0" />
+                        <ShoppingCart className="h-4 w-4 flex-shrink-0 group-hover:text-foreground" />
                         <span className="truncate">Orders</span>
-                      </a>
+                      </button>
 
-                              <a
-                                href="#account"
-                                onClick={() => setIsMobileMenuOpen(false)}
-                                className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-muted hover:text-foreground hover:bg-surface rounded-lg transition-all duration-200"
-                              >
-                                <UserCircle className="h-4 w-4 flex-shrink-0" />
-                                <span className="truncate">Account</span>
-                              </a>
+                      <button
+                        onClick={() => { console.log('Account clicked - TODO: implement'); setIsMobileMenuOpen(false); }}
+                        className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-muted hover:text-foreground hover:bg-surface-strong rounded-lg transition-all duration-200 w-full text-left group"
+                      >
+                        <UserCircle className="h-4 w-4 flex-shrink-0 group-hover:text-foreground" />
+                        <span className="truncate">Account</span>
+                      </button>
 
                       <button
                         onClick={() => { router.push('/settings'); setIsMobileMenuOpen(false); }}
-                        className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-muted hover:text-foreground hover:bg-surface rounded-lg transition-all duration-200 w-full text-left"
+                        className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-muted hover:text-foreground hover:bg-surface-strong rounded-lg transition-all duration-200 w-full text-left group"
                       >
-                        <Settings className="h-4 w-4 flex-shrink-0" />
+                        <Settings className="h-4 w-4 flex-shrink-0 group-hover:text-foreground" />
                         <span className="truncate">Settings</span>
                       </button>
                     </nav>
