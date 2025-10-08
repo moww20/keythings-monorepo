@@ -188,12 +188,13 @@ export default function HomePage() {
   }
 
   return (
-    <main className="relative min-h-screen bg-[color:var(--background)]">
+    <main className="relative overflow-hidden min-h-screen bg-[color:var(--background)]">
       <div className="absolute inset-0 -z-10 bg-[color:var(--background)]" />
       <div className="pointer-events-none absolute inset-x-0 top-[-20%] z-0 h-[480px] bg-gradient-to-b from-[color:color-mix(in_oklab,var(--foreground)_18%,transparent)] via-transparent to-transparent blur-3xl" />
       
-      <div className="flex xl:grid xl:grid-cols-[12rem_minmax(0,1fr)]">
-        <aside className="hidden xl:block fixed left-0 top-16 bottom-0 w-48 glass border-r border-hairline overflow-y-auto">
+      <div className="relative z-10 max-w-7xl mx-auto px-6 py-8">
+        <div className="flex flex-col gap-8 xl:grid xl:grid-cols-[12rem_minmax(0,1fr)] xl:h-[calc(100vh-8rem)] xl:overflow-hidden">
+          <aside className="hidden xl:block sticky top-[8rem] h-[calc(100vh-8rem)] w-48 flex-shrink-0 overflow-auto glass border-r border-hairline">
           <div className="p-4">
             <nav className="space-y-1">
               <a
@@ -289,8 +290,7 @@ export default function HomePage() {
           </div>
         </aside>
 
-        <div className="flex-1 xl:ml-48">
-          <div className="max-w-7xl mx-auto px-6 py-8">
+        <div className="flex-1 min-w-0 h-full overflow-auto xl:w-full">
           <div className="xl:hidden mb-4">
               <button className="glass rounded-lg border border-hairline p-3 text-foreground hover:bg-surface transition-colors">
                 <svg className="h-6 w-6" fill="currentColor" viewBox="0 0 24 24">
@@ -344,21 +344,9 @@ export default function HomePage() {
                 <button className="bg-surface border border-hairline text-foreground px-6 py-2 rounded-md font-medium hover:bg-surface-strong transition-colors">
                   Cash In
                 </button>
-              </div>
-            </div>
-
-            <div className="mt-4 h-12 bg-surface rounded border border-hairline flex items-center justify-center">
-              <div className="flex items-end gap-1 h-8">
-                {[2, 4, 3, 6, 4, 7, 5, 8, 6, 4, 7, 9, 8, 6, 9, 7, 8, 10, 9, 7].map((height, i) => (
-                  <div
-                    key={i}
-                    className="w-1 bg-accent rounded-t"
-                    style={{ height: `${height * 4}px` }}
-                  />
-                ))}
-              </div>
-            </div>
-            </div>
+             </div>
+           </div>
+           </div>
 
             <div className="glass rounded-lg border border-hairline shadow-[0_20px_60px_rgba(6,7,10,0.45)]">
               <div className="p-6 border-b border-hairline">
