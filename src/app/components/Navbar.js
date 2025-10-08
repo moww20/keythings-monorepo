@@ -81,18 +81,24 @@ export default function Navbar() {
         }
       }
 
+      const handleChainChanged = () => {
+        void checkWalletConnection()
+      }
+
       const handleDisconnect = () => {
         setWalletConnected(false)
         setWalletAddress(null)
       }
 
       provider.on?.('accountsChanged', handleAccountsChanged)
+      provider.on?.('chainChanged', handleChainChanged)
       provider.on?.('disconnect', handleDisconnect)
 
       detachListeners = () => {
         const remove = provider.removeListener?.bind(provider) || provider.off?.bind(provider)
         if (remove) {
           remove('accountsChanged', handleAccountsChanged)
+          remove('chainChanged', handleChainChanged)
           remove('disconnect', handleDisconnect)
         }
       }
