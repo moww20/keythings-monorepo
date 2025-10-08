@@ -428,7 +428,7 @@ export default function HomePage() {
                   24h Volume
                 </button>
                 <button className="text-[#b7bdc6] hover:text-white transition-colors ml-auto">
-                  More >
+                  More &gt;
                 </button>
               </div>
             </div>
