@@ -2,6 +2,7 @@ import "./globals.css";
 import Navbar from "./components/Navbar";
 import Footer from "./components/Footer";
 import WalletRedirector from "./components/WalletRedirector";
+import ConditionalFooter from "./components/ConditionalFooter";
 
 export const metadata = {
   title: "Keythings Wallet",
@@ -27,7 +28,7 @@ export default function RootLayout({ children }) {
         <Navbar />
         <div className="pt-16 min-h-screen flex flex-col">
           <main className="flex-1">{children}</main>
-          <Footer />
+          <ConditionalFooter />
         </div>
       </body>
     </html>
