@@ -236,13 +236,13 @@ export default function AssetsPage() {
                   <span className="truncate">Account</span>
                 </a>
 
-                <a
-                  href="#settings"
-                  className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-muted hover:text-foreground hover:bg-surface rounded-lg transition-all duration-200"
+                <button
+                  onClick={() => router.push('/settings')}
+                  className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-muted hover:text-foreground hover:bg-surface rounded-lg transition-all duration-200 w-full text-left"
                 >
                   <Settings className="h-4 w-4 flex-shrink-0" />
                   <span className="truncate">Settings</span>
-                </a>
+                </button>
               </nav>
             </div>
           </aside>
@@ -318,14 +318,13 @@ export default function AssetsPage() {
                                 <span className="truncate">Account</span>
                               </a>
 
-                      <a
-                        href="#settings"
-                        onClick={() => setIsMobileMenuOpen(false)}
-                        className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-muted hover:text-foreground hover:bg-surface rounded-lg transition-all duration-200"
+                      <button
+                        onClick={() => { router.push('/settings'); setIsMobileMenuOpen(false); }}
+                        className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-muted hover:text-foreground hover:bg-surface rounded-lg transition-all duration-200 w-full text-left"
                       >
                         <Settings className="h-4 w-4 flex-shrink-0" />
                         <span className="truncate">Settings</span>
-                      </a>
+                      </button>
                     </nav>
                   </div>
                 </div>
