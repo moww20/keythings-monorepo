@@ -5,6 +5,7 @@ import { AnimatePresence, motion } from "framer-motion"
 import { createPortal } from "react-dom"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
+import { BookOpen } from "lucide-react"
 // Connect button removed from header per request
 import SearchBar from "./SearchBar"
 import ThemeToggle from "./ThemeToggle"
@@ -74,7 +75,19 @@ export default function Navbar() {
             </svg>
           </a>
           <ThemeToggle />
-          <Link href="/docs" className={`${linkClass('/docs')} max-[519px]:hidden`}>Docs</Link>
+          <Link 
+            href="/docs" 
+            aria-label="Documentation"
+            className="inline-flex items-center justify-center w-9 h-9 rounded-full hover:bg-white/5 text-foreground/90 max-[519px]:hidden"
+          >
+            <BookOpen className="w-5 h-5" />
+          </Link>
+          <button
+            type="button"
+            className="px-4 py-2 rounded-full bg-white/10 hover:bg-white/20 hover:shadow-lg hover:shadow-white/10 text-foreground text-sm font-medium transition-all duration-200 max-[519px]:hidden [html[data-theme='light']_&]:border [html[data-theme='light']_&]:border-gray-300 [html[data-theme='light']_&]:hover:shadow-gray-300/50"
+          >
+            Connect Wallet
+          </button>
           <button
             type="button"
             aria-label="Open menu"
@@ -121,7 +134,16 @@ export default function Navbar() {
                     </button>
                   </div>
                   <div className="grid gap-2">
-                    <Link href="/docs" className={linkClass('/docs')}>Docs</Link>
+                    <Link href="/docs" className="flex items-center gap-2 px-3 py-1.5 rounded-full text-sm transition bg-white/10 text-foreground">
+                      <BookOpen className="w-4 h-4" />
+                      <span>Docs</span>
+                    </Link>
+                    <button
+                      type="button"
+                      className="px-4 py-2 rounded-full bg-white/10 hover:bg-white/20 hover:shadow-lg hover:shadow-white/10 text-foreground text-sm font-medium transition-all duration-200 text-left [html[data-theme='light']_&]:border [html[data-theme='light']_&]:border-gray-300 [html[data-theme='light']_&]:hover:shadow-gray-300/50"
+                    >
+                      Connect Wallet
+                    </button>
                     <div className="flex items-center gap-3 pt-2">
                       <a href="https://x.com/twatter_army" target="_blank" rel="noopener noreferrer" aria-label="X (Twitter)" className="inline-flex items-center justify-center w-9 h-9 rounded-full hover:bg-white/5 text-foreground/90">
                         <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor" role="img" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><path d={siX.path} /></svg>

@@ -110,6 +110,7 @@ export default function SearchBar() {
           type="text"
           placeholder="Search docs..."
           className="w-full h-10 rounded-full bg-transparent pl-9 pr-10 text-sm placeholder:text-[--color-muted] focus:outline-none"
+          suppressHydrationWarning
         />
         <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-[--color-muted]">
           <span className="inline-flex items-center justify-center w-6 h-6 rounded-md hairline bg-white/5 text-[11px]">/</span>

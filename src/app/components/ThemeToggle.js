@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { Sun, Moon } from "lucide-react"
 
 function getSystemPrefersDark() {
   if (typeof window === "undefined") return true
@@ -45,25 +46,29 @@ export default function ThemeToggle() {
       type="button"
       aria-label="Toggle color mode"
       aria-pressed={isDark}
-      className={`relative inline-flex items-center h-8 w-14 rounded-full hairline transition ${trackClass}`}
+      className={`relative inline-flex items-center h-7 w-14 rounded-full hairline transition-colors ${trackClass}`}
       onClick={() => setTheme(isDark ? "light" : "dark")}
     >
-      <span className={`absolute left-1 top-1/2 -translate-y-1/2 ${!isDark ? "text-[#9aa0a6]" : "text-[--color-muted] opacity-70"} z-[1]`} aria-hidden>
-        {/* Sun icon */}
-        <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M12 4V2M12 22v-2M4 12H2m20 0h-2M5 5l-1.5-1.5M20.5 20.5 19 19M5 19l-1.5 1.5M20.5 3.5 19 5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/>
-          <circle cx="12" cy="12" r="3.5" stroke="currentColor" strokeWidth="1.6"/>
-        </svg>
+      {/* Sun icon - left side */}
+      <span 
+        className={`absolute left-[0.875rem] top-1/2 -translate-x-1/2 -translate-y-1/2 transition-colors z-[1] ${!isDark ? "text-[#6b7280]" : "text-[--color-muted] opacity-50"}`} 
+        aria-hidden="true"
+      >
+        <Sun className="w-3.5 h-3.5" strokeWidth={2} />
       </span>
-      <span className={`absolute right-1 top-1/2 -translate-y-1/2 ${isDark ? "text-[#9aa0a6]" : "text-[--color-muted] opacity-70"} z-[1]`} aria-hidden>
-        {/* Moon icon */}
-        <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M21 12.79A9 9 0 1111.21 3a7 7 0 109.79 9.79z" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
-        </svg>
+      
+      {/* Moon icon - right side */}
+      <span 
+        className={`absolute right-[0.875rem] top-1/2 translate-x-1/2 -translate-y-1/2 transition-colors z-[1] ${isDark ? "text-[#9ca3af]" : "text-[--color-muted] opacity-50"}`} 
+        aria-hidden="true"
+      >
+        <Moon className="w-3.5 h-3.5" strokeWidth={2} />
       </span>
+      
+      {/* Sliding thumb */}
       <span
-        className={`absolute inline-block h-6 w-6 rounded-full bg-white/90 transition-transform top-1 left-1 ${isDark ? "translate-x-6" : "translate-x-0"}`}
-        aria-hidden
+        className={`absolute inline-block h-5 w-5 rounded-full bg-white shadow-sm transition-transform duration-200 ease-in-out top-1 left-1 ${isDark ? "translate-x-[1.75rem]" : "translate-x-0"}`}
+        aria-hidden="true"
       />
     </button>
   )
