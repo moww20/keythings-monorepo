@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { LayoutDashboard, Wallet, ShoppingCart, Gift, Users, UserCircle, Users2, Settings } from 'lucide-react';
+import { LayoutDashboard, Wallet, ShoppingCart, Gift, Users, UserCircle, Users2, Settings, ArrowDownToLine, ArrowUpFromLine, Banknote } from 'lucide-react';
 
 export default function HomePage() {
   const router = useRouter();
@@ -412,16 +412,19 @@ export default function HomePage() {
               </div>
 
               <div className="flex flex-col sm:flex-row gap-3">
-                <button className="bg-accent text-white px-6 py-2 rounded-md font-medium hover:bg-accent/90 transition-colors">
+                <button className="inline-flex items-center justify-center gap-2 bg-accent text-white px-6 py-2.5 rounded-md font-medium hover:bg-accent/90 transition-colors min-w-[120px]">
+                  <ArrowDownToLine className="h-4 w-4" />
                   Deposit
                 </button>
-                <button className="bg-surface border border-hairline text-foreground px-6 py-2 rounded-md font-medium hover:bg-surface-strong transition-colors">
+                <button className="inline-flex items-center justify-center gap-2 bg-surface border border-hairline text-foreground px-6 py-2.5 rounded-md font-medium hover:bg-surface-strong transition-colors min-w-[120px]">
+                  <ArrowUpFromLine className="h-4 w-4" />
                   Withdraw
                 </button>
-                <button className="bg-surface border border-hairline text-foreground px-6 py-2 rounded-md font-medium hover:bg-surface-strong transition-colors">
+                <button className="inline-flex items-center justify-center gap-2 bg-surface border border-hairline text-foreground px-6 py-2.5 rounded-md font-medium hover:bg-surface-strong transition-colors min-w-[120px]">
+                  <Banknote className="h-4 w-4" />
                   Cash In
                 </button>
-             </div>
+              </div>
            </div>
            </div>
 
