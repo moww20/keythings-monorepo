@@ -1,0 +1,782 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Keeta Wallet API Test</title>
+    <style>
+        body { 
+            font-family: Arial, sans-serif; 
+            margin: 20px; 
+            background-color: #1a1a1a; 
+            color: #e0e0e0; 
+        }
+        .test-section { 
+            margin: 20px 0; 
+            padding: 15px; 
+            border: 1px solid #444; 
+            border-radius: 5px; 
+            background-color: #2d2d2d;
+        }
+        .success { color: #4ade80; }
+        .error { color: #f87171; }
+        .info { color: #60a5fa; }
+        button { 
+            margin: 5px; 
+            padding: 10px 15px; 
+            background-color: #3b82f6; 
+            color: white; 
+            border: none; 
+            border-radius: 4px; 
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #2563eb;
+        }
+        pre { 
+            background: #1e1e1e; 
+            color: #e0e0e0;
+            padding: 10px; 
+            border-radius: 3px; 
+            overflow-x: auto; 
+            border: 1px solid #444;
+        }
+        details {
+            margin: 10px 0;
+        }
+        summary {
+            cursor: pointer;
+            color: #60a5fa;
+            font-weight: bold;
+        }
+        summary:hover {
+            color: #93c5fd;
+        }
+        h1, h2 {
+            color: #f8fafc;
+        }
+    </style>
+</head>
+<body>
+    <h1>Keeta Wallet API End-to-End Test</h1>
+    
+    <div class="test-section">
+        <h2>1. Wallet Detection</h2>
+        <button onclick="testWalletDetection()">Test Wallet Detection</button>
+        <details>
+            <summary>Show Code</summary>
+            <pre><code>if (typeof window.keeta !== 'undefined') {
+    console.log('Keeta wallet detected!');
+    keeta = window.keeta;
+} else {
+    console.log('Keeta wallet not found');
+}</code></pre>
+        </details>
+        <div id="detection-result"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>2. Connection Test</h2>
+        <button onclick="testConnection()">Request Connection</button>
+        <details>
+            <summary>Show Code</summary>
+            <pre><code>const accounts = await keeta.requestAccounts();
+console.log('Connected accounts:', accounts);</code></pre>
+        </details>
+        <div id="connection-result"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>3. Account Operations</h2>
+        <button onclick="testGetAccounts()">Get Accounts</button>
+        <button onclick="testGetBalance()">Get Balance</button>
+        <details>
+            <summary>Show Code</summary>
+            <pre><code>// Get Accounts
+const accounts = await keeta.getAccounts();
+
+// Get Balance (with throttling protection)
+const balance = await keeta.getBalance(accounts[0]);
+
+// Wait to avoid throttling, then get all balances
+await new Promise(resolve => setTimeout(resolve, 1500));
+const allBalances = await keeta.getAllBalances();</code></pre>
+        </details>
+        <div id="account-result"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>4. Network Operations</h2>
+        <button onclick="testGetNetwork()">Get Network</button>
+        <button onclick="testSwitchNetwork()">Switch Network</button>
+        <button onclick="testNetworkConfiguration()">Test Network Config</button>
+        <details>
+            <summary>Show Code</summary>
+            <pre><code>// Get Network Info
+const network = await keeta.getNetwork();
+const chainInfo = await keeta.request({ method: 'keeta_getChain' });
+const baseToken = await keeta.request({ method: 'keeta_getBaseToken' });
+
+// Switch Network
+await keeta.switchNetwork('test'); // or 'main'
+
+// Test Network Configuration
+const networkConfig = {
+    test: { name: 'Keeta Test Network', chainId: '0x1' },
+    main: { name: 'Keeta Main Network', chainId: '0x3' }
+};</code></pre>
+        </details>
+        <div id="network-result"></div>
+    </div>
+
+
+    <div class="test-section">
+        <h2>5. Faucet Testing</h2>
+        <button onclick="testFaucet()">Get 10 KTA Test Tokens (Programmatic)</button>
+        <details>
+            <summary>Show Code</summary>
+            <pre><code>// Programmatic faucet request - automatically gets 10 KTA tokens
+async function getFaucetTokens() {
+    const accounts = await keeta.getAccounts();
+    const account = accounts[0];
+    
+    // Try API request first
+    try {
+        const response = await fetch('https://faucet.test.keeta.com/api/request', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ address: account, amount: '10' })
+        });
+        return await response.json();
+    } catch (error) {
+        // Fallback: Send tiny amount to trigger faucet
+        const transaction = {
+            to: 'keeta_aabszsbrqppriqddrkptq5awubshpq3cgsoi4rc624xm6phdt74vo5w7wipwtmi',
+            from: account,
+            amount: '0.001'
+        };
+        return await keeta.sendTransaction(transaction);
+    }
+}</code></pre>
+        </details>
+        <div id="faucet-result"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>6. Transaction Testing</h2>
+        <button onclick="testSendTransaction()">Send 0.01 KTA Transaction</button>
+        <details>
+            <summary>Show Code</summary>
+            <pre><code>const transaction = {
+    to: 'keeta_aabl5radk65whrc56our35ys57ntilrljcpktsnktj27a4vbppkeh4qa4efdexi',
+    amount: '0.01'
+};
+const result = await keeta.sendTransaction(transaction);</code></pre>
+        </details>
+        <div id="transaction-result"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>7. Token Creation Testing</h2>
+        <button onclick="testCreateToken()">Create "LetsFookingGo" Token</button>
+        <details>
+            <summary>Show Code</summary>
+            <pre><code>// First, request transaction capability
+const capabilities = await keeta.requestCapabilities(['transact']);
+const transactCapability = capabilities.find(cap => cap.capability === 'transact');
+
+// Then create the token with capability token
+const result = await keeta.request({
+    method: 'keeta_createToken',
+    params: [
+        'LetsFookingGo',  // name
+        'LFG',           // symbol
+        8,               // decimals
+        '888',           // supply
+        'public',        // accessMode
+        { capabilityToken: transactCapability.token }  // capability token
+    ]
+});</code></pre>
+        </details>
+        <div id="token-creation-result"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>8. Event Listeners</h2>
+        <button onclick="setupEventListeners()">Setup Event Listeners</button>
+        <details>
+            <summary>Show Code</summary>
+            <pre><code>keeta.on('accountsChanged', (accounts) => {
+    console.log('Accounts changed:', accounts);
+});
+
+keeta.on('chainChanged', (chainId) => {
+    console.log('Chain changed:', chainId);
+});
+
+keeta.on('disconnect', () => {
+    console.log('Wallet disconnected');
+});</code></pre>
+        </details>
+        <div id="event-result"></div>
+    </div>
+
+    <script>
+        let keeta = null;
+
+        function log(elementId, message, type = 'info') {
+            const element = document.getElementById(elementId);
+            const className = type === 'error' ? 'error' : type === 'success' ? 'success' : 'info';
+            element.innerHTML += `<div class="${className}">${new Date().toLocaleTimeString()}: ${message}</div>`;
+        }
+
+        function testWalletDetection() {
+            const resultDiv = document.getElementById('detection-result');
+            resultDiv.innerHTML = '';
+
+            if (typeof window.keeta !== 'undefined') {
+                log('detection-result', '✅ Keeta wallet detected!', 'success');
+                log('detection-result', `isKeeta: ${window.keeta.isKeeta}`, 'info');
+                log('detection-result', `isAvailable: ${window.keeta.isAvailable}`, 'info');
+                log('detection-result', `isConnected: ${window.keeta.isConnected}`, 'info');
+                keeta = window.keeta;
+            } else {
+                log('detection-result', '❌ Keeta wallet not found. Make sure the extension is installed and enabled.', 'error');
+            }
+        }
+
+        async function testConnection() {
+            const resultDiv = document.getElementById('connection-result');
+            resultDiv.innerHTML = '';
+
+            if (!keeta) {
+                log('connection-result', '❌ Wallet not detected. Run detection test first.', 'error');
+                return;
+            }
+
+            try {
+                log('connection-result', '🔄 Requesting connection...', 'info');
+                const accounts = await keeta.requestAccounts();
+                log('connection-result', `✅ Connected! Accounts: ${JSON.stringify(accounts)}`, 'success');
+            } catch (error) {
+                log('connection-result', `❌ Connection failed: ${error.message}`, 'error');
+            }
+        }
+
+        async function testGetAccounts() {
+            const resultDiv = document.getElementById('account-result');
+            resultDiv.innerHTML = '';
+
+            if (!keeta) {
+                log('account-result', '❌ Wallet not detected.', 'error');
+                return;
+            }
+
+            try {
+                const accounts = await keeta.getAccounts();
+                log('account-result', `✅ Accounts: ${JSON.stringify(accounts)}`, 'success');
+            } catch (error) {
+                log('account-result', `❌ Get accounts failed: ${error.message}`, 'error');
+            }
+        }
+
+        async function testGetBalance() {
+            const resultDiv = document.getElementById('account-result');
+            
+            if (!keeta) {
+                log('account-result', '❌ Wallet not detected.', 'error');
+                return;
+            }
+
+            try {
+                // Get the connected account first
+                const accounts = await keeta.getAccounts();
+                if (accounts.length === 0) {
+                    log('account-result', '❌ No connected accounts found.', 'error');
+                    return;
+                }
+                
+                // Get single balance
+                const balance = await keeta.getBalance(accounts[0]);
+                log('account-result', `✅ Single balance for ${accounts[0]}: ${balance}`, 'success');
+                
+                // Get all balances (all tokens) with throttling protection
+                try {
+                    log('account-result', '⏳ Waiting 1.5 seconds to avoid throttling...', 'info');
+                    await new Promise(resolve => setTimeout(resolve, 1500));
+                    
+                    const allBalances = await keeta.getAllBalances();
+                    log('account-result', `✅ All token balances: ${JSON.stringify(allBalances, null, 2)}`, 'success');
+                    
+                    if (allBalances.length === 0) {
+                        log('account-result', '⚠️ No token balances found. This might indicate:', 'info');
+                        log('account-result', '1. Wallet is not connected to Keeta network', 'info');
+                        log('account-result', '2. Account has no tokens', 'info');
+                        log('account-result', '3. Network connection issue', 'info');
+                    }
+                } catch (balanceError) {
+                    if (balanceError.message.includes('throttled')) {
+                        log('account-result', `⚠️ Balance query throttled: ${balanceError.message}`, 'info');
+                        log('account-result', '💡 Try clicking "Get Balance" again in a few seconds', 'info');
+                    } else {
+                        log('account-result', `❌ getAllBalances failed: ${balanceError.message}`, 'error');
+                    }
+                }
+            } catch (error) {
+                log('account-result', `❌ Get balance failed: ${error.message}`, 'error');
+            }
+        }
+
+        async function testGetNetwork() {
+            const resultDiv = document.getElementById('network-result');
+            resultDiv.innerHTML = '';
+
+            if (!keeta) {
+                log('network-result', '❌ Wallet not detected.', 'error');
+                return;
+            }
+
+            try {
+                const network = await keeta.getNetwork();
+                log('network-result', `✅ Network: ${JSON.stringify(network, null, 2)}`, 'success');
+                
+                // Test network connectivity
+                try {
+                    const chainInfo = await keeta.request({ method: 'keeta_getChain' });
+                    log('network-result', `✅ Chain info: ${JSON.stringify(chainInfo, null, 2)}`, 'success');
+                    
+                    if (Array.isArray(chainInfo) && chainInfo.length === 0) {
+                        log('network-result', '⚠️ Chain info is empty - wallet not connected to blockchain', 'error');
+                    }
+                } catch (chainError) {
+                    log('network-result', `❌ Chain info failed: ${chainError.message}`, 'error');
+                }
+                
+                // Test base token info
+                try {
+                    const baseToken = await keeta.request({ method: 'keeta_getBaseToken' });
+                    log('network-result', `✅ Base token: ${JSON.stringify(baseToken, null, 2)}`, 'success');
+                } catch (tokenError) {
+                    log('network-result', `❌ Base token failed: ${tokenError.message}`, 'error');
+                }
+                
+                // Test account info
+                try {
+                    const accounts = await keeta.getAccounts();
+                    if (accounts.length > 0) {
+                        const accountInfo = await keeta.request({ 
+                            method: 'keeta_getAccountInfo', 
+                            params: [accounts[0]] 
+                        });
+                        log('network-result', `✅ Account info: ${JSON.stringify(accountInfo, null, 2)}`, 'success');
+                    }
+                } catch (accountError) {
+                    log('network-result', `❌ Account info failed: ${accountError.message}`, 'error');
+                }
+                
+                // Show network-specific information
+                if (network.name === 'test' || network.name === 'Keeta Test Network' || network.chainId === '0x1') {
+                    log('network-result', '💡 You are on the TEST network. To get test tokens:', 'info');
+                    log('network-result', '1. Visit the Keeta test faucet: https://faucet.test.keeta.com', 'info');
+                    log('network-result', '2. Or use the faucet account: keeta_aabszsbrqppriqddrkptq5awubshpq3cgsoi4rc624xm6phdt74vo5w7wipwtmi', 'info');
+                    log('network-result', '3. Send a small amount to your account to get started', 'info');
+                } else if (network.name === 'main' || network.name === 'Keeta Main Network' || network.chainId === '0x3') {
+                    log('network-result', '💡 You are on the MAIN network. This is the live Keeta network.', 'info');
+                    log('network-result', '⚠️ Be careful with real funds on mainnet!', 'error');
+                    log('network-result', '🔗 Explorer: https://explorer.keeta.com', 'info');
+                } else {
+                    log('network-result', '⚠️ Unknown network detected. Please check your wallet configuration.', 'error');
+                    log('network-result', `Network details: ${JSON.stringify(network, null, 2)}`, 'info');
+                }
+            } catch (error) {
+                log('network-result', `❌ Get network failed: ${error.message}`, 'error');
+            }
+        }
+
+        async function testSwitchNetwork() {
+            const resultDiv = document.getElementById('network-result');
+            
+            if (!keeta) {
+                log('network-result', '❌ Wallet not detected.', 'error');
+                return;
+            }
+
+            try {
+                const currentNetwork = await keeta.getNetwork();
+                
+                // Use wallet's network configuration
+                const networkConfig = {
+                    test: {
+                        name: 'Keeta Test Network',
+                        chainId: '0x1',
+                        explorer: 'https://explorer.test.keeta.com'
+                    },
+                    main: {
+                        name: 'Keeta Main Network', 
+                        chainId: '0x3',
+                        explorer: 'https://explorer.keeta.com'
+                    }
+                };
+                
+                // Determine target network based on current network
+                let targetNetwork;
+                if (currentNetwork.name === 'Keeta Test Network' || currentNetwork.name === 'test') {
+                    targetNetwork = 'main';
+                } else {
+                    targetNetwork = 'test';
+                }
+                
+                log('network-result', `🔄 Current network: ${currentNetwork.name} (Chain ID: ${currentNetwork.chainId})`, 'info');
+                log('network-result', `🔄 Switching to: ${networkConfig[targetNetwork].name} (Chain ID: ${networkConfig[targetNetwork].chainId})`, 'info');
+                
+                await keeta.switchNetwork(targetNetwork);
+                
+                // Verify the switch worked
+                const newNetwork = await keeta.getNetwork();
+                log('network-result', `✅ Network switched successfully!`, 'success');
+                log('network-result', `✅ New network: ${newNetwork.name} (Chain ID: ${newNetwork.chainId})`, 'success');
+                log('network-result', `🔗 Explorer: ${networkConfig[targetNetwork].explorer}`, 'info');
+                
+                // Show network-specific information
+                if (targetNetwork === 'test') {
+                    log('network-result', '💡 You are now on the TEST network. To get test tokens:', 'info');
+                    log('network-result', '1. Visit the Keeta test faucet: https://faucet.test.keeta.com', 'info');
+                    log('network-result', '2. Or use the faucet account: keeta_aabszsbrqppriqddrkptq5awubshpq3cgsoi4rc624xm6phdt74vo5w7wipwtmi', 'info');
+                } else {
+                    log('network-result', '💡 You are now on the MAIN network. This is the live Keeta network.', 'info');
+                    log('network-result', '⚠️ Be careful with real funds on mainnet!', 'error');
+                }
+                
+            } catch (error) {
+                log('network-result', `❌ Switch network failed: ${error.message}`, 'error');
+                log('network-result', `Error details: ${JSON.stringify(error, null, 2)}`, 'error');
+                
+                // Provide troubleshooting information
+                log('network-result', '🔧 Troubleshooting tips:', 'info');
+                log('network-result', '1. Make sure the wallet extension is properly installed', 'info');
+                log('network-result', '2. Check if the target network is available', 'info');
+                log('network-result', '3. Try refreshing the page and reconnecting', 'info');
+            }
+        }
+
+        async function testNetworkConfiguration() {
+            const resultDiv = document.getElementById('network-result');
+            
+            if (!keeta) {
+                log('network-result', '❌ Wallet not detected.', 'error');
+                return;
+            }
+
+            try {
+                log('network-result', '🔧 Testing network configuration...', 'info');
+                
+                // Define expected network configuration from wallet
+                const expectedConfig = {
+                    test: {
+                        name: 'Keeta Test Network',
+                        chainId: '0x1',
+                        explorer: 'https://explorer.test.keeta.com',
+                        faucet: 'https://faucet.test.keeta.com'
+                    },
+                    main: {
+                        name: 'Keeta Main Network',
+                        chainId: '0x3',
+                        explorer: 'https://explorer.keeta.com',
+                        faucet: null // No faucet for mainnet
+                    }
+                };
+                
+                // Get current network
+                const currentNetwork = await keeta.getNetwork();
+                log('network-result', `📊 Current network: ${currentNetwork.name}`, 'info');
+                log('network-result', `📊 Chain ID: ${currentNetwork.chainId}`, 'info');
+                
+                // Validate network configuration
+                let networkType = null;
+                if (currentNetwork.chainId === '0x1' || currentNetwork.name === 'Keeta Test Network') {
+                    networkType = 'test';
+                } else if (currentNetwork.chainId === '0x3' || currentNetwork.name === 'Keeta Main Network') {
+                    networkType = 'main';
+                }
+                
+                if (networkType) {
+                    const config = expectedConfig[networkType];
+                    log('network-result', `✅ Network type identified: ${networkType.toUpperCase()}`, 'success');
+                    log('network-result', `✅ Expected name: ${config.name}`, 'success');
+                    log('network-result', `✅ Expected chain ID: ${config.chainId}`, 'success');
+                    log('network-result', `🔗 Explorer: ${config.explorer}`, 'info');
+                    
+                    if (config.faucet) {
+                        log('network-result', `🚰 Faucet: ${config.faucet}`, 'info');
+                    } else {
+                        log('network-result', `⚠️ No faucet available for ${networkType} network`, 'info');
+                    }
+                    
+                    // Test network connectivity
+                    try {
+                        const chainInfo = await keeta.request({ method: 'keeta_getChain' });
+                        log('network-result', `✅ Network connectivity: OK`, 'success');
+                        log('network-result', `📊 Chain info: ${JSON.stringify(chainInfo, null, 2)}`, 'info');
+                    } catch (connectError) {
+                        log('network-result', `❌ Network connectivity failed: ${connectError.message}`, 'error');
+                    }
+                    
+                } else {
+                    log('network-result', `⚠️ Unknown network configuration`, 'error');
+                    log('network-result', `📊 Detected: ${JSON.stringify(currentNetwork, null, 2)}`, 'info');
+                }
+                
+                // Test network switching capability
+                log('network-result', '🔄 Testing network switching capability...', 'info');
+                try {
+                    const targetNetwork = networkType === 'test' ? 'main' : 'test';
+                    log('network-result', `🔄 Would switch to: ${targetNetwork}`, 'info');
+                    log('network-result', `📊 Target config: ${JSON.stringify(expectedConfig[targetNetwork], null, 2)}`, 'info');
+                } catch (switchError) {
+                    log('network-result', `❌ Network switching test failed: ${switchError.message}`, 'error');
+                }
+                
+            } catch (error) {
+                log('network-result', `❌ Network configuration test failed: ${error.message}`, 'error');
+                log('network-result', `Error details: ${JSON.stringify(error, null, 2)}`, 'error');
+            }
+        }
+
+
+        // Get test tokens from faucet (programmatic approach)
+        async function testFaucet() {
+            const resultDiv = document.getElementById('faucet-result');
+            resultDiv.innerHTML = '';
+
+            if (!keeta) {
+                log('faucet-result', '❌ Wallet not detected.', 'error');
+                return;
+            }
+
+            try {
+                // Check current network first
+                const network = await keeta.getNetwork();
+                log('faucet-result', `📊 Current network: ${network.name} (Chain ID: ${network.chainId})`, 'info');
+                
+                // Only allow faucet on test network
+                if (network.chainId !== '0x1' && network.name !== 'Keeta Test Network') {
+                    log('faucet-result', '❌ Faucet is only available on the TEST network!', 'error');
+                    log('faucet-result', '💡 Switch to test network first, then try again.', 'info');
+                    return;
+                }
+                
+                // Get connected accounts first
+                const accounts = await keeta.getAccounts();
+                if (accounts.length === 0) {
+                    log('faucet-result', '❌ No connected accounts found. Please connect first.', 'error');
+                    return;
+                }
+
+                const account = accounts[0];
+                
+                log('faucet-result', `🔄 Requesting test tokens from Keeta faucet...`, 'info');
+                log('faucet-result', `Account: ${account}`, 'info');
+                log('faucet-result', `💰 Requesting 10 KTA test tokens...`, 'info');
+
+                // Use network-specific faucet URL
+                const faucetUrl = 'https://faucet.test.keeta.com';
+                
+                try {
+                    // Try to make a programmatic request to the faucet
+                    const response = await fetch(`${faucetUrl}/api/request`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            address: account,
+                            amount: '10'
+                        })
+                    });
+
+                    if (response.ok) {
+                        const result = await response.json();
+                        log('faucet-result', `✅ Faucet request successful!`, 'success');
+                        log('faucet-result', `📥 You should receive 10 KTA tokens shortly!`, 'success');
+                        log('faucet-result', `Transaction: ${JSON.stringify(result, null, 2)}`, 'success');
+                    } else {
+                        throw new Error(`Faucet API returned status: ${response.status}`);
+                    }
+                } catch (apiError) {
+                    // If API doesn't work, fall back to manual instructions
+                    log('faucet-result', `⚠️ Programmatic faucet request failed, using manual method...`, 'warning');
+                    log('faucet-result', `📤 Visit: ${faucetUrl}`, 'info');
+                    log('faucet-result', `💡 Enter your account address: ${account}`, 'info');
+                    log('faucet-result', `🎯 Click "Request Test Tokens" to get 10 KTA`, 'info');
+                    
+                    // Alternative: Try to simulate the faucet by sending a small amount to trigger the faucet
+                    log('faucet-result', `🔄 Attempting alternative faucet method...`, 'info');
+                    
+                    // This is a workaround - some faucets respond to small transactions
+                    const faucetAccount = 'keeta_aabszsbrqppriqddrkptq5awubshpq3cgsoi4rc624xm6phdt74vo5w7wipwtmi';
+                    const transaction = {
+                        to: faucetAccount,
+                        from: account,
+                        amount: '0.001' // Send a tiny amount to trigger faucet
+                    };
+                    
+                    log('faucet-result', `📤 Sending 0.001 KTA to faucet to trigger response...`, 'info');
+                    const result = await keeta.sendTransaction(transaction);
+                    
+                    log('faucet-result', `✅ Trigger transaction sent!`, 'success');
+                    log('faucet-result', `📥 The faucet should now send you 10 KTA tokens!`, 'success');
+                    log('faucet-result', `Transaction: ${result}`, 'success');
+                }
+                
+            } catch (error) {
+                log('faucet-result', `❌ Faucet request failed: ${error.message}`, 'error');
+                log('faucet-result', `Error details: ${JSON.stringify(error, null, 2)}`, 'error');
+            }
+        }
+
+        async function testSendTransaction() {
+            const resultDiv = document.getElementById('transaction-result');
+            resultDiv.innerHTML = '';
+
+            if (!keeta) {
+                log('transaction-result', '❌ Wallet not detected.', 'error');
+                return;
+            }
+
+            try {
+                // Get connected accounts first
+                const accounts = await keeta.getAccounts();
+                if (accounts.length === 0) {
+                    log('transaction-result', '❌ No connected accounts found. Please connect first.', 'error');
+                    return;
+                }
+
+                const fromAccount = accounts[0];
+                const toAccount = 'keeta_aabl5radk65whrc56our35ys57ntilrljcpktsnktj27a4vbppkeh4qa4efdexi';
+                const amount = '0.01'; // 0.01 KTA (Keeta uses whole numbers, not decimals)
+                
+                log('transaction-result', `🔄 Preparing transaction:`, 'info');
+                log('transaction-result', `From: ${fromAccount}`, 'info');
+                log('transaction-result', `To: ${toAccount}`, 'info');
+                log('transaction-result', `Amount: ${amount} KTA`, 'info');
+
+                // Create the transaction object
+                const transaction = {
+                    to: toAccount,
+                    amount: amount
+                };
+
+                log('transaction-result', '🔄 Requesting transaction signature...', 'info');
+                log('transaction-result', `Transaction object: ${JSON.stringify(transaction, null, 2)}`, 'info');
+                
+                // Try to send the transaction using the wallet's send method
+                const result = await keeta.sendTransaction(transaction);
+                
+                log('transaction-result', `✅ Transaction sent successfully!`, 'success');
+                log('transaction-result', `Transaction result: ${JSON.stringify(result, null, 2)}`, 'success');
+                
+            } catch (error) {
+                log('transaction-result', `❌ Send transaction failed: ${error.message}`, 'error');
+                log('transaction-result', `Error details: ${JSON.stringify(error, null, 2)}`, 'error');
+            }
+        }
+
+        async function testCreateToken() {
+            const resultDiv = document.getElementById('token-creation-result');
+            resultDiv.innerHTML = '';
+
+            if (!keeta) {
+                log('token-creation-result', '❌ Wallet not detected.', 'error');
+                return;
+            }
+
+            try {
+                // Get connected accounts first
+                const accounts = await keeta.getAccounts();
+                if (accounts.length === 0) {
+                    log('token-creation-result', '❌ No connected accounts found. Please connect first.', 'error');
+                    return;
+                }
+
+                const fromAccount = accounts[0];
+                
+                // Token creation parameters
+                const name = 'LetsFookingGo';
+                const symbol = 'LFG';
+                const decimals = 8;
+                const initialSupply = '888';
+                const accessMode = 'public';
+                
+                log('token-creation-result', `🔄 Creating token:`, 'info');
+                log('token-creation-result', `Name: ${name}`, 'info');
+                log('token-creation-result', `Symbol: ${symbol}`, 'info');
+                log('token-creation-result', `Supply: ${initialSupply}`, 'info');
+                log('token-creation-result', `Decimal Places: ${decimals}`, 'info');
+                log('token-creation-result', `Access Mode: ${accessMode}`, 'info');
+
+                log('token-creation-result', '🔄 Requesting token creation...', 'info');
+                log('token-creation-result', `Parameters: name="${name}", symbol="${symbol}", decimals=${decimals}, supply="${initialSupply}", accessMode="${accessMode}"`, 'info');
+                
+                // Get capability token for transaction (required for token creation)
+                log('token-creation-result', '🔐 Requesting transaction capability...', 'info');
+                const capabilities = await keeta.requestCapabilities(['transact']);
+                const transactCapability = capabilities.find(cap => cap.capability === 'transact');
+                
+                if (!transactCapability) {
+                    throw new Error('Failed to get transaction capability');
+                }
+                
+                log('token-creation-result', '✅ Transaction capability granted', 'success');
+                
+                // Try to create the token using the wallet's createToken method
+                const result = await keeta.request({
+                    method: 'keeta_createToken',
+                    params: [name, symbol, decimals, initialSupply, accessMode, { capabilityToken: transactCapability.token }]
+                });
+                
+                log('token-creation-result', `✅ Token created successfully!`, 'success');
+                log('token-creation-result', `Token creation result: ${JSON.stringify(result, null, 2)}`, 'success');
+                
+            } catch (error) {
+                log('token-creation-result', `❌ Token creation failed: ${error.message}`, 'error');
+                log('token-creation-result', `Error details: ${JSON.stringify(error, null, 2)}`, 'error');
+            }
+        }
+
+        function setupEventListeners() {
+            const resultDiv = document.getElementById('event-result');
+            resultDiv.innerHTML = '';
+
+            if (!keeta) {
+                log('event-result', '❌ Wallet not detected.', 'error');
+                return;
+            }
+
+            try {
+                keeta.on('accountsChanged', (accounts) => {
+                    log('event-result', `📢 Accounts changed: ${JSON.stringify(accounts)}`, 'info');
+                });
+
+                keeta.on('chainChanged', (chainId) => {
+                    log('event-result', `📢 Chain changed: ${chainId}`, 'info');
+                });
+
+                keeta.on('disconnect', () => {
+                    log('event-result', '📢 Wallet disconnected', 'info');
+                });
+
+                log('event-result', '✅ Event listeners setup complete', 'success');
+            } catch (error) {
+                log('event-result', `❌ Setup event listeners failed: ${error.message}`, 'error');
+            }
+        }
+
+        // Auto-detect wallet on page load
+        window.addEventListener('load', () => {
+            setTimeout(() => {
+                testWalletDetection();
+            }, 1000);
+        });
+    </script>
+</body>
+</html>
