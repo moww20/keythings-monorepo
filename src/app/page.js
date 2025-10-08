@@ -4,24 +4,24 @@ import Image from "next/image"
 export const metadata = {
   title: "Keythings Wallet — Chrome Extension Splash",
   description:
-    "Experience the Keythings Wallet for the Keeta Network. Non-custodial security, glassmorphism design, and an intuitive dashboard built for power users.",
+    "Keythings Wallet delivers Keeta Network security and performance with private control, clear workflows, and confident approvals.",
 }
 
 const featureHighlights = [
   {
-    title: "Non-custodial by design",
+    title: "You stay in control",
     description:
-      "Private keys never leave your browser. AES-GCM encryption, Argon2id hardening, and origin isolation keep attackers out while you stay in control.",
+      "Private keys remain in your hands with layered protections that keep intruders out while you move quickly.",
   },
   {
-    title: "Purpose-built for Keeta",
+    title: "Made for the Keeta Network",
     description:
-      "Native Keeta SDK integration, instant testnet switching, and network-aware prompts so you're always signing the right transaction on the right chain.",
+      "Smart prompts, clear approvals, and reliable connectivity ensure every action lands on the right Keeta environment.",
   },
   {
-    title: "Intuitive, glass UI",
+    title: "Peace of mind at speed",
     description:
-      "A polished glassmorphism interface surfaces balances, NFTs, and storage with zero noise. Every control is tuned for speed and clarity.",
+      "Simple navigation and responsive performance help you monitor balances, storage, and NFTs without breaking focus.",
   },
 ]
 
@@ -29,19 +29,19 @@ const workflow = [
   {
     title: "Launch & unlock",
     description:
-      "Enter with biometric-grade password flows and smart account switching. Session health, lock timers, and key guardianship all begin here.",
+      "Sign in with calm confidence and pick up exactly where you left off. Smart session controls keep the wallet ready when you are.",
     image: { src: "/images/wallet/locked.png", alt: "Keythings Wallet lock screen" },
   },
   {
     title: "Command the dashboard",
     description:
-      "Monitor real-time token balances, price action, storage, NFTs, and recent activity from a single, responsive hub.",
+      "See balances, storage, NFTs, and activity in one organized view so you can make quick decisions without second guessing.",
     image: { src: "/images/wallet/dashboard.png", alt: "Keythings Wallet dashboard overview" },
   },
   {
     title: "Move value with confidence",
     description:
-      "Simulate and sign transactions with precise fee insights, saved contacts, and frictionless token management tools.",
+      "Review fees, confirm recipients, and send assets with prompts that highlight what matters before you sign.",
     image: { src: "/images/wallet/send.png", alt: "Keythings Wallet send token flow" },
   },
 ]
@@ -50,19 +50,19 @@ const capabilityCards = [
   {
     title: "Token supply orchestration",
     description:
-      "Mint, burn, and distribute Keeta-native tokens with full transparency and audit trails for every operation.",
+      "Launch, adjust, and distribute Keeta-native tokens with confidence while every move stays easy to audit.",
     image: { src: "/images/wallet/token-supply.png", alt: "Token supply management" },
   },
   {
     title: "NFT & storage ready",
     description:
-      "Track collectibles and storage allocations side-by-side, complete with activity history and contextual alerts.",
+      "Follow collectibles and storage allowances together with timely updates that keep your team aligned.",
     image: { src: "/images/wallet/menu.png", alt: "Wallet navigation menu" },
   },
   {
     title: "Rapid onboarding",
     description:
-      "Spin up a new vault, import an existing seed, or recover in seconds. Guided flows keep new teammates secure from day one.",
+      "Create, import, or recover wallets in a few guided steps so every teammate feels secure from day one.",
     image: { src: "/images/wallet/welcome.png", alt: "Keythings Wallet onboarding" },
   },
 ]
@@ -83,10 +83,10 @@ export default function Home() {
               Keeta Optimized
             </span>
             <h1 className="text-balance text-4xl font-semibold leading-tight text-white md:text-5xl lg:text-6xl">
-              The glassmorphism wallet built for the Keeta Network
+              The Keeta Network wallet built for peace of mind
             </h1>
             <p className="max-w-2xl text-lg text-white/70">
-              Keythings Wallet gives builders, treasuries, and communities a frictionless way to secure, visualize, and mobilize digital value on Keeta. Designed for Chrome with uncompromising privacy and performance.
+              Keythings Wallet keeps builders, treasuries, and communities confident on the Keeta Network. Secure your assets, understand activity at a glance, and approve every move with the performance of a native Chrome experience.
             </p>
             <div className="flex flex-wrap items-center gap-4">
               <a
@@ -136,9 +136,9 @@ export default function Home() {
         <div className="mx-auto max-w-6xl px-6">
           <div className="mb-12 flex flex-col gap-3 text-center">
             <span className="text-xs uppercase tracking-[0.35em] text-white/50">Workflow</span>
-            <h2 className="text-3xl font-semibold text-white md:text-4xl">A launch-to-signing experience that just flows</h2>
+            <h2 className="text-3xl font-semibold text-white md:text-4xl">A secure rhythm from unlock to signature</h2>
             <p className="mx-auto max-w-3xl text-base text-white/65">
-              Every touchpoint is engineered for velocity. From unlocking the vault to distributing tokens, Keythings Wallet keeps your teams in motion with auditability and trust built in.
+              Every touchpoint supports fast, confident action. From opening the wallet to distributing tokens, Keythings Wallet keeps your teams assured that each step is protected and ready for Keeta.
             </p>
           </div>
           <div className="grid gap-8 lg:grid-cols-3">
@@ -169,22 +169,22 @@ export default function Home() {
             <div className="space-y-6">
               <span className="text-xs uppercase tracking-[0.35em] text-white/50">Why teams choose Keythings</span>
               <h2 className="text-3xl font-semibold text-white md:text-4xl">
-                Enterprise-grade security without compromising on simplicity
+                Security and clarity without slowing down
               </h2>
               <p className="text-base text-white/65">
-                Seeds stay locked in volatile memory. Capability-based permissions, progressive lockouts, and transaction simulation guard every signature. Pair it with a design system your stakeholders will actually love using.
+                Keys stay protected, approvals stay transparent, and teammates always know what happens next. Keythings Wallet brings the safeguards you expect with the speed Keeta projects demand.
               </p>
               <dl className="grid gap-6 sm:grid-cols-2">
                 <div className="rounded-2xl border border-white/10 bg-white/5 p-5 shadow-[0_18px_50px_rgba(5,6,9,0.45)]">
-                  <dt className="text-sm font-semibold text-white">Security-first architecture</dt>
+                  <dt className="text-sm font-semibold text-white">Security-first approach</dt>
                   <dd className="text-sm text-white/60">
-                    AES-GCM encryption, Argon2id key derivation, manifest v3 hardening, and origin isolation across every surface.
+                    Layered defenses keep access private, alert you to risks, and make every signature feel trustworthy.
                   </dd>
                 </div>
                 <div className="rounded-2xl border border-white/10 bg-white/5 p-5 shadow-[0_18px_50px_rgba(5,6,9,0.45)]">
-                  <dt className="text-sm font-semibold text-white">Developer-grade tooling</dt>
+                  <dt className="text-sm font-semibold text-white">Built for momentum</dt>
                   <dd className="text-sm text-white/60">
-                    TypeScript, Redux Toolkit, and the Keeta SDK power modular flows, automation hooks, and custom dapp permissions.
+                    Purpose-built Keeta workflows and intuitive automation keep your team focused on delivering outcomes.
                   </dd>
                 </div>
               </dl>
@@ -196,7 +196,7 @@ export default function Home() {
                   Transaction simulation
                 </div>
                 <div className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-xs uppercase tracking-[0.25em] text-white/60">
-                  Risk intelligence
+                  Risk insights
                 </div>
               </div>
             </div>
@@ -232,9 +232,9 @@ export default function Home() {
             <div className="absolute inset-x-0 top-0 h-1/2 bg-gradient-to-b from-white/15 via-transparent to-transparent" />
             <div className="relative space-y-6">
               <span className="text-xs uppercase tracking-[0.35em] text-white/50">Ready to deploy</span>
-              <h2 className="text-3xl font-semibold text-white md:text-4xl">Bring the Keeta Network to every browser tab</h2>
+              <h2 className="text-3xl font-semibold text-white md:text-4xl">Put the Keeta Network a click away</h2>
               <p className="mx-auto max-w-3xl text-base text-white/65">
-                Empower your community with a self-sovereign wallet experience that feels instantly familiar. Install Keythings Wallet, connect your dapps, and unlock the next era of Keeta-native finance.
+                Give your community a wallet that protects their assets, clarifies every step, and keeps Keeta-native activity running smoothly. Install Keythings Wallet, connect your dapps, and move forward with assurance.
               </p>
               <div className="flex flex-wrap justify-center gap-4">
                 <a
