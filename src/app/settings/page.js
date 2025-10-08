@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { LayoutDashboard, Wallet, ShoppingCart, UserCircle, Settings, User, Bell, Palette, Globe, Clock, Zap, Moon, Sun } from 'lucide-react';
+import { LayoutDashboard, Wallet, ShoppingCart, UserCircle, Settings, User, Bell, Globe, Clock, Zap } from 'lucide-react';
 import { throttleBalanceCheck } from '../lib/wallet-throttle';
 
 export default function SettingsPage() {
@@ -17,8 +17,6 @@ export default function SettingsPage() {
   
   const [isConnecting, setIsConnecting] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [shortcutsEnabled, setShortcutsEnabled] = useState(false);
-  const [isDarkTheme, setIsDarkTheme] = useState(true);
 
   const formatAddress = (address) => {
     if (!address) return '';
@@ -427,39 +425,16 @@ export default function SettingsPage() {
                 </div>
                 
                 <div className="p-6 space-y-6">
-                  {/* Color Preference */}
+                  {/* Language */}
                   <div className="flex items-center justify-between">
                     <div className="flex-1">
-                      <h3 className="text-lg font-semibold text-foreground mb-2">Color Preference</h3>
+                      <h3 className="text-lg font-semibold text-foreground mb-2">Language</h3>
+                      <p className="text-sm text-muted mb-4">
+                        Choose your preferred language for the interface.
+                      </p>
                       <div className="flex items-center gap-2">
-                        <div className="flex items-center gap-1">
-                          <div className="w-3 h-3 bg-green-500 rounded-sm"></div>
-                          <svg className="h-3 w-3 text-green-500" fill="currentColor" viewBox="0 0 24 24">
-                            <path d="M7 14l5-5 5 5z" />
-                          </svg>
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <div className="w-3 h-3 bg-red-500 rounded-sm"></div>
-                          <svg className="h-3 w-3 text-red-500" fill="currentColor" viewBox="0 0 24 24">
-                            <path d="M7 10l5 5 5-5z" />
-                          </svg>
-                        </div>
-                        <span className="text-foreground">Green Up / Red Down</span>
-                      </div>
-                    </div>
-                    <button className="inline-flex items-center justify-center gap-2 bg-surface border border-hairline text-foreground px-6 py-2.5 rounded-md font-medium hover:bg-surface-strong transition-colors min-w-[120px]">
-                      Edit
-                    </button>
-                  </div>
-
-                  {/* Style Settings */}
-                  <div className="flex items-center justify-between">
-                    <div className="flex-1">
-                      <h3 className="text-lg font-semibold text-foreground mb-2">Style Settings</h3>
-                      <div className="flex items-center gap-2">
-                        <div className="w-3 h-3 bg-red-500 rounded-sm"></div>
-                        <div className="w-3 h-3 bg-green-500 rounded-sm"></div>
-                        <span className="text-foreground">Fresh</span>
+                        <Globe className="h-4 w-4 text-muted" />
+                        <span className="text-foreground">English</span>
                       </div>
                     </div>
                     <button className="inline-flex items-center justify-center gap-2 bg-surface border border-hairline text-foreground px-6 py-2.5 rounded-md font-medium hover:bg-surface-strong transition-colors min-w-[120px]">
@@ -471,6 +446,9 @@ export default function SettingsPage() {
                   <div className="flex items-center justify-between">
                     <div className="flex-1">
                       <h3 className="text-lg font-semibold text-foreground mb-2">UTC Time Zone</h3>
+                      <p className="text-sm text-muted mb-4">
+                        Set your timezone for accurate time display.
+                      </p>
                       <div className="flex items-center gap-2">
                         <Clock className="h-4 w-4 text-muted" />
                         <span className="text-foreground">Last 24 hours</span>
@@ -479,58 +457,6 @@ export default function SettingsPage() {
                     <button className="inline-flex items-center justify-center gap-2 bg-surface border border-hairline text-foreground px-6 py-2.5 rounded-md font-medium hover:bg-surface-strong transition-colors min-w-[120px]">
                       Edit
                     </button>
-                  </div>
-
-                  {/* Shortcuts */}
-                  <div className="flex items-center justify-between">
-                    <div className="flex-1">
-                      <h3 className="text-lg font-semibold text-foreground mb-2">Shortcuts</h3>
-                      <div className="flex items-center gap-3">
-                        <button
-                          onClick={() => setShortcutsEnabled(!shortcutsEnabled)}
-                          className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                            shortcutsEnabled ? 'bg-accent' : 'bg-gray-300'
-                          }`}
-                        >
-                          <span
-                            className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                              shortcutsEnabled ? 'translate-x-6' : 'translate-x-1'
-                            }`}
-                          />
-                        </button>
-                      </div>
-                    </div>
-                    <button className="inline-flex items-center justify-center gap-2 bg-surface border border-hairline text-foreground px-6 py-2.5 rounded-md font-medium hover:bg-surface-strong transition-colors min-w-[120px]">
-                      Edit
-                    </button>
-                  </div>
-
-                  {/* Theme */}
-                  <div className="flex items-center justify-between">
-                    <div className="flex-1">
-                      <h3 className="text-lg font-semibold text-foreground mb-2">Theme</h3>
-                      <div className="flex items-center gap-3">
-                        <span className="text-foreground">Dark</span>
-                        <div className="flex gap-1">
-                          <button
-                            onClick={() => setIsDarkTheme(false)}
-                            className={`p-2 rounded-full transition-colors ${
-                              !isDarkTheme ? 'bg-accent text-white' : 'bg-surface text-muted hover:bg-surface-strong'
-                            }`}
-                          >
-                            <Sun className="h-4 w-4" />
-                          </button>
-                          <button
-                            onClick={() => setIsDarkTheme(true)}
-                            className={`p-2 rounded-full transition-colors ${
-                              isDarkTheme ? 'bg-accent text-white' : 'bg-surface text-muted hover:bg-surface-strong'
-                            }`}
-                          >
-                            <Moon className="h-4 w-4" />
-                          </button>
-                        </div>
-                      </div>
-                    </div>
                   </div>
                 </div>
               </div>
