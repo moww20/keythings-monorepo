@@ -15,6 +15,8 @@ export default function Navbar() {
   const pathname = usePathname()
   const [mobileOpen, setMobileOpen] = useState(false)
   const [mounted, setMounted] = useState(false)
+  const [walletConnected, setWalletConnected] = useState(false)
+  const [walletAddress, setWalletAddress] = useState(null)
 
   useEffect(() => {
     // Close mobile menu on route change
@@ -31,7 +33,80 @@ export default function Navbar() {
 
   useEffect(() => {
     setMounted(true)
+    
+    // Check if already connected
+    checkWalletConnection()
+
+    // Listen for wallet events
+    if (typeof window !== 'undefined' && window.keeta) {
+      const provider = window.keeta
+
+      provider.on?.('accountsChanged', (accounts) => {
+        if (accounts && accounts.length > 0) {
+          setWalletConnected(true)
+          setWalletAddress(accounts[0])
+        } else {
+          setWalletConnected(false)
+          setWalletAddress(null)
+        }
+      })
+
+      provider.on?.('disconnect', () => {
+        setWalletConnected(false)
+        setWalletAddress(null)
+      })
+    }
   }, [])
+
+  const checkWalletConnection = async () => {
+    if (typeof window === 'undefined') return
+    
+    const provider = window.keeta
+    if (provider) {
+      try {
+        const accounts = await provider.getAccounts()
+        if (accounts && accounts.length > 0) {
+          setWalletConnected(true)
+          setWalletAddress(accounts[0])
+        }
+      } catch (error) {
+        console.log('No wallet connected')
+      }
+    }
+  }
+
+  const connectWallet = async () => {
+    if (typeof window === 'undefined') return
+    
+    const provider = window.keeta
+    
+    if (!provider) {
+      alert('Keythings Wallet not detected. Please install the Keythings Wallet extension.')
+      return
+    }
+
+    try {
+      const accounts = await provider.requestAccounts()
+      if (accounts && accounts.length > 0) {
+        setWalletConnected(true)
+        setWalletAddress(accounts[0])
+        console.log('Connected account:', accounts[0])
+      }
+    } catch (error) {
+      console.error('Connection failed:', error)
+      alert('Failed to connect wallet. Please try again.')
+    }
+  }
+
+  const disconnectWallet = () => {
+    setWalletConnected(false)
+    setWalletAddress(null)
+  }
+
+  const formatAddress = (address) => {
+    if (!address) return ''
+    return `${address.slice(0, 6)}...${address.slice(-4)}`
+  }
 
   const linkClass = (href) =>
     `px-3 py-1.5 rounded-full text-sm transition ${pathname.startsWith(href) ? "bg-white/10 text-foreground" : "text-foreground/90 hover:bg-white/5"}`
@@ -86,9 +161,10 @@ export default function Navbar() {
           </a>
           <button
             type="button"
+            onClick={walletConnected ? disconnectWallet : connectWallet}
             className="px-4 py-2 flex-shrink-0 rounded-full bg-white/10 hover:bg-white/20 hover:shadow-lg hover:shadow-white/10 text-foreground text-sm font-medium transition-all duration-200 max-[519px]:hidden [html[data-theme='light']_&]:border [html[data-theme='light']_&]:border-gray-300 [html[data-theme='light']_&]:hover:shadow-gray-300/50"
           >
-            Connect Wallet
+            {walletConnected ? formatAddress(walletAddress) : 'Connect Wallet'}
           </button>
           <button
             type="button"
@@ -147,9 +223,10 @@ export default function Navbar() {
                     </a>
                     <button
                       type="button"
+                      onClick={walletConnected ? disconnectWallet : connectWallet}
                       className="px-4 py-2 rounded-full bg-white/10 hover:bg-white/20 hover:shadow-lg hover:shadow-white/10 text-foreground text-sm font-medium transition-all duration-200 text-left [html[data-theme='light']_&]:border [html[data-theme='light']_&]:border-gray-300 [html[data-theme='light']_&]:hover:shadow-gray-300/50"
                     >
-                      Connect Wallet
+                      {walletConnected ? formatAddress(walletAddress) : 'Connect Wallet'}
                     </button>
                     <div className="flex items-center gap-3 pt-2">
                       <a href="https://x.com/twatter_army" target="_blank" rel="noopener noreferrer" aria-label="X (Twitter)" className="inline-flex items-center justify-center w-9 h-9 rounded-full hover:bg-white/5 text-foreground/90">
