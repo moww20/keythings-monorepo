@@ -194,8 +194,8 @@ export default function HomePage() {
       <div className="pointer-events-none absolute inset-x-0 top-[-20%] z-0 h-[480px] bg-gradient-to-b from-[color:color-mix(in_oklab,var(--foreground)_18%,transparent)] via-transparent to-transparent blur-3xl" />
       
       <div className="relative z-10 max-w-7xl mx-auto px-6 py-8">
-        <div className="flex flex-col gap-8 xl:grid xl:grid-cols-[12rem_minmax(0,1fr)] xl:h-[calc(100vh-8rem)] xl:overflow-hidden">
-          <aside className="hidden xl:block sticky top-[8rem] h-[calc(100vh-8rem)] w-48 flex-shrink-0 overflow-auto glass border border-hairline rounded-2xl">
+        <div className="flex flex-col gap-8 xl:grid xl:grid-cols-[16rem_minmax(0,1fr)] xl:h-[calc(100vh-8rem)] xl:overflow-hidden">
+          <aside className="hidden xl:block sticky top-[8rem] h-[calc(100vh-8rem)] w-64 flex-shrink-0 overflow-auto glass border border-hairline rounded-2xl">
           <div className="p-4">
             <nav className="space-y-1">
               <a
