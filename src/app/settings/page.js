@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { LayoutDashboard, Wallet, ShoppingCart, UserCircle, Settings, User, Bell, Globe, Clock, Zap } from 'lucide-react';
-import { throttleBalanceCheck } from '../lib/wallet-throttle';
+import { throttleBalanceCheck, markBalanceCheckComplete } from '../lib/wallet-throttle';
 
 export default function SettingsPage() {
   const router = useRouter();
@@ -29,8 +29,8 @@ export default function SettingsPage() {
       return;
     }
 
-    // Use shared throttling mechanism
-    if (!throttleBalanceCheck(forceCheck)) {
+    // Use shared throttling mechanism with source tracking
+    if (!throttleBalanceCheck(forceCheck, 'settings-page')) {
       return; // Throttled
     }
 
@@ -53,6 +53,9 @@ export default function SettingsPage() {
     } catch (error) {
       console.error('Error checking wallet connection:', error);
       setWalletState(prevState => ({ ...prevState, connected: false, loading: false }));
+    } finally {
+      // Mark balance check as complete
+      markBalanceCheckComplete();
     }
   }, []);
 
@@ -68,15 +71,28 @@ export default function SettingsPage() {
     try {
       const accounts = await provider.requestAccounts();
       if (accounts && accounts.length > 0) {
-        const balance = await provider.getBalance(accounts[0]);
-        const network = await provider.getNetwork();
-        setWalletState({
-          connected: true,
-          accounts,
-          balance,
-          network,
-          loading: false,
-        });
+        // Use throttling for balance check during connection
+        if (throttleBalanceCheck(true, 'connect-wallet-settings')) {
+          const balance = await provider.getBalance(accounts[0]);
+          const network = await provider.getNetwork();
+          setWalletState({
+            connected: true,
+            accounts,
+            balance,
+            network,
+            loading: false,
+          });
+          markBalanceCheckComplete();
+        } else {
+          // If throttled, just set basic connection info
+          setWalletState({
+            connected: true,
+            accounts,
+            balance: null,
+            network: null,
+            loading: false,
+          });
+        }
       }
     } catch (error) {
       console.error('Failed to connect wallet:', error);
