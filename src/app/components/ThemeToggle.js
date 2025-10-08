@@ -46,28 +46,30 @@ export default function ThemeToggle() {
       type="button"
       aria-label="Toggle color mode"
       aria-pressed={isDark}
-      className={`relative inline-flex items-center h-7 w-14 rounded-full hairline transition-colors ${trackClass}`}
+      className={`relative inline-flex items-center justify-center flex-shrink-0 h-7 w-14 rounded-full hairline transition-colors ${trackClass}`}
       onClick={() => setTheme(isDark ? "light" : "dark")}
+      style={{ minWidth: '3.5rem', minHeight: '1.75rem' }}
     >
       {/* Sun icon - left side */}
       <span 
-        className={`absolute left-[0.875rem] top-1/2 -translate-x-1/2 -translate-y-1/2 transition-colors z-[1] ${!isDark ? "text-[#6b7280]" : "text-[--color-muted] opacity-50"}`} 
+        className={`absolute left-[0.875rem] top-1/2 -translate-x-1/2 -translate-y-1/2 transition-colors duration-200 z-[1] ${!isDark ? "text-[#6b7280]" : "text-[--color-muted] opacity-50"}`} 
         aria-hidden="true"
       >
-        <Sun className="w-3.5 h-3.5" strokeWidth={2} />
+        <Sun className="w-3.5 h-3.5" strokeWidth={2} style={{ display: 'block' }} />
       </span>
       
       {/* Moon icon - right side */}
       <span 
-        className={`absolute right-[0.875rem] top-1/2 translate-x-1/2 -translate-y-1/2 transition-colors z-[1] ${isDark ? "text-[#9ca3af]" : "text-[--color-muted] opacity-50"}`} 
+        className={`absolute right-[0.875rem] top-1/2 translate-x-1/2 -translate-y-1/2 transition-colors duration-200 z-[1] ${isDark ? "text-[#9ca3af]" : "text-[--color-muted] opacity-50"}`} 
         aria-hidden="true"
       >
-        <Moon className="w-3.5 h-3.5" strokeWidth={2} />
+        <Moon className="w-3.5 h-3.5" strokeWidth={2} style={{ display: 'block' }} />
       </span>
       
       {/* Sliding thumb */}
       <span
-        className={`absolute inline-block h-5 w-5 rounded-full bg-white shadow-sm transition-transform duration-200 ease-in-out top-1 left-1 ${isDark ? "translate-x-[1.75rem]" : "translate-x-0"}`}
+        className={`absolute inline-block h-5 w-5 rounded-full bg-white shadow-sm transition-transform duration-200 ease-in-out will-change-transform ${isDark ? "translate-x-[1.75rem]" : "translate-x-0"}`}
+        style={{ top: '0.25rem', left: '0.25rem' }}
         aria-hidden="true"
       />
     </button>
