@@ -1,4 +1,5 @@
 import Link from "next/link"
+import Image from "next/image"
 
 export const metadata = {
   title: "Keythings Wallet — Chrome Extension Splash",
@@ -29,19 +30,19 @@ const workflow = [
     title: "Launch & unlock",
     description:
       "Enter with biometric-grade password flows and smart account switching. Session health, lock timers, and key guardianship all begin here.",
-    mockup: "locked",
+    image: { src: "/images/wallet/locked.png", alt: "Keythings Wallet lock screen" },
   },
   {
     title: "Command the dashboard",
     description:
       "Monitor real-time token balances, price action, storage, NFTs, and recent activity from a single, responsive hub.",
-    mockup: "dashboard",
+    image: { src: "/images/wallet/dashboard.png", alt: "Keythings Wallet dashboard overview" },
   },
   {
     title: "Move value with confidence",
     description:
       "Simulate and sign transactions with precise fee insights, saved contacts, and frictionless token management tools.",
-    mockup: "send",
+    image: { src: "/images/wallet/send.png", alt: "Keythings Wallet send token flow" },
   },
 ]
 
@@ -50,319 +51,22 @@ const capabilityCards = [
     title: "Token supply orchestration",
     description:
       "Mint, burn, and distribute Keeta-native tokens with full transparency and audit trails for every operation.",
-    mockup: "token-supply",
+    image: { src: "/images/wallet/token-supply.png", alt: "Token supply management" },
   },
   {
     title: "NFT & storage ready",
     description:
       "Track collectibles and storage allocations side-by-side, complete with activity history and contextual alerts.",
-    mockup: "menu",
+    image: { src: "/images/wallet/menu.png", alt: "Wallet navigation menu" },
   },
   {
     title: "Rapid onboarding",
     description:
       "Spin up a new vault, import an existing seed, or recover in seconds. Guided flows keep new teammates secure from day one.",
-    mockup: "welcome",
+    image: { src: "/images/wallet/welcome.png", alt: "Keythings Wallet onboarding" },
   },
 ]
 
-function WalletMockup({ variant, className = "" }) {
-  const baseClasses =
-    "relative flex w-full flex-col gap-5 overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-b from-white/[0.14] via-white/[0.04] to-[#05070a]/90 p-6 text-white shadow-[0_22px_60px_rgba(5,6,11,0.55)]"
-
-  if (variant === "locked") {
-    return (
-      <div className={`${baseClasses} min-h-[260px] ${className}`}>
-        <div className="absolute inset-x-6 top-0 h-28 rounded-full bg-emerald-400/20 blur-2xl" />
-        <div className="relative flex flex-1 flex-col items-center justify-center gap-6 text-center">
-          <div className="flex h-16 w-16 items-center justify-center rounded-2xl border border-emerald-400/30 bg-emerald-400/10">
-            <div className="h-9 w-7 rounded-md border-2 border-emerald-300/70">
-              <div className="mx-auto mt-1 h-2 w-5 rounded-full border-2 border-emerald-300/70" />
-            </div>
-          </div>
-          <div className="space-y-1">
-            <p className="text-xs uppercase tracking-[0.35em] text-white/55">Vault locked</p>
-            <p className="text-2xl font-semibold text-white">Keythings Wallet</p>
-            <p className="text-xs text-white/55">Session secure · Origin isolated</p>
-          </div>
-          <div className="flex w-full flex-col gap-3">
-            <div className="flex h-12 items-center justify-center rounded-full border border-white/10 bg-black/50 text-lg tracking-[0.6em] text-white/45">
-              ••••••
-            </div>
-            <div className="flex h-11 items-center justify-center rounded-full bg-emerald-400 text-sm font-semibold text-black shadow-[0_12px_30px_rgba(16,185,129,0.35)]">
-              Unlock vault
-            </div>
-          </div>
-        </div>
-        <div className="relative flex items-center justify-between rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-xs text-white/55">
-          <span>Timer 00:45</span>
-          <span>Guardian sync enabled</span>
-        </div>
-      </div>
-    )
-  }
-
-  if (variant === "dashboard") {
-    return (
-      <div className={`${baseClasses} min-h-[320px] ${className}`}>
-        <div className="absolute inset-x-4 top-0 h-32 rounded-full bg-white/15 blur-2xl" />
-        <div className="relative flex flex-col gap-4">
-          <div className="flex items-start justify-between">
-            <div className="space-y-1">
-              <p className="text-xs uppercase tracking-[0.35em] text-white/55">Portfolio</p>
-              <p className="text-3xl font-semibold text-white">512,940 KTA</p>
-              <p className="text-xs text-white/45">≈ $184,120.08</p>
-            </div>
-            <div className="flex items-center gap-3">
-              <span className="h-12 w-12 rounded-2xl bg-gradient-to-br from-emerald-400/80 via-emerald-400/40 to-transparent" />
-              <div className="space-y-1 text-right">
-                <p className="text-xs text-white/55">24h change</p>
-                <p className="text-sm font-semibold text-emerald-300">+12.4%</p>
-              </div>
-            </div>
-          </div>
-          <div className="rounded-xl border border-white/10 bg-white/5 p-4">
-            <div className="mb-3 flex items-center justify-between text-xs text-white/45">
-              <span>Asset</span>
-              <span>Value</span>
-            </div>
-            <div className="space-y-2 text-sm">
-              {[
-                { label: "Keeta", value: "312,450", accent: "from-emerald-300/70 to-emerald-500/60" },
-                { label: "Stable reserves", value: "142,620", accent: "from-cyan-300/60 to-cyan-500/50" },
-                { label: "Storage", value: "57,870", accent: "from-violet-300/60 to-violet-500/50" },
-              ].map((row) => (
-                <div key={row.label} className="flex items-center justify-between rounded-lg bg-black/30 p-3">
-                  <div className="flex items-center gap-3">
-                    <span className={`h-8 w-8 rounded-xl bg-gradient-to-br ${row.accent}`} />
-                    <span className="text-white/85">{row.label}</span>
-                  </div>
-                  <span className="font-semibold text-white/75">{row.value}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-3 text-xs text-white/60">
-            <div className="rounded-xl border border-white/10 bg-black/40 p-3">
-              <p className="mb-2 text-[0.65rem] uppercase tracking-[0.3em] text-white/45">Activity</p>
-              <div className="space-y-2 text-sm text-white/70">
-                <div className="flex items-center justify-between">
-                  <span>Receive</span>
-                  <span className="text-emerald-300">+420</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span>Stake</span>
-                  <span className="text-violet-300">-1,200</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span>Storage</span>
-                  <span className="text-cyan-300">+80</span>
-                </div>
-              </div>
-            </div>
-            <div className="rounded-xl border border-white/10 bg-black/40 p-3">
-              <p className="mb-2 text-[0.65rem] uppercase tracking-[0.3em] text-white/45">Network</p>
-              <div className="space-y-2">
-                <div className="flex items-center gap-3 rounded-lg bg-white/5 p-2 text-sm text-white/80">
-                  <span className="h-6 w-6 rounded-full bg-emerald-400/70" />
-                  <div>
-                    <p>Mainnet</p>
-                    <p className="text-xs text-white/45">Healthy</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-3 rounded-lg border border-white/10 p-2 text-xs text-white/60">
-                  <span className="h-6 w-6 rounded-full bg-cyan-400/50" />
-                  <span>Testnet · Ready</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    )
-  }
-
-  if (variant === "send") {
-    return (
-      <div className={`${baseClasses} min-h-[280px] ${className}`}>
-        <div className="absolute inset-x-6 top-0 h-24 rounded-full bg-cyan-400/20 blur-2xl" />
-        <div className="relative space-y-4">
-          <div className="space-y-1">
-            <p className="text-xs uppercase tracking-[0.35em] text-white/55">Send assets</p>
-            <p className="text-lg font-semibold text-white">Distribute tokens</p>
-          </div>
-          <div className="space-y-3">
-            <div className="space-y-2">
-              <label className="text-xs uppercase tracking-[0.35em] text-white/45">Recipient</label>
-              <div className="flex items-center justify-between rounded-xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white/70">
-                <span>treasury.multisig.keeta</span>
-                <span className="rounded-full bg-white/10 px-3 py-1 text-[0.65rem] uppercase tracking-[0.25em]">Saved</span>
-              </div>
-            </div>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div className="space-y-2">
-                <label className="text-xs uppercase tracking-[0.35em] text-white/45">Amount</label>
-                <div className="rounded-xl border border-white/10 bg-black/30 px-4 py-3 text-white/80">4,200 KTA</div>
-              </div>
-              <div className="space-y-2">
-                <label className="text-xs uppercase tracking-[0.35em] text-white/45">Network fee</label>
-                <div className="rounded-xl border border-white/10 bg-black/30 px-4 py-3 text-emerald-300">0.0021 KTA</div>
-              </div>
-            </div>
-          </div>
-          <div className="rounded-xl border border-white/10 bg-white/5 p-4 text-xs text-white/60">
-            <p className="mb-2 text-[0.65rem] uppercase tracking-[0.35em] text-white/45">Simulation</p>
-            <div className="space-y-1 text-sm text-white/70">
-              <div className="flex items-center justify-between">
-                <span>Arrival</span>
-                <span className="text-emerald-300">12s</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span>Risk</span>
-                <span className="text-white/50">None detected</span>
-              </div>
-            </div>
-          </div>
-          <div className="flex items-center justify-between">
-            <span className="text-xs text-white/50">3 approvals required</span>
-            <div className="flex h-11 w-32 items-center justify-center rounded-full bg-cyan-400 text-sm font-semibold text-black shadow-[0_12px_30px_rgba(34,211,238,0.35)]">
-              Sign & send
-            </div>
-          </div>
-        </div>
-      </div>
-    )
-  }
-
-  if (variant === "token-supply") {
-    return (
-      <div className={`${baseClasses} min-h-[260px] ${className}`}>
-        <div className="absolute inset-x-6 top-0 h-24 rounded-full bg-violet-500/20 blur-2xl" />
-        <div className="relative space-y-4">
-          <div>
-            <p className="text-xs uppercase tracking-[0.35em] text-white/55">Token supply</p>
-            <p className="text-lg font-semibold text-white">Orchestrate movements</p>
-          </div>
-          <div className="grid gap-4">
-            <div className="space-y-2">
-              {["Treasury", "Community", "Liquidity"].map((label, index) => (
-                <div key={label} className="space-y-1">
-                  <div className="flex items-center justify-between text-xs text-white/55">
-                    <span>{label}</span>
-                    <span>{index === 0 ? "Live" : "Scheduled"}</span>
-                  </div>
-                  <div className="h-2 rounded-full bg-white/10">
-                    <div
-                      className={`h-2 rounded-full bg-gradient-to-r ${
-                        index === 0
-                          ? "from-violet-400 via-fuchsia-400 to-emerald-400"
-                          : index === 1
-                            ? "from-cyan-400 via-emerald-400 to-lime-400"
-                            : "from-amber-400 via-orange-400 to-rose-400"
-                      }`}
-                      style={{ width: `${60 + index * 20}%` }}
-                    />
-                  </div>
-                </div>
-              ))}
-            </div>
-            <div className="grid grid-cols-2 gap-3 text-xs text-white/60">
-              <div className="rounded-xl border border-white/10 bg-black/35 p-3">
-                <p className="text-[0.65rem] uppercase tracking-[0.3em] text-white/45">Mint authority</p>
-                <p className="mt-2 text-sm text-white/80">Multisig · Threshold 3</p>
-              </div>
-              <div className="rounded-xl border border-white/10 bg-black/35 p-3">
-                <p className="text-[0.65rem] uppercase tracking-[0.3em] text-white/45">Audit log</p>
-                <p className="mt-2 text-sm text-white/80">9 entries this week</p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    )
-  }
-
-  if (variant === "menu") {
-    return (
-      <div className={`${baseClasses} min-h-[260px] ${className}`}>
-        <div className="absolute inset-x-6 top-0 h-24 rounded-full bg-white/15 blur-2xl" />
-        <div className="relative space-y-4">
-          <p className="text-xs uppercase tracking-[0.35em] text-white/55">Navigation</p>
-          <div className="space-y-2">
-            {[
-              { label: "Dashboard", active: true },
-              { label: "NFT Vault", accent: "emerald" },
-              { label: "Storage", accent: "cyan" },
-              { label: "Governance", accent: "violet" },
-              { label: "Activity", accent: "white" },
-            ].map((item) => (
-              <div
-                key={item.label}
-                className={`flex items-center justify-between rounded-2xl border border-white/10 px-4 py-3 text-sm ${
-                  item.active ? "bg-white/15 text-white" : "bg-black/40 text-white/70"
-                }`}
-              >
-                <span>{item.label}</span>
-                <span
-                  className={`h-2.5 w-2.5 rounded-full ${
-                    item.accent === "emerald"
-                      ? "bg-emerald-400"
-                      : item.accent === "cyan"
-                        ? "bg-cyan-400"
-                        : item.accent === "violet"
-                          ? "bg-violet-400"
-                          : "bg-white/60"
-                  }`}
-                />
-              </div>
-            ))}
-          </div>
-          <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-xs text-white/60">
-            <p className="text-[0.65rem] uppercase tracking-[0.3em] text-white/45">Context</p>
-            <p className="mt-2 text-sm text-white/75">Switch spaces in one click and pin your favorites for faster approvals.</p>
-          </div>
-        </div>
-      </div>
-    )
-  }
-
-  if (variant === "welcome") {
-    return (
-      <div className={`${baseClasses} min-h-[260px] ${className}`}>
-        <div className="absolute inset-x-6 top-0 h-24 rounded-full bg-emerald-400/20 blur-2xl" />
-        <div className="relative space-y-4">
-          <div className="space-y-1">
-            <p className="text-xs uppercase tracking-[0.35em] text-white/55">Welcome</p>
-            <p className="text-lg font-semibold text-white">Set up in minutes</p>
-          </div>
-          <div className="space-y-3">
-            {[
-              { step: "Create vault", detail: "Generate a new Keeta seed" },
-              { step: "Add guardians", detail: "Invite trusted recovery partners" },
-              { step: "Import keys", detail: "Bring an existing mnemonic" },
-            ].map((item, index) => (
-              <div key={item.step} className="flex items-start gap-3 rounded-2xl border border-white/10 bg-black/35 px-4 py-3">
-                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-white/10 text-sm font-semibold text-white/70">
-                  {index + 1}
-                </div>
-                <div>
-                  <p className="text-sm text-white">{item.step}</p>
-                  <p className="text-xs text-white/55">{item.detail}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-          <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-xs text-white/65">
-            <p className="text-[0.65rem] uppercase tracking-[0.3em] text-white/45">Security defaults</p>
-            <p className="mt-2 text-sm text-white/80">Biometric unlock and 2FA prompts auto-enable for new workspaces.</p>
-          </div>
-        </div>
-      </div>
-    )
-  }
-
-  return <div className={`${baseClasses} min-h-[240px] ${className}`} />
-}
 
 export default function Home() {
   return (
@@ -414,9 +118,14 @@ export default function Home() {
               <div className="absolute -inset-6 rounded-[36px] bg-gradient-to-br from-white/10 via-white/0 to-white/5 blur-2xl" />
               <div className="glass relative overflow-hidden rounded-[30px] border border-white/10 p-6 shadow-[0_35px_85px_rgba(0,0,0,0.55)]">
                 <div className="absolute inset-x-12 top-8 h-48 rounded-full bg-gradient-to-b from-white/20 via-transparent to-transparent blur-2xl" />
-                <div className="relative">
-                  <WalletMockup variant="dashboard" className="min-h-[520px]" />
-                </div>
+                <Image
+                  src="/images/wallet/dashboard.png"
+                  width={360}
+                  height={640}
+                  alt="Keythings Wallet dashboard"
+                  className="relative rounded-2xl border-4 border-gray-600 shadow-[0_18px_55px_rgba(7,8,12,0.65)]"
+                  priority
+                />
               </div>
             </div>
           </div>
@@ -436,7 +145,13 @@ export default function Home() {
             {workflow.map((step) => (
               <div key={step.title} className="group relative flex flex-col gap-5 rounded-3xl border border-white/8 bg-white/[0.035] p-6 shadow-[0_20px_60px_rgba(6,7,10,0.45)] transition hover:border-white/15 hover:bg-white/[0.06]">
                 <div className="rounded-2xl border border-white/10 bg-gradient-to-br from-white/10 via-white/0 to-transparent p-4">
-                  <WalletMockup variant={step.mockup} className="min-h-[280px]" />
+                  <Image
+                    src={step.image.src}
+                    width={320}
+                    height={560}
+                    alt={step.image.alt}
+                    className="rounded-xl border-4 border-gray-600"
+                  />
                 </div>
                 <div className="space-y-2">
                   <h3 className="text-lg font-semibold text-white">{step.title}</h3>
@@ -495,7 +210,13 @@ export default function Home() {
                       <p className="text-sm leading-relaxed text-white/65">{capability.description}</p>
                     </div>
                     <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
-                      <WalletMockup variant={capability.mockup} className="min-h-[260px]" />
+                      <Image
+                        src={capability.image.src}
+                        width={260}
+                        height={420}
+                        alt={capability.image.alt}
+                        className="rounded-xl border-4 border-gray-600"
+                      />
                     </div>
                   </div>
                 </div>
