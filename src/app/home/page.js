@@ -12,6 +12,8 @@ export default function HomePage() {
     network: null,
     loading: true,
   })
+  
+  const [isConnecting, setIsConnecting] = useState(false)
 
   const formatAddress = (address) => {
     if (!address) return ''
@@ -48,6 +50,40 @@ export default function HomePage() {
     } catch (error) {
       console.error('Error checking wallet connection:', error);
       setWalletState(prevState => ({ ...prevState, connected: false, loading: false }));
+    }
+  }, []);
+
+  const connectWallet = useCallback(async () => {
+    if (typeof window === 'undefined' || !window.keeta) {
+      alert('Please install the Keythings wallet extension first!');
+      return;
+    }
+
+    setIsConnecting(true);
+    const provider = window.keeta;
+    
+    try {
+      const accounts = await provider.requestAccounts();
+      if (accounts && accounts.length > 0) {
+        const balance = await provider.getBalance(accounts[0]);
+        const network = await provider.getNetwork();
+        setWalletState({
+          connected: true,
+          accounts,
+          balance,
+          network,
+          loading: false,
+        });
+      }
+    } catch (error) {
+      console.error('Failed to connect wallet:', error);
+      if (error.message?.includes('rejected') || error.message?.includes('denied')) {
+        // User rejected the connection, no need to show error
+      } else {
+        alert('Failed to connect wallet. Please try again.');
+      }
+    } finally {
+      setIsConnecting(false);
     }
   }, []);
 
@@ -103,6 +139,23 @@ export default function HomePage() {
         <p className="text-lg text-muted mb-8">
           Please connect your Keeta Wallet to access the dashboard.
         </p>
+        <button
+          onClick={connectWallet}
+          disabled={isConnecting}
+          className="mb-6 inline-flex items-center justify-center gap-2 rounded-full bg-white px-6 py-3 text-sm font-semibold text-black shadow-[0_20px_50px_rgba(15,15,20,0.35)] transition-all duration-200 hover:bg-white/90 hover:scale-[1.02] active:scale-[0.98] disabled:opacity-70 disabled:cursor-not-allowed disabled:transform-none"
+        >
+          {isConnecting ? (
+            <>
+              <svg className="animate-spin h-4 w-4 text-black" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+              Connecting...
+            </>
+          ) : (
+            'Connect Wallet'
+          )}
+        </button>
         <p className="text-xs text-muted">
             Don&apos;t have a wallet?{' '}
             <a
