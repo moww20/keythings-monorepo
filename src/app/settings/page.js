@@ -352,25 +352,6 @@ export default function SettingsPage() {
                       Edit
                     </button>
                   </div>
-
-                  {/* C2C Profile */}
-                  <div className="flex items-center justify-between">
-                    <div className="flex-1">
-                      <h3 className="text-lg font-semibold text-foreground mb-2">C2C Profile</h3>
-                      <p className="text-sm text-muted mb-4">
-                        Edit your C2C nickname, manage your payment methods and the list of users you follow.
-                      </p>
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-full bg-blue-500 flex items-center justify-center">
-                          <span className="text-white text-sm font-bold">U</span>
-                        </div>
-                        <span className="text-foreground font-medium">User-b9a60</span>
-                      </div>
-                    </div>
-                    <button className="inline-flex items-center justify-center gap-2 bg-surface border border-hairline text-foreground px-6 py-2.5 rounded-md font-medium hover:bg-surface-strong transition-colors min-w-[120px]">
-                      Edit
-                    </button>
-                  </div>
                 </div>
               </div>
 
