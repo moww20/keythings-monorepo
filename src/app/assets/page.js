@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { LayoutDashboard, Wallet, ShoppingCart, Gift, Users, UserCircle, Users2, Settings, ArrowDownToLine, ArrowUpFromLine, Banknote, Search, Eye, EyeOff } from 'lucide-react';
 import EstimatedBalance from '../components/EstimatedBalance';
+import { throttleBalanceCheck } from '../lib/wallet-throttle';
 
 export default function AssetsPage() {
   const router = useRouter();
@@ -18,8 +19,6 @@ export default function AssetsPage() {
   const [isConnecting, setIsConnecting] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [hideSmallAssets, setHideSmallAssets] = useState(false);
-  const lastBalanceCheck = useRef(0);
-  const BALANCE_CHECK_THROTTLE = 1500;
 
   const formatAddress = (address) => {
     if (!address) return '';
@@ -32,19 +31,15 @@ export default function AssetsPage() {
       return;
     }
 
-    const now = Date.now();
-    const timeSinceLastCheck = now - lastBalanceCheck.current;
-    
-    if (!forceCheck && timeSinceLastCheck < BALANCE_CHECK_THROTTLE) {
-      console.log('Throttling balance check, waiting...', Math.ceil((BALANCE_CHECK_THROTTLE - timeSinceLastCheck) / 1000), 'seconds');
-      return;
+    // Use shared throttling mechanism
+    if (!throttleBalanceCheck(forceCheck)) {
+      return; // Throttled
     }
 
     const provider = window.keeta;
     try {
       const accounts = await provider.getAccounts();
       if (accounts && accounts.length > 0) {
-        lastBalanceCheck.current = now;
         const balance = await provider.getBalance(accounts[0]);
         const network = await provider.getNetwork();
         setWalletState({
@@ -75,7 +70,6 @@ export default function AssetsPage() {
     try {
       const accounts = await provider.requestAccounts();
       if (accounts && accounts.length > 0) {
-        lastBalanceCheck.current = Date.now();
         const balance = await provider.getBalance(accounts[0]);
         const network = await provider.getNetwork();
         setWalletState({
