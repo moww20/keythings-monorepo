@@ -34,6 +34,12 @@ export default function Navbar() {
   useEffect(() => {
     setMounted(true)
     
+    // Debug: Check what's available on window
+    console.log('🔍 Debug - window.keeta:', typeof window.keeta)
+    if (typeof window.keeta !== 'undefined') {
+      console.log('🔍 Debug - window.keeta properties:', Object.keys(window.keeta))
+    }
+    
     // Check if already connected
     checkWalletConnection()
 
@@ -61,8 +67,9 @@ export default function Navbar() {
   const checkWalletConnection = async () => {
     if (typeof window === 'undefined') return
     
-    const provider = window.keeta
-    if (provider && provider.isKeeta && provider.isAvailable) {
+    // Simple detection like test-api.html
+    if (typeof window.keeta !== 'undefined') {
+      const provider = window.keeta
       try {
         const accounts = await provider.getAccounts()
         if (accounts && accounts.length > 0) {
@@ -75,9 +82,13 @@ export default function Navbar() {
     }
   }
 
-  const waitForWallet = async (maxAttempts = 10) => {
+  const waitForWallet = async (maxAttempts = 20) => {
     for (let i = 0; i < maxAttempts; i++) {
-      if (window.keeta && window.keeta.isKeeta && window.keeta.isAvailable) {
+      if (typeof window.keeta !== 'undefined') {
+        console.log('✅ Keeta wallet detected!')
+        console.log('isKeeta:', window.keeta.isKeeta)
+        console.log('isAvailable:', window.keeta.isAvailable)
+        console.log('isConnected:', window.keeta.isConnected)
         return window.keeta
       }
       await new Promise(resolve => setTimeout(resolve, 100))
