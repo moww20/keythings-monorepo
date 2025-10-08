@@ -75,13 +75,15 @@ export default function Navbar() {
             </svg>
           </a>
           <ThemeToggle />
-          <Link 
-            href="/docs" 
+          <a 
+            href="https://docs.keythings.xyz/docs/introduction" 
+            target="_blank"
+            rel="noopener noreferrer"
             aria-label="Documentation"
             className="inline-flex items-center justify-center w-9 h-9 rounded-full hover:bg-white/5 text-foreground/90 max-[519px]:hidden"
           >
             <BookOpen className="w-5 h-5" />
-          </Link>
+          </a>
           <button
             type="button"
             className="px-4 py-2 rounded-full bg-white/10 hover:bg-white/20 hover:shadow-lg hover:shadow-white/10 text-foreground text-sm font-medium transition-all duration-200 max-[519px]:hidden [html[data-theme='light']_&]:border [html[data-theme='light']_&]:border-gray-300 [html[data-theme='light']_&]:hover:shadow-gray-300/50"
@@ -134,10 +136,15 @@ export default function Navbar() {
                     </button>
                   </div>
                   <div className="grid gap-2">
-                    <Link href="/docs" className="flex items-center gap-2 px-3 py-1.5 rounded-full text-sm transition bg-white/10 text-foreground">
+                    <a 
+                      href="https://docs.keythings.xyz/docs/introduction" 
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-2 px-3 py-1.5 rounded-full text-sm transition bg-white/10 text-foreground hover:bg-white/15"
+                    >
                       <BookOpen className="w-4 h-4" />
                       <span>Docs</span>
-                    </Link>
+                    </a>
                     <button
                       type="button"
                       className="px-4 py-2 rounded-full bg-white/10 hover:bg-white/20 hover:shadow-lg hover:shadow-white/10 text-foreground text-sm font-medium transition-all duration-200 text-left [html[data-theme='light']_&]:border [html[data-theme='light']_&]:border-gray-300 [html[data-theme='light']_&]:hover:shadow-gray-300/50"
