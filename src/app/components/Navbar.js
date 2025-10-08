@@ -62,7 +62,7 @@ export default function Navbar() {
     if (typeof window === 'undefined') return
     
     const provider = window.keeta
-    if (provider) {
+    if (provider && provider.isKeeta && provider.isAvailable) {
       try {
         const accounts = await provider.getAccounts()
         if (accounts && accounts.length > 0) {
@@ -80,21 +80,35 @@ export default function Navbar() {
     
     const provider = window.keeta
     
-    if (!provider) {
+    if (!provider || !provider.isKeeta || !provider.isAvailable) {
       alert('Keythings Wallet not detected. Please install the Keythings Wallet extension.')
+      window.open('https://docs.keythings.xyz/docs/introduction', '_blank')
       return
     }
 
     try {
+      // Request connection
       const accounts = await provider.requestAccounts()
       if (accounts && accounts.length > 0) {
         setWalletConnected(true)
         setWalletAddress(accounts[0])
-        console.log('Connected account:', accounts[0])
+        console.log('✅ Connected to Keythings Wallet:', accounts[0])
+        
+        // Get network info
+        try {
+          const network = await provider.getNetwork()
+          console.log('📊 Current network:', network.name, '(Chain ID:', network.chainId + ')')
+        } catch (networkError) {
+          console.log('Network info not available')
+        }
       }
     } catch (error) {
       console.error('Connection failed:', error)
-      alert('Failed to connect wallet. Please try again.')
+      if (error.message.includes('User rejected')) {
+        alert('Connection request rejected. Please approve the connection in your wallet.')
+      } else {
+        alert('Failed to connect wallet. Please try again.')
+      }
     }
   }
 
