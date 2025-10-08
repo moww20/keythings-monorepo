@@ -1,29 +1,29 @@
-'use client'
+'use client';
 
-import { useEffect, useState, useCallback } from 'react'
-import { useRouter } from 'next/navigation'
+import { useEffect, useState, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 
 export default function HomePage() {
-  const router = useRouter()
+  const router = useRouter();
   const [walletState, setWalletState] = useState({
     connected: false,
     accounts: [],
     balance: null,
     network: null,
     loading: true,
-  })
+  });
   
-  const [isConnecting, setIsConnecting] = useState(false)
+  const [isConnecting, setIsConnecting] = useState(false);
 
   const formatAddress = (address) => {
-    if (!address) return ''
-    return `${address.slice(0, 6)}...${address.slice(-4)}`
-  }
+    if (!address) return '';
+    return `${address.slice(0, 6)}...${address.slice(-4)}`;
+  };
 
   const formatBalance = (balance) => {
-    if (balance === null) return '0.00'
-    return (Number(balance) / 10 ** 18).toFixed(2)
-  }
+    if (balance === null) return '0.00';
+    return (Number(balance) / 10 ** 18).toFixed(2);
+  };
 
   const checkWalletConnection = useCallback(async () => {
     if (typeof window === 'undefined' || !window.keeta) {
@@ -129,7 +129,7 @@ export default function HomePage() {
       <div className="min-h-screen flex items-center justify-center bg-[color:var(--background)]">
         <p className="text-foreground">Loading wallet data...</p>
       </div>
-    )
+    );
   }
 
   if (!walletState.connected) {
@@ -168,7 +168,7 @@ export default function HomePage() {
             </a>
           </p>
       </div>
-    )
+    );
   }
 
   return (
@@ -545,5 +545,6 @@ export default function HomePage() {
         </div>
       </div>
     </main>
-  )
+  );
 }
+
