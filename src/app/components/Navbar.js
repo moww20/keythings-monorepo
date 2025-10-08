@@ -75,18 +75,37 @@ export default function Navbar() {
     }
   }
 
+  const waitForWallet = async (maxAttempts = 10) => {
+    for (let i = 0; i < maxAttempts; i++) {
+      if (window.keeta && window.keeta.isKeeta && window.keeta.isAvailable) {
+        return window.keeta
+      }
+      await new Promise(resolve => setTimeout(resolve, 100))
+    }
+    return null
+  }
+
   const connectWallet = async () => {
     if (typeof window === 'undefined') return
     
-    const provider = window.keeta
+    // Wait for wallet to be available (give extension time to inject)
+    const provider = await waitForWallet()
     
-    if (!provider || !provider.isKeeta || !provider.isAvailable) {
-      alert('Keythings Wallet not detected. Please install the Keythings Wallet extension.')
-      window.open('https://docs.keythings.xyz/docs/introduction', '_blank')
+    if (!provider) {
+      const retry = confirm(
+        'Keythings Wallet not detected.\n\n' +
+        'If you have the extension installed, please refresh the page.\n\n' +
+        'Otherwise, click OK to visit the installation page.'
+      )
+      if (retry) {
+        window.open('https://docs.keythings.xyz/docs/introduction', '_blank')
+      }
       return
     }
 
     try {
+      console.log('🔄 Requesting wallet connection...')
+      
       // Request connection
       const accounts = await provider.requestAccounts()
       if (accounts && accounts.length > 0) {
@@ -104,7 +123,7 @@ export default function Navbar() {
       }
     } catch (error) {
       console.error('Connection failed:', error)
-      if (error.message.includes('User rejected')) {
+      if (error.message.includes('User rejected') || error.message.includes('rejected')) {
         alert('Connection request rejected. Please approve the connection in your wallet.')
       } else {
         alert('Failed to connect wallet. Please try again.')
