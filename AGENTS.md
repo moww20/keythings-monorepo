@@ -20,6 +20,322 @@ Welcome to the bigCat repository. Follow these rules whenever you modify code.
 
 ---
 
+## 🎨 DESIGN SYSTEM STANDARDIZATION
+
+**MANDATORY**: When creating UI elements, buttons, cards, or any visual components, follow these standardized design patterns from the home page.
+
+### Color Palette & CSS Variables
+
+**Always use CSS variables - NEVER hardcode colors:**
+
+#### Background Colors:
+- `bg-[color:var(--background)]` - Main page background (#0b0b0f dark, #f7f8fa light)
+- `.glass` - Glassmorphism cards (var(--surface-glass) with backdrop-filter)
+- `bg-surface` - Soft surface background (6% foreground opacity)
+- `bg-surface-strong` - Stronger surface (10% foreground opacity)
+- `bg-accent` - Primary action color (blue #6aa8ff)
+
+#### Text Colors:
+- `text-foreground` - Primary text (#e6e6e6 dark, #0c0d10 light)
+- `text-muted` - Secondary text (62% foreground opacity, #9aa0a6)
+- `text-subtle` - Tertiary text (74% foreground opacity)
+- `text-faint` - Quaternary text (48% foreground opacity)
+
+#### Border Colors:
+- `border-hairline` - Subtle borders (rgba(255,255,255,0.08) dark, rgba(0,0,0,0.08) light)
+- `border-soft` - Slightly stronger borders (18-20% foreground opacity)
+
+#### Accent Colors:
+- `bg-accent` - Blue accent (#6aa8ff)
+- `text-accent` - Use for links, highlights
+- Avoid hardcoded accent colors - use CSS variable
+
+### Typography Hierarchy
+
+#### Font Sizes:
+- **Page Title**: `text-4xl` (2.25rem / 36px) - Used for main headings
+- **Section Title**: `text-xl` (1.25rem / 20px) - Section headers like "Markets"
+- **Subsection Title**: `text-lg` (1.125rem / 18px) - "Estimated Balance", "Menu"
+- **Body Large**: `text-base` (1rem / 16px) - Default body text
+- **Body Regular**: `text-sm` (0.875rem / 14px) - Menu items, buttons, labels
+- **Body Small**: `text-xs` (0.75rem / 12px) - Captions, metadata
+- **Balance Display**: `text-3xl` (1.875rem / 30px) - Large numbers/balances
+
+#### Font Weights:
+- **Bold**: `font-bold` (700) - Page titles, important headings
+- **Semibold**: `font-semibold` (600) - Section titles, emphasized text
+- **Medium**: `font-medium` (500) - Buttons, menu items, labels
+- **Regular**: (400) - Default body text
+
+### Spacing & Padding Rhythm
+
+#### Container Padding:
+- **Page Container**: `px-6 py-8` - Main content wrapper
+- **Card/Box Padding**: `p-6` or `p-4` - Glass containers
+- **Small Card**: `p-4` - Sidebar, compact cards
+
+#### Component Gaps:
+- **Large Gap**: `gap-8` - Between major sections
+- **Medium Gap**: `gap-6` - Within sections
+- **Standard Gap**: `gap-3` - Button groups, form fields
+- **Compact Gap**: `gap-2` - Icon + text, tight elements
+- **Minimal Gap**: `gap-1` - Very tight spacing
+
+#### Button Padding:
+- **Primary Button**: `px-6 py-2.5` or `px-6 py-3` - CTA buttons
+- **Secondary Button**: `px-6 py-2.5` - Action buttons
+- **Icon Button**: `p-3` - Square icon-only buttons
+- **Small Button**: `px-3 py-2` - Menu items, compact actions
+- **Minimal Button**: `p-2` or `p-1` - Utility buttons
+
+#### Margin Rhythm:
+- **Section Bottom**: `mb-8` - Between major sections
+- **Element Bottom**: `mb-4` or `mb-6` - Between elements
+- **Small Bottom**: `mb-2` - Between small elements
+
+### Border Radius Standards
+
+- **Extra Large**: `rounded-2xl` (1rem / 16px) - Sidebar, major cards
+- **Large**: `rounded-lg` (0.5rem / 8px) - Menu items, buttons, cards
+- **Medium**: `rounded-md` (0.375rem / 6px) - Action buttons
+- **Full**: `rounded-full` (9999px) - Pills, connect wallet button
+
+### Component Patterns
+
+#### Glassmorphism Cards:
+```jsx
+<div className="glass rounded-lg border border-hairline shadow-[0_20px_60px_rgba(6,7,10,0.45)]">
+  <div className="p-6">
+    {/* Content */}
+  </div>
+</div>
+```
+
+#### Sidebar/Navigation Items:
+```jsx
+// Active State
+<a className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-foreground bg-surface-strong rounded-lg transition-all duration-200 hover:bg-surface-strong/80">
+  <IconComponent className="h-4 w-4 flex-shrink-0" />
+  <span className="truncate">Label</span>
+</a>
+
+// Inactive State
+<a className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-muted hover:text-foreground hover:bg-surface rounded-lg transition-all duration-200">
+  <IconComponent className="h-4 w-4 flex-shrink-0" />
+  <span className="truncate">Label</span>
+</a>
+```
+
+#### Primary Action Button:
+```jsx
+<button className="inline-flex items-center justify-center gap-2 bg-accent text-white px-6 py-2.5 rounded-md font-medium hover:bg-accent/90 transition-colors min-w-[120px]">
+  <IconComponent className="h-4 w-4" />
+  Button Text
+</button>
+```
+
+#### Secondary Action Button:
+```jsx
+<button className="inline-flex items-center justify-center gap-2 bg-surface border border-hairline text-foreground px-6 py-2.5 rounded-md font-medium hover:bg-surface-strong transition-colors min-w-[120px]">
+  <IconComponent className="h-4 w-4" />
+  Button Text
+</button>
+```
+
+#### Large Primary Button (Connect Wallet):
+```jsx
+<button className="inline-flex items-center justify-center gap-2 rounded-full bg-white px-6 py-3 text-sm font-semibold text-black shadow-[0_20px_50px_rgba(15,15,20,0.35)] transition-all duration-200 hover:bg-white/90 disabled:opacity-70 disabled:cursor-not-allowed">
+  Button Text
+</button>
+```
+
+### Icon Standards
+
+**ALWAYS use Lucide React icons** - Import from `lucide-react`:
+
+#### Icon Sizes:
+- **Menu Icons**: `h-4 w-4` - Sidebar, navigation
+- **Button Icons**: `h-4 w-4` - Action buttons
+- **Large Icons**: `h-5 w-5` or `h-6 w-6` - Feature highlights
+- **Dropdown/Utility**: `h-3 w-3` - Small indicators
+
+#### Common Icons:
+- `LayoutDashboard` - Dashboard
+- `Wallet` - Assets/Wallet
+- `ShoppingCart` - Orders
+- `Gift` - Rewards
+- `Users` - Referral/Team
+- `UserCircle` - Account
+- `Users2` - Sub Accounts
+- `Settings` - Settings
+- `ArrowDownToLine` - Deposit
+- `ArrowUpFromLine` - Withdraw
+- `Banknote` - Cash/Money
+
+#### Icon Usage:
+```jsx
+import { IconName } from 'lucide-react';
+
+<IconName className="h-4 w-4 flex-shrink-0" />
+```
+
+### Hover Effects
+
+**NO scale/transform effects** - Only highlight effects:
+
+#### Standard Hover Pattern:
+- **Text Color**: `hover:text-foreground` (brighten text)
+- **Background**: `hover:bg-surface` (show background)
+- **Transition**: `transition-all duration-200` (smooth 200ms)
+
+#### Button Hover Pattern:
+- **Primary**: `hover:bg-accent/90` (slightly dim)
+- **Secondary**: `hover:bg-surface-strong` (brighten background)
+- **Glass**: `hover:bg-surface` (show background)
+
+#### Active State:
+- **Background**: `bg-surface-strong` (10% opacity)
+- **Hover**: `hover:bg-surface-strong/80` (slightly dim)
+
+### Shadow Standards
+
+- **Card Shadow**: `shadow-[0_20px_60px_rgba(6,7,10,0.45)]` - Glass cards
+- **Button Shadow**: `shadow-[0_20px_50px_rgba(15,15,20,0.35)]` - Primary buttons
+- **Subtle Shadow**: `shadow-sm` or no shadow for secondary elements
+
+### Responsive Breakpoints
+
+- **Mobile First**: Default styles for mobile
+- **Small**: `sm:` (640px+) - Small tablets
+- **Large**: `lg:` (1024px+) - Tablets/small desktops
+- **Extra Large**: `xl:` (1280px+) - Desktop sidebar appears
+
+#### Common Responsive Patterns:
+```jsx
+// Flex direction
+className="flex flex-col sm:flex-row gap-3"
+
+// Grid columns
+className="xl:grid xl:grid-cols-[16rem_minmax(0,1fr)]"
+
+// Hide on mobile
+className="hidden xl:block"
+
+// Show on mobile only
+className="xl:hidden"
+```
+
+### Layout Containers
+
+#### Page Wrapper:
+```jsx
+<main className="relative overflow-hidden min-h-screen bg-[color:var(--background)]">
+  <div className="relative z-10 max-w-7xl mx-auto px-6 py-8">
+    {/* Content */}
+  </div>
+</main>
+```
+
+#### Sidebar Width:
+- **Desktop Sidebar**: `w-64` (16rem / 256px)
+- **Grid Column**: `xl:grid-cols-[16rem_minmax(0,1fr)]`
+
+### Animation & Transitions
+
+**Timing Standards:**
+- **Fast**: `duration-200` (200ms) - Hover effects, color changes
+- **Medium**: `duration-300` (300ms) - Larger transforms, modals
+- **Slow**: `duration-500` (500ms) - Page transitions
+
+**Easing:**
+- Use `transition-all` for multi-property animations
+- Use `transition-colors` for color-only changes
+
+### Table Styling
+
+#### Table Structure:
+```jsx
+<div className="overflow-x-auto">
+  <table className="w-full">
+    <thead>
+      <tr className="border-b border-hairline">
+        <th className="text-left py-4 px-6 text-muted text-sm font-medium">
+          Header
+        </th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr className="border-b border-hairline hover:bg-surface/50 transition-colors">
+        <td className="py-4 px-6">
+          <div className="text-foreground font-medium">Content</div>
+          <div className="text-muted text-sm">Subtext</div>
+        </td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+```
+
+#### Table Padding:
+- **Cell Padding**: `py-4 px-6` - Standard table cells
+- **Header Padding**: `py-4 px-6` - Table headers
+
+### Form Elements
+
+#### Input Fields:
+- Use `.input-pill` class for form inputs
+- Border: `border border-hairline`
+- Padding: `px-4 py-2`
+- Rounded: `rounded-lg` or `rounded-full`
+
+### Mobile Menu Pattern
+
+```jsx
+const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
+// Toggle Button
+<button onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}>
+  <svg>...</svg>
+</button>
+
+// Mobile Sidebar
+{isMobileMenuOpen && (
+  <>
+    <div className="fixed inset-0 bg-black/50 z-40 xl:hidden" onClick={() => setIsMobileMenuOpen(false)} />
+    <div className="fixed inset-y-0 left-0 w-64 glass border-r border-hairline z-50 xl:hidden overflow-auto">
+      {/* Menu content */}
+    </div>
+  </>
+)}
+```
+
+### Z-Index Hierarchy
+
+- **Backdrop**: `z-40` - Overlay backgrounds
+- **Modal/Sidebar**: `z-50` - Slide-out menus
+- **Content**: `z-10` - Main content layer
+- **Background**: `-z-10` - Background decorations
+
+### Disabled States
+
+```jsx
+disabled:opacity-70 
+disabled:cursor-not-allowed 
+disabled:transform-none
+```
+
+### Loading States
+
+#### Spinner SVG:
+```jsx
+<svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+</svg>
+```
+
+---
+
 Run the following before committing changes:
 
 ## 1. MANDATORY: Think First, Then Scan Knowledge Base
