@@ -1,6 +1,7 @@
 import "./globals.css";
 import Navbar from "./components/Navbar";
 import Footer from "./components/Footer";
+import WalletRedirector from "./components/WalletRedirector";
 
 export const metadata = {
   title: "Keythings Wallet",
@@ -22,6 +23,7 @@ export default function RootLayout({ children }) {
   return (
     <html lang="en">
       <body className={`antialiased font-sans`}>
+        <WalletRedirector />
         <Navbar />
         <div className="pt-16 min-h-screen flex flex-col">
           <main className="flex-1">{children}</main>

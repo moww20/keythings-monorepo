@@ -1,10 +1,10 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { AnimatePresence, motion } from "framer-motion"
 import { createPortal } from "react-dom"
 import Link from "next/link"
-import { usePathname } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
 import { BookOpen } from "lucide-react"
 // Connect button removed from header per request
 import SearchBar from "./SearchBar"
@@ -13,10 +13,18 @@ import { siX, siDiscord } from "simple-icons"
 
 export default function Navbar() {
   const pathname = usePathname()
+  const router = useRouter()
   const [mobileOpen, setMobileOpen] = useState(false)
   const [mounted, setMounted] = useState(false)
   const [walletConnected, setWalletConnected] = useState(false)
   const [walletAddress, setWalletAddress] = useState(null)
+
+  const redirectToHome = useCallback(() => {
+    if (typeof window === "undefined") return
+    if (window.location.pathname !== "/home") {
+      router.push("/home")
+    }
+  }, [router])
 
   useEffect(() => {
     // Close mobile menu on route change
@@ -33,55 +41,72 @@ export default function Navbar() {
 
   useEffect(() => {
     setMounted(true)
-    
+
     // Debug: Check what's available on window immediately
     console.log('🔍 Debug - window.keeta:', typeof window.keeta)
     if (typeof window.keeta !== 'undefined') {
       console.log('🔍 Debug - window.keeta properties:', Object.keys(window.keeta))
     }
-    
+
     // Debug: Check for other common wallet providers
     console.log('🔍 Debug - window.ethereum:', typeof window.ethereum)
     console.log('🔍 Debug - window.solana:', typeof window.solana)
-    
+
     // Debug: Check if extension context is available
     if (typeof window.chrome !== 'undefined') {
       console.log('🔍 Debug - Chrome extension APIs available')
     }
-    
-    // Auto-detect wallet on page load with delay like test-api.html
-    setTimeout(() => {
+
+    const timeoutId = setTimeout(() => {
       console.log('🔍 Debug - Delayed check - window.keeta:', typeof window.keeta)
       if (typeof window.keeta !== 'undefined') {
         console.log('🔍 Debug - Delayed check - window.keeta properties:', Object.keys(window.keeta))
       }
-      checkWalletConnection()
+      void checkWalletConnection()
     }, 1000)
 
-    // Listen for wallet events
+    let detachListeners = null
+
     if (typeof window !== 'undefined' && window.keeta) {
       const provider = window.keeta
 
-      provider.on?.('accountsChanged', (accounts) => {
+      const handleAccountsChanged = (accounts) => {
         if (accounts && accounts.length > 0) {
           setWalletConnected(true)
           setWalletAddress(accounts[0])
+          redirectToHome()
         } else {
           setWalletConnected(false)
           setWalletAddress(null)
         }
-      })
+      }
 
-      provider.on?.('disconnect', () => {
+      const handleDisconnect = () => {
         setWalletConnected(false)
         setWalletAddress(null)
-      })
-    }
-  }, [])
+      }
 
-  const checkWalletConnection = async () => {
+      provider.on?.('accountsChanged', handleAccountsChanged)
+      provider.on?.('disconnect', handleDisconnect)
+
+      detachListeners = () => {
+        const remove = provider.removeListener?.bind(provider) || provider.off?.bind(provider)
+        if (remove) {
+          remove('accountsChanged', handleAccountsChanged)
+          remove('disconnect', handleDisconnect)
+        }
+      }
+    }
+
+    return () => {
+      clearTimeout(timeoutId)
+      detachListeners?.()
+    }
+  }, [checkWalletConnection, redirectToHome])
+
+  const checkWalletConnection = useCallback(async () => {
     if (typeof window === 'undefined') return
-    
+
     // Simple detection like test-api.html
     if (typeof window.keeta !== 'undefined') {
       const provider = window.keeta
@@ -90,12 +115,13 @@ export default function Navbar() {
         if (accounts && accounts.length > 0) {
           setWalletConnected(true)
           setWalletAddress(accounts[0])
+          redirectToHome()
         }
       } catch (error) {
         console.log('No wallet connected')
       }
     }
-  }
+  }, [redirectToHome])
 
   const waitForWallet = async (maxAttempts = 20) => {
     for (let i = 0; i < maxAttempts; i++) {
@@ -138,7 +164,8 @@ export default function Navbar() {
         setWalletConnected(true)
         setWalletAddress(accounts[0])
         console.log('✅ Connected to Keythings Wallet:', accounts[0])
-        
+        redirectToHome()
+
         // Get network info
         try {
           const network = await provider.getNetwork()
