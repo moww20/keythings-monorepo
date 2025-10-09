@@ -24,6 +24,9 @@ export default function HomePage() {
   const [tokens, setTokens] = useState([]);
   const [loadingTokens, setLoadingTokens] = useState(false);
   const [activeTab, setActiveTab] = useState('holding');
+  
+  // Ref to track pending fetch timeout to prevent multiple simultaneous fetches
+  const fetchTimeoutRef = useRef(null);
 
   const formatAddress = (address) => {
     if (!address) return '';
@@ -159,7 +162,7 @@ export default function HomePage() {
     } finally {
       setLoadingTokens(false);
     }
-  }, [walletState.network, loadingTokens]);
+  }, [loadingTokens]);
 
   const checkWalletConnection = useCallback(async (forceCheck = false, shouldFetchTokens = false) => {
     if (typeof window === 'undefined' || !window.keeta) {
@@ -215,9 +218,17 @@ export default function HomePage() {
         // Fetch tokens after successful connection if requested (wallet is unlocked)
         console.log('checkWalletConnection: shouldFetchTokens =', shouldFetchTokens);
         if (shouldFetchTokens) {
+          // Clear any pending fetch timeout to prevent multiple simultaneous fetches
+          if (fetchTimeoutRef.current) {
+            console.log('checkWalletConnection: Clearing existing fetch timeout');
+            clearTimeout(fetchTimeoutRef.current);
+            fetchTimeoutRef.current = null;
+          }
+          
           console.log('checkWalletConnection: Scheduling fetchTokens in 1 second');
-          setTimeout(() => {
+          fetchTimeoutRef.current = setTimeout(() => {
             console.log('checkWalletConnection: Calling fetchTokens now with network:', network, 'account:', accounts[0]);
+            fetchTimeoutRef.current = null;
             fetchTokens(network, accounts[0]);
           }, 1000);
         }
@@ -225,9 +236,13 @@ export default function HomePage() {
         setWalletState(prevState => ({ ...prevState, connected: false, loading: false, isLocked: false }));
       }
     } catch (error) {
-      // Silently ignore throttling errors - they're expected in dev mode due to React Strict Mode
-      if (!error.message || !error.message.includes('throttled')) {
+      // Handle throttling errors gracefully - don't disconnect wallet
+      if (error.message && error.message.includes('throttled')) {
+        console.log('checkWalletConnection: Balance query throttled, will retry automatically');
+        // Don't change connection state, just mark as complete
+      } else {
         console.error('Error checking wallet connection:', error);
+        // Only disconnect on actual errors, not throttling
         setWalletState(prevState => ({ ...prevState, connected: false, loading: false }));
       }
     } finally {
@@ -319,6 +334,12 @@ export default function HomePage() {
       provider.on?.('disconnect', handleDisconnect);
 
       return () => {
+        // Clear any pending fetch timeout on unmount
+        if (fetchTimeoutRef.current) {
+          clearTimeout(fetchTimeoutRef.current);
+          fetchTimeoutRef.current = null;
+        }
+        
         const remove = provider.removeListener?.bind(provider) || provider.off?.bind(provider);
         if (remove) {
           remove('accountsChanged', handleAccountsChanged);
