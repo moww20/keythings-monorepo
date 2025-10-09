@@ -299,28 +299,8 @@ export default function HomePage() {
   }, []);
 
   useEffect(() => {
-    // Try to restore wallet state from sessionStorage to avoid re-fetching on navigation
-    const cachedState = sessionStorage.getItem('keeta_wallet_state');
-    if (cachedState) {
-      try {
-        const parsed = JSON.parse(cachedState);
-        // Only use cache if it's less than 10 seconds old
-        if (parsed && Date.now() - parsed.timestamp < 10000) {
-          setWalletState(parsed.state);
-          if (parsed.tokens) {
-            setTokens(parsed.tokens);
-          }
-          // Do a non-forced check in the background (respects throttling)
-          checkWalletConnection(false, false);
-          return;
-        }
-      } catch (e) {
-        // Ignore cache errors
-      }
-    }
-    
-    // No valid cache - do initial check (don't force to respect throttling)
-    checkWalletConnection(false, true);
+    // Initial check with force to ensure we get data on mount, and fetch tokens
+    checkWalletConnection(true, true);
 
     if (typeof window !== 'undefined' && window.keeta) {
       const provider = window.keeta;
@@ -347,8 +327,6 @@ export default function HomePage() {
       const handleDisconnect = () => {
         setWalletState(prevState => ({ ...prevState, connected: false, accounts: [], balance: null }));
         setTokens([]);
-        // Clear cached state on disconnect
-        sessionStorage.removeItem('keeta_wallet_state');
       };
 
       provider.on?.('accountsChanged', handleAccountsChanged);
@@ -371,21 +349,6 @@ export default function HomePage() {
       };
     }
   }, [checkWalletConnection]);
-
-  // Cache wallet state and tokens to sessionStorage for faster navigation
-  useEffect(() => {
-    if (walletState.connected && !walletState.loading) {
-      try {
-        sessionStorage.setItem('keeta_wallet_state', JSON.stringify({
-          state: walletState,
-          tokens,
-          timestamp: Date.now()
-        }));
-      } catch (e) {
-        // Ignore storage errors
-      }
-    }
-  }, [walletState, tokens]);
 
   if (walletState.loading) {
     return (
