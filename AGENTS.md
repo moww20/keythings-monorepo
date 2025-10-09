@@ -336,6 +336,240 @@ disabled:transform-none
 
 ---
 
+## 🔍 INPUT VALIDATION & ERROR HANDLING
+
+**MANDATORY**: All input validation and data parsing must use Zod schemas. Try/catch blocks should be minimized and used only for truly exceptional cases.
+
+### Zod Validation Standards
+
+**ALWAYS use Zod for:**
+- API response validation
+- User input validation
+- Environment variable validation
+- Configuration validation
+- Third-party data parsing (wallet provider responses, CoinGecko API, etc.)
+- Function parameter validation
+
+**Installation:**
+```bash
+bun add zod
+```
+
+### ✅ CORRECT Approach - Using Zod
+
+```typescript
+import { z } from 'zod';
+
+// Define schema
+const WalletResponseSchema = z.object({
+  accounts: z.array(z.string()),
+  balance: z.string(),
+  network: z.object({
+    name: z.string(),
+    chainId: z.string(),
+  }),
+});
+
+// Validate data
+const result = WalletResponseSchema.safeParse(data);
+
+if (!result.success) {
+  console.error('Invalid wallet response:', result.error);
+  // Handle validation error
+  return null;
+}
+
+// TypeScript now knows result.data is valid
+const { accounts, balance, network } = result.data;
+```
+
+### ❌ INCORRECT Approach - Using Try/Catch
+
+```typescript
+// BAD: Don't use try/catch for validation
+try {
+  const accounts = data.accounts; // No type checking
+  const balance = data.balance;   // Could be undefined
+  // ... more unvalidated access
+} catch (error) {
+  console.error('Error:', error);
+}
+```
+
+### Common Zod Patterns
+
+#### API Response Validation:
+```typescript
+const TokenMetadataSchema = z.object({
+  address: z.string(),
+  name: z.string().optional(),
+  ticker: z.string().optional(),
+  decimals: z.number().optional(),
+  metadata: z.string().optional(),
+});
+
+async function fetchTokenMetadata(address: string) {
+  const response = await provider.getTokenMetadata(address);
+  const result = TokenMetadataSchema.safeParse(response);
+  
+  if (!result.success) {
+    console.warn('Invalid token metadata:', result.error);
+    return null;
+  }
+  
+  return result.data;
+}
+```
+
+#### User Input Validation:
+```typescript
+const SendTransactionSchema = z.object({
+  to: z.string().min(1, 'Recipient address required'),
+  amount: z.string().regex(/^\d+(\.\d+)?$/, 'Invalid amount format'),
+  token: z.string().optional(),
+});
+
+function validateTransactionInput(input: unknown) {
+  return SendTransactionSchema.safeParse(input);
+}
+```
+
+#### Environment Variables:
+```typescript
+const EnvSchema = z.object({
+  NEXT_PUBLIC_SITE_URL: z.string().url(),
+  NODE_ENV: z.enum(['development', 'production', 'test']),
+});
+
+const env = EnvSchema.parse(process.env);
+```
+
+#### Array Validation:
+```typescript
+const TokenListSchema = z.array(
+  z.object({
+    token: z.string(),
+    balance: z.string(),
+    metadata: z.string().optional(),
+  })
+);
+
+const tokens = TokenListSchema.safeParse(rawTokens);
+if (!tokens.success) {
+  console.error('Invalid token list');
+  return [];
+}
+```
+
+### When to Use Try/Catch
+
+**ONLY use try/catch for:**
+- Network requests that might fail
+- File system operations
+- External API calls (fetch, etc.)
+- Truly exceptional runtime errors
+
+**Example of Acceptable Try/Catch:**
+```typescript
+async function fetchFromApi(url: string) {
+  try {
+    const response = await fetch(url);
+    const data = await response.json();
+    
+    // Validate with Zod
+    const result = ApiResponseSchema.safeParse(data);
+    if (!result.success) {
+      return null;
+    }
+    
+    return result.data;
+  } catch (error) {
+    // Network error or parsing error
+    console.error('API request failed:', error);
+    return null;
+  }
+}
+```
+
+### Prohibited Patterns
+
+❌ **NEVER do this:**
+```typescript
+// BAD: Using try/catch for type checking
+try {
+  const value = data.field.subfield.value;
+} catch {
+  const value = null;
+}
+
+// GOOD: Use Zod with optional chaining
+const schema = z.object({
+  field: z.object({
+    subfield: z.object({
+      value: z.string().optional(),
+    }).optional(),
+  }).optional(),
+});
+const validated = schema.safeParse(data);
+const value = validated.success ? validated.data.field?.subfield?.value : null;
+```
+
+❌ **NEVER suppress validation errors:**
+```typescript
+// BAD: Silently ignoring validation errors
+const result = schema.safeParse(data);
+// Just continue without checking result.success
+
+// GOOD: Handle validation errors properly
+const result = schema.safeParse(data);
+if (!result.success) {
+  console.error('Validation failed:', result.error);
+  // Show user-friendly error or return fallback
+  return null;
+}
+```
+
+### Type Safety Benefits
+
+Using Zod provides:
+- ✅ **Runtime type checking** - Catch data errors at runtime
+- ✅ **TypeScript inference** - Automatic type inference from schemas
+- ✅ **Clear error messages** - Detailed validation error reports
+- ✅ **Self-documenting code** - Schema serves as documentation
+- ✅ **Prevents runtime crashes** - Invalid data caught before use
+
+### Integration with ESLint
+
+Add these ESLint rules to enforce Zod usage:
+
+```javascript
+// eslint.config.mjs
+{
+  rules: {
+    'no-restricted-syntax': [
+      'error',
+      {
+        selector: 'TryStatement > CatchClause > Identifier',
+        message: 'Use Zod validation instead of try/catch for data validation',
+      },
+    ],
+  },
+}
+```
+
+### Migration Checklist
+
+When refactoring existing code:
+- [ ] Identify all try/catch blocks used for validation
+- [ ] Create Zod schemas for the data being validated
+- [ ] Replace try/catch with `.safeParse()` calls
+- [ ] Add proper error handling for validation failures
+- [ ] Update TypeScript types to match Zod schemas
+- [ ] Test with invalid data to ensure validation works
+- [ ] Remove unnecessary try/catch blocks
+
+---
+
 Run the following before committing changes:
 
 ## 1. MANDATORY: Think First, Then Scan Knowledge Base
