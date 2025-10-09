@@ -11,13 +11,10 @@ export const throttleBalanceCheck = (forceCheck = false, source = 'unknown') => 
   
   // If there's already a balance check in progress, wait
   if (pendingBalanceCheck && !forceCheck) {
-    console.log(`Balance check already in progress from ${source}. Skipping.`);
     return false;
   }
   
   if (!forceCheck && timeSinceLastCheck < BALANCE_CHECK_THROTTLE) {
-    const remainingTime = Math.ceil((BALANCE_CHECK_THROTTLE - timeSinceLastCheck) / 1000);
-    console.log(`Balance queries are throttled from ${source}. Please wait ${remainingTime} second(s) before retrying.`);
     return false; // Throttled
   }
   

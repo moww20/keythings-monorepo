@@ -135,26 +135,22 @@ export default function HomePage() {
 
   const checkWalletConnection = useCallback(async (forceCheck = false, shouldFetchTokens = false) => {
     if (typeof window === 'undefined' || !window.keeta) {
-      console.log('HomePage: No wallet provider found');
       setWalletState(prevState => ({ ...prevState, connected: false, loading: false }));
       return;
     }
 
     // Use shared throttling mechanism with source tracking
     if (!throttleBalanceCheck(forceCheck, 'home-page')) {
-      console.log('HomePage: Throttled, skipping check');
       return; // Throttled
     }
 
     const provider = window.keeta;
     try {
       const accounts = await provider.getAccounts();
-      console.log('HomePage: getAccounts result:', accounts);
       
       if (accounts && accounts.length > 0) {
         const balance = await provider.getBalance(accounts[0]);
         const network = await provider.getNetwork();
-        console.log('HomePage: Wallet connected! Balance:', balance, 'Network:', network?.name);
         
         setWalletState({
           connected: true,
@@ -166,18 +162,14 @@ export default function HomePage() {
         
         // Fetch tokens after successful connection if requested
         if (shouldFetchTokens) {
-          console.log('HomePage: Scheduling token fetch in 1 second...');
           setTimeout(() => fetchTokens(), 1000);
         }
       } else {
-        console.log('HomePage: No accounts found, showing connect screen');
         setWalletState(prevState => ({ ...prevState, connected: false, loading: false }));
       }
     } catch (error) {
       // Silently ignore throttling errors - they're expected in dev mode due to React Strict Mode
-      if (error.message && error.message.includes('throttled')) {
-        console.log('HomePage: Balance check throttled (expected in dev mode)');
-      } else {
+      if (!error.message || !error.message.includes('throttled')) {
         console.error('Error checking wallet connection:', error);
         setWalletState(prevState => ({ ...prevState, connected: false, loading: false }));
       }

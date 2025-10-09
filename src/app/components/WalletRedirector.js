@@ -59,22 +59,17 @@ export default function WalletRedirector() {
       try {
         if (typeof provider.getAccounts === "function") {
           const accounts = await provider.getAccounts()
-          console.log('WalletRedirector: getAccounts result:', accounts)
           if (Array.isArray(accounts) && accounts.length > 0) {
-            console.log('WalletRedirector: Wallet connected, redirecting to /home')
             redirectToHome()
             return
           }
         }
 
         if (typeof provider.isConnected === "boolean" && provider.isConnected) {
-          console.log('WalletRedirector: isConnected=true, redirecting to /home')
           redirectToHome()
         } else if (typeof provider.isConnected === "function") {
           try {
-            const connected = provider.isConnected()
-            console.log('WalletRedirector: isConnected() result:', connected)
-            if (connected) {
+            if (provider.isConnected()) {
               redirectToHome()
             }
           } catch (error) {

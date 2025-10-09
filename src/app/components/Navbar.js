@@ -113,10 +113,6 @@ export default function Navbar() {
   const waitForWallet = async (maxAttempts = 20) => {
     for (let i = 0; i < maxAttempts; i++) {
       if (typeof window.keeta !== 'undefined') {
-        console.log('✅ Keeta wallet detected!')
-        console.log('isKeeta:', window.keeta.isKeeta)
-        console.log('isAvailable:', window.keeta.isAvailable)
-        console.log('isConnected:', window.keeta.isConnected)
         return window.keeta
       }
       await new Promise(resolve => setTimeout(resolve, 100))
@@ -143,23 +139,12 @@ export default function Navbar() {
     }
 
     try {
-      console.log('🔄 Requesting wallet connection...')
-      
       // Request connection
       const accounts = await provider.requestAccounts()
       if (accounts && accounts.length > 0) {
         setWalletConnected(true)
         setWalletAddress(accounts[0])
-        console.log('✅ Connected to Keythings Wallet:', accounts[0])
         redirectToHome()
-
-        // Get network info
-        try {
-          const network = await provider.getNetwork()
-          console.log('📊 Current network:', network.name, '(Chain ID:', network.chainId + ')')
-        } catch (networkError) {
-          console.log('Network info not available')
-        }
       }
     } catch (error) {
       console.error('Connection failed:', error)
