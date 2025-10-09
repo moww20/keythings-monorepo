@@ -50,7 +50,7 @@ export default function HomePage() {
     // TODO: Implement cash in functionality
   };
 
-  const fetchTokens = useCallback(async (networkData = null, accountAddress = null) => {
+  const fetchTokens = useCallback(async (networkData = null, accountAddress = null, currentBalance = null) => {
     if (typeof window === 'undefined' || !window.keeta) {
       console.log('fetchTokens: No wallet provider available');
       setTokens([]);
@@ -64,35 +64,18 @@ export default function HomePage() {
     }
 
     setLoadingTokens(true);
+    const provider = window.keeta;
 
     try {
-      console.log('fetchTokens: Using Keeta SDK to fetch balances...');
+      console.log('fetchTokens: Fetching all balances...');
       
-      // Import the SDK dynamically to avoid server-side bundling issues
-      const KeetaNet = await import('@keetanetwork/keetanet-client');
+      // Wait before calling getAllBalances to avoid throttling
+      await new Promise(resolve => setTimeout(resolve, 1500));
       
-      // Get account address
-      const address = accountAddress || walletState.accounts?.[0];
-      if (!address) {
-        console.log('fetchTokens: No account address available');
-        setTokens([]);
-        setLoadingTokens(false);
-        return;
-      }
-
-      // Create account from public key string
-      const account = await KeetaNet.lib.Account.fromPublicKeyString(address);
+      // Use getAllBalances from the wallet provider (not allBalances!)
+      const balances = await provider.getAllBalances();
       
-      // Connect to network (read-only, no signer needed)
-      const networkName = networkData?.name?.toLowerCase()?.includes('test') ? 'test' : 'main';
-      console.log('fetchTokens: Creating UserClient for network:', networkName);
-      
-      const client = KeetaNet.UserClient.fromNetwork(networkName, null, { account });
-      
-      // Get all balances using SDK
-      const balances = await client.allBalances();
-      
-      console.log('fetchTokens: allBalances result:', balances);
+      console.log('fetchTokens: getAllBalances result:', balances);
       
       if (!balances || balances.length === 0) {
         console.log('fetchTokens: No balances found');
@@ -100,6 +83,17 @@ export default function HomePage() {
         setLoadingTokens(false);
         return;
       }
+
+      // Get base token address from the provider
+      let baseTokenAddress = null;
+      try {
+        const baseTokenInfo = await provider.getBaseToken();
+        baseTokenAddress = baseTokenInfo?.address || null;
+        console.log('fetchTokens: Base token info:', baseTokenInfo);
+      } catch (error) {
+        console.warn('fetchTokens: Failed to get base token:', error);
+      }
+      console.log('fetchTokens: Base token address:', baseTokenAddress);
 
       // Filter balances > 0
       const nonZeroBalances = balances.filter(entry => {
@@ -113,26 +107,29 @@ export default function HomePage() {
       console.log('fetchTokens: Non-zero balances:', nonZeroBalances.length);
 
       if (nonZeroBalances.length === 0) {
-        console.log('fetchTokens: All balances are zero');
+        console.log('fetchTokens: No non-zero balances');
         setTokens([]);
         setLoadingTokens(false);
         return;
       }
 
-      // Get base token address from SDK client
-      const baseTokenAddress = client.baseToken?.publicKeyString?.toString() || null;
-      console.log('fetchTokens: Base token address:', baseTokenAddress);
-
       // Process each token
+      console.log('fetchTokens: Processing tokens...', nonZeroBalances);
       const processedTokens = await Promise.all(
-        nonZeroBalances.map(async (entry) => {
+        nonZeroBalances.map(async (entry, index) => {
           try {
+            console.log(`fetchTokens: Processing token ${index + 1}/${nonZeroBalances.length}:`, {
+              token: entry.token,
+              balance: entry.balance,
+              hasMetadata: !!entry.metadata
+            });
             const tokenData = await processTokenForDisplay(
               entry.token,
               entry.balance,
               entry.metadata,
               baseTokenAddress
             );
+            console.log(`fetchTokens: Processed token ${index + 1}:`, tokenData);
             return tokenData;
           } catch (error) {
             console.error('Failed to process token:', entry.token, error);
@@ -141,15 +138,19 @@ export default function HomePage() {
         })
       );
 
+      console.log('fetchTokens: All tokens processed:', processedTokens);
+
       // Filter out failed tokens and sort (base token first, then by name)
       const validTokens = processedTokens.filter(token => token !== null);
+      console.log('fetchTokens: Valid tokens after filtering:', validTokens);
+      
       validTokens.sort((a, b) => {
         if (a.isBaseToken) return -1;
         if (b.isBaseToken) return 1;
         return a.name.localeCompare(b.name);
       });
 
-      console.log('fetchTokens: Processed tokens:', validTokens.length, validTokens);
+      console.log('fetchTokens: Final processed tokens (sorted):', validTokens);
       setTokens(validTokens);
     } catch (error) {
       console.error('Failed to fetch tokens:', error);
