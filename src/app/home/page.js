@@ -56,10 +56,18 @@ export default function HomePage() {
       return;
     }
 
+    // Don't fetch if we're already loading or if we recently fetched
+    if (loadingTokens) {
+      return;
+    }
+
     setLoadingTokens(true);
     const provider = window.keeta;
 
     try {
+      // Wait a bit to avoid rate limiting from simultaneous calls
+      await new Promise(resolve => setTimeout(resolve, 500));
+
       // Get all balances from the wallet
       const balances = await provider.getAllBalances?.();
       
@@ -126,9 +134,9 @@ export default function HomePage() {
     } finally {
       setLoadingTokens(false);
     }
-  }, [walletState.connected]);
+  }, [walletState.connected, loadingTokens]);
 
-  const checkWalletConnection = useCallback(async (forceCheck = false) => {
+  const checkWalletConnection = useCallback(async (forceCheck = false, shouldFetchTokens = false) => {
     if (typeof window === 'undefined' || !window.keeta) {
       setWalletState(prevState => ({ ...prevState, connected: false, loading: false }));
       return;
@@ -152,6 +160,11 @@ export default function HomePage() {
           network,
           loading: false,
         });
+        
+        // Fetch tokens after successful connection if requested
+        if (shouldFetchTokens) {
+          setTimeout(() => fetchTokens(), 1000);
+        }
       } else {
         setWalletState(prevState => ({ ...prevState, connected: false, loading: false }));
       }
@@ -162,7 +175,7 @@ export default function HomePage() {
       // Mark balance check as complete
       markBalanceCheckComplete();
     }
-  }, []);
+  }, [fetchTokens]);
 
   const connectWallet = useCallback(async () => {
     if (typeof window === 'undefined' || !window.keeta) {
@@ -212,8 +225,8 @@ export default function HomePage() {
   }, []);
 
   useEffect(() => {
-    // Initial check with force to ensure we get data on mount
-    checkWalletConnection(true);
+    // Initial check with force to ensure we get data on mount, and fetch tokens
+    checkWalletConnection(true, true);
 
     if (typeof window !== 'undefined' && window.keeta) {
       const provider = window.keeta;
@@ -222,9 +235,8 @@ export default function HomePage() {
         if (accounts && accounts.length > 0) {
           // Use setTimeout to debounce the check
           setTimeout(() => {
-            checkWalletConnection(true);
-            fetchTokens();
-          }, 200);
+            checkWalletConnection(true, true);
+          }, 1500);
         } else {
           setWalletState(prevState => ({ ...prevState, connected: false, accounts: [], balance: null }));
           setTokens([]);
@@ -234,9 +246,8 @@ export default function HomePage() {
       const handleChainChanged = () => {
         // Use setTimeout to debounce the check
         setTimeout(() => {
-          checkWalletConnection(true);
-          fetchTokens();
-        }, 200);
+          checkWalletConnection(true, true);
+        }, 1500);
       };
 
       const handleDisconnect = () => {
@@ -257,14 +268,7 @@ export default function HomePage() {
         }
       };
     }
-  }, [checkWalletConnection, fetchTokens]);
-
-  // Fetch tokens when wallet connects
-  useEffect(() => {
-    if (walletState.connected) {
-      fetchTokens();
-    }
-  }, [walletState.connected, fetchTokens]);
+  }, [checkWalletConnection]);
 
   if (walletState.loading) {
     return (
