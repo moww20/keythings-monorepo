@@ -67,11 +67,11 @@ export default function HomePage() {
     const provider = window.keeta;
 
     try {
-      console.log('fetchTokens: Calling getAllBalances...');
+      console.log('fetchTokens: Calling allBalances...');
       
-      // Use getAllBalances from the wallet provider
+      // Use allBalances from the wallet provider (not getAllBalances!)
       // This is cached by the extension and doesn't trigger rate limiting
-      const balances = await provider.getAllBalances?.();
+      const balances = await provider.allBalances?.();
       
       console.log('fetchTokens: getAllBalances result:', balances);
       
