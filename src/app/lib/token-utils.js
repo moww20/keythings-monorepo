@@ -253,9 +253,17 @@ export async function processTokenForDisplay(tokenAddress, balance, metadata, ba
   const displayAmount = formatAmountWithCommas(formattedAmount);
 
   // Get icon
-  const icon = metadata ? getTokenIconFromMetadata(metadata) : null;
-  const iconDataUrl = icon ? getTokenIconDataUrl(icon) : '';
-  const fallbackIcon = icon ? null : createFallbackTokenIcon(ticker);
+  let iconDataUrl = '';
+  let fallbackIcon = null;
+  
+  if (isBaseToken) {
+    // Use the Keeta logo for KTA base token
+    iconDataUrl = '/icons/TLEOfKos_400x400.jpg';
+  } else {
+    const icon = metadata ? getTokenIconFromMetadata(metadata) : null;
+    iconDataUrl = icon ? getTokenIconDataUrl(icon) : '';
+    fallbackIcon = icon ? null : createFallbackTokenIcon(ticker);
+  }
 
   return {
     address: tokenAddress,
