@@ -204,11 +204,11 @@ export default function HomePage() {
       const accounts = await provider.getAccounts();
       console.log('checkWalletConnection: accounts =', accounts);
       
-      // If wallet is locked but has accounts, show locked state
-      if (isLocked && accounts && accounts.length > 0) {
+      // If wallet is locked, show locked state (regardless of account count)
+      if (isLocked) {
         setWalletState({
           connected: true,
-          accounts,
+          accounts: accounts || [],
           balance: null,
           network: null,
           loading: false,
