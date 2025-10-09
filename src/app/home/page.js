@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
+import Image from 'next/image';
 import { LayoutDashboard, Wallet, ShoppingCart, UserCircle, Settings } from 'lucide-react';
 import EstimatedBalance from '../components/EstimatedBalance';
 import { throttleBalanceCheck, markBalanceCheckComplete } from '../lib/wallet-throttle';
@@ -566,6 +567,7 @@ export default function HomePage() {
                         <td className="py-4 px-6">
                           <div className="flex items-center gap-3">
                             {token.icon ? (
+                              // eslint-disable-next-line @next/next/no-img-element
                               <img src={token.icon} alt={token.ticker} className="w-8 h-8 rounded-full" />
                             ) : token.fallbackIcon ? (
                               <div 
