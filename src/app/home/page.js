@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { LayoutDashboard, Wallet, ShoppingCart, UserCircle, Settings } from 'lucide-react';
 import EstimatedBalance from '../components/EstimatedBalance';
 import { throttleBalanceCheck, markBalanceCheckComplete } from '../lib/wallet-throttle';
+import { processTokenForDisplay } from '../lib/token-utils';
 
 export default function HomePage() {
   const router = useRouter();
@@ -18,6 +19,9 @@ export default function HomePage() {
   
   const [isConnecting, setIsConnecting] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [tokens, setTokens] = useState([]);
+  const [loadingTokens, setLoadingTokens] = useState(false);
+  const [activeTab, setActiveTab] = useState('holding');
 
   const formatAddress = (address) => {
     if (!address) return '';
@@ -44,6 +48,84 @@ export default function HomePage() {
     console.log('Cash In clicked');
     // TODO: Implement cash in functionality
   };
+
+  const fetchTokens = useCallback(async () => {
+    if (typeof window === 'undefined' || !window.keeta || !walletState.connected) {
+      setTokens([]);
+      return;
+    }
+
+    setLoadingTokens(true);
+    const provider = window.keeta;
+
+    try {
+      // Get all balances from the wallet
+      const balances = await provider.getAllBalances?.();
+      
+      if (!balances || balances.length === 0) {
+        setTokens([]);
+        setLoadingTokens(false);
+        return;
+      }
+
+      // Filter balances > 0
+      const nonZeroBalances = balances.filter(entry => {
+        try {
+          return entry.balance && BigInt(entry.balance) > 0n;
+        } catch {
+          return false;
+        }
+      });
+
+      if (nonZeroBalances.length === 0) {
+        setTokens([]);
+        setLoadingTokens(false);
+        return;
+      }
+
+      // Get base token address
+      let baseTokenAddress = null;
+      try {
+        const network = await provider.getNetwork();
+        baseTokenAddress = network?.baseToken || null;
+      } catch (error) {
+        console.warn('Failed to get base token address:', error);
+      }
+
+      // Process each token
+      const processedTokens = await Promise.all(
+        nonZeroBalances.map(async (entry) => {
+          try {
+            const tokenData = await processTokenForDisplay(
+              entry.token,
+              entry.balance,
+              entry.metadata,
+              baseTokenAddress
+            );
+            return tokenData;
+          } catch (error) {
+            console.error('Failed to process token:', entry.token, error);
+            return null;
+          }
+        })
+      );
+
+      // Filter out failed tokens and sort (base token first, then by name)
+      const validTokens = processedTokens.filter(token => token !== null);
+      validTokens.sort((a, b) => {
+        if (a.isBaseToken) return -1;
+        if (b.isBaseToken) return 1;
+        return a.name.localeCompare(b.name);
+      });
+
+      setTokens(validTokens);
+    } catch (error) {
+      console.error('Failed to fetch tokens:', error);
+      setTokens([]);
+    } finally {
+      setLoadingTokens(false);
+    }
+  }, [walletState.connected]);
 
   const checkWalletConnection = useCallback(async (forceCheck = false) => {
     if (typeof window === 'undefined' || !window.keeta) {
@@ -138,19 +220,27 @@ export default function HomePage() {
       const handleAccountsChanged = (accounts) => {
         if (accounts && accounts.length > 0) {
           // Use setTimeout to debounce the check
-          setTimeout(() => checkWalletConnection(true), 200);
+          setTimeout(() => {
+            checkWalletConnection(true);
+            fetchTokens();
+          }, 200);
         } else {
           setWalletState(prevState => ({ ...prevState, connected: false, accounts: [], balance: null }));
+          setTokens([]);
         }
       };
 
       const handleChainChanged = () => {
         // Use setTimeout to debounce the check
-        setTimeout(() => checkWalletConnection(true), 200);
+        setTimeout(() => {
+          checkWalletConnection(true);
+          fetchTokens();
+        }, 200);
       };
 
       const handleDisconnect = () => {
         setWalletState(prevState => ({ ...prevState, connected: false, accounts: [], balance: null }));
+        setTokens([]);
       };
 
       provider.on?.('accountsChanged', handleAccountsChanged);
@@ -166,7 +256,14 @@ export default function HomePage() {
         }
       };
     }
-  }, [checkWalletConnection]);
+  }, [checkWalletConnection, fetchTokens]);
+
+  // Fetch tokens when wallet connects
+  useEffect(() => {
+    if (walletState.connected) {
+      fetchTokens();
+    }
+  }, [walletState.connected, fetchTokens]);
 
   if (walletState.loading) {
     return (
@@ -362,26 +459,37 @@ export default function HomePage() {
 
             <div className="px-6 py-4 border-b border-hairline">
               <div className="flex flex-wrap gap-4 lg:gap-8">
-                <button className="text-accent font-medium border-b-2 border-accent pb-2">
+                <button 
+                  onClick={() => setActiveTab('holding')}
+                  className={`font-medium border-b-2 pb-2 transition-colors ${
+                    activeTab === 'holding' ? 'text-accent border-accent' : 'text-muted hover:text-foreground border-transparent'
+                  }`}
+                >
                   Holding
                 </button>
-                <button className="text-muted hover:text-foreground transition-colors">
+                <button 
+                  onClick={() => setActiveTab('hot')}
+                  className={`font-medium border-b-2 pb-2 transition-colors ${
+                    activeTab === 'hot' ? 'text-accent border-accent' : 'text-muted hover:text-foreground border-transparent'
+                  }`}
+                >
                   Hot
                 </button>
-                <button className="text-muted hover:text-foreground transition-colors">
+                <button 
+                  onClick={() => setActiveTab('new-listing')}
+                  className={`font-medium border-b-2 pb-2 transition-colors ${
+                    activeTab === 'new-listing' ? 'text-accent border-accent' : 'text-muted hover:text-foreground border-transparent'
+                  }`}
+                >
                   New Listing
                 </button>
-                <button className="text-muted hover:text-foreground transition-colors">
+                <button 
+                  onClick={() => setActiveTab('favorite')}
+                  className={`font-medium border-b-2 pb-2 transition-colors ${
+                    activeTab === 'favorite' ? 'text-accent border-accent' : 'text-muted hover:text-foreground border-transparent'
+                  }`}
+                >
                   Favorite
-                </button>
-                <button className="text-muted hover:text-foreground transition-colors">
-                  Top Gainers
-                </button>
-                <button className="text-muted hover:text-foreground transition-colors">
-                  24h Volume
-                </button>
-                <button className="text-muted hover:text-foreground transition-colors lg:ml-auto">
-                  More &gt;
                 </button>
               </div>
             </div>
@@ -428,125 +536,77 @@ export default function HomePage() {
                   </tr>
                 </thead>
                 <tbody>
-                  <tr className="border-b border-hairline hover:bg-surface/50 transition-colors">
-                    <td className="py-4 px-6">
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full bg-green-500 flex items-center justify-center">
-                          <span className="text-white text-xs font-bold">U</span>
+                  {loadingTokens ? (
+                    <tr>
+                      <td colSpan="5" className="py-12 text-center">
+                        <div className="flex flex-col items-center gap-3">
+                          <svg className="animate-spin h-8 w-8 text-accent" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                          </svg>
+                          <span className="text-muted">Loading tokens...</span>
                         </div>
-                        <div>
-                          <div className="text-foreground font-medium">USDT</div>
-                          <div className="text-muted text-sm">TetherUS</div>
+                      </td>
+                    </tr>
+                  ) : tokens.length === 0 ? (
+                    <tr>
+                      <td colSpan="5" className="py-12 text-center">
+                        <div className="flex flex-col items-center gap-3">
+                          <Wallet className="h-12 w-12 text-muted opacity-50" />
+                          <span className="text-muted">No tokens found in your wallet</span>
                         </div>
-                      </div>
-                    </td>
-                    <td className="py-4 px-6 text-right">
-                      <div className="text-foreground font-medium">1,000.00</div>
-                      <div className="text-muted text-sm">$1,000.00</div>
-                    </td>
-                    <td className="py-4 px-6 text-right">
-                      <div className="text-foreground font-medium">$1.0000</div>
-                      <div className="text-muted text-sm">$1.0000</div>
-                    </td>
-                    <td className="py-4 px-6 text-right text-red-500 font-medium">
-                      -0.02%
-                    </td>
-                    <td className="py-4 px-6 text-right">
-                      <button className="text-accent hover:text-foreground transition-colors">
-                        Trade
-                      </button>
-                    </td>
-                  </tr>
-
-                  <tr className="border-b border-hairline hover:bg-surface/50 transition-colors">
-                    <td className="py-4 px-6">
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center">
-                          <span className="text-white text-xs font-bold">S</span>
-                        </div>
-                        <div>
-                          <div className="text-foreground font-medium">SUI</div>
-                          <div className="text-muted text-sm">Sui</div>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="py-4 px-6 text-right">
-                      <div className="text-foreground font-medium">500.00</div>
-                      <div className="text-muted text-sm">$500.00</div>
-                    </td>
-                    <td className="py-4 px-6 text-right">
-                      <div className="text-foreground font-medium">$1.0000</div>
-                      <div className="text-muted text-sm">$0.9800</div>
-                    </td>
-                    <td className="py-4 px-6 text-right text-green-500 font-medium">
-                      +2.42%
-                    </td>
-                    <td className="py-4 px-6 text-right">
-                      <button className="text-accent hover:text-foreground transition-colors">
-                        Trade
-                      </button>
-                    </td>
-                  </tr>
-
-                  <tr className="border-b border-hairline hover:bg-surface/50 transition-colors">
-                    <td className="py-4 px-6">
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full bg-purple-500 flex items-center justify-center">
-                          <span className="text-white text-xs font-bold">G</span>
-                        </div>
-                        <div>
-                          <div className="text-foreground font-medium">GLMR</div>
-                          <div className="text-muted text-sm">Moonbeam</div>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="py-4 px-6 text-right">
-                      <div className="text-foreground font-medium">2,000.00</div>
-                      <div className="text-muted text-sm">$2,000.00</div>
-                    </td>
-                    <td className="py-4 px-6 text-right">
-                      <div className="text-foreground font-medium">$1.0000</div>
-                      <div className="text-muted text-sm">$0.9800</div>
-                    </td>
-                    <td className="py-4 px-6 text-right text-green-500 font-medium">
-                      +2.12%
-                    </td>
-                    <td className="py-4 px-6 text-right">
-                      <button className="text-accent hover:text-foreground transition-colors">
-                        Trade
-                      </button>
-                    </td>
-                  </tr>
-
-                  <tr className="hover:bg-surface/50 transition-colors">
-                    <td className="py-4 px-6">
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center">
-                          <span className="text-white text-xs font-bold">A</span>
-                        </div>
-                        <div>
-                          <div className="text-foreground font-medium">ADA</div>
-                          <div className="text-muted text-sm">Cardano</div>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="py-4 px-6 text-right">
-                      <div className="text-foreground font-medium">3,000.00</div>
-                      <div className="text-muted text-sm">$3,000.00</div>
-                    </td>
-                    <td className="py-4 px-6 text-right">
-                      <div className="text-foreground font-medium">$1.0000</div>
-                      <div className="text-muted text-sm">$0.9850</div>
-                    </td>
-                    <td className="py-4 px-6 text-right text-green-500 font-medium">
-                      +1.61%
-                    </td>
-                    <td className="py-4 px-6 text-right">
-                      <button className="text-accent hover:text-foreground transition-colors">
-                        Trade
-                      </button>
-                    </td>
-                  </tr>
+                      </td>
+                    </tr>
+                  ) : (
+                    tokens.map((token, index) => (
+                      <tr 
+                        key={token.address} 
+                        className={`hover:bg-surface/50 transition-colors ${index !== tokens.length - 1 ? 'border-b border-hairline' : ''}`}
+                      >
+                        <td className="py-4 px-6">
+                          <div className="flex items-center gap-3">
+                            {token.icon ? (
+                              <img src={token.icon} alt={token.ticker} className="w-8 h-8 rounded-full" />
+                            ) : token.fallbackIcon ? (
+                              <div 
+                                className="w-8 h-8 rounded-full flex items-center justify-center"
+                                style={{ 
+                                  backgroundColor: token.fallbackIcon.bgColor,
+                                  color: token.fallbackIcon.textColor
+                                }}
+                              >
+                                <span className="text-xs font-bold">{token.fallbackIcon.letter}</span>
+                              </div>
+                            ) : (
+                              <div className="w-8 h-8 rounded-full bg-gray-500 flex items-center justify-center">
+                                <span className="text-white text-xs font-bold">?</span>
+                              </div>
+                            )}
+                            <div>
+                              <div className="text-foreground font-medium">{token.ticker || 'Unknown'}</div>
+                              <div className="text-muted text-sm">{token.name}</div>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="py-4 px-6 text-right">
+                          <div className="text-foreground font-medium">{token.formattedAmount}</div>
+                          <div className="text-muted text-sm">{token.ticker}</div>
+                        </td>
+                        <td className="py-4 px-6 text-right">
+                          <div className="text-foreground font-medium">—</div>
+                          <div className="text-muted text-sm">—</div>
+                        </td>
+                        <td className="py-4 px-6 text-right text-muted font-medium">
+                          —
+                        </td>
+                        <td className="py-4 px-6 text-right">
+                          <button className="text-accent hover:text-foreground transition-colors">
+                            Send
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>
