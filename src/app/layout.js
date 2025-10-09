@@ -3,6 +3,7 @@ import Navbar from "./components/Navbar";
 import Footer from "./components/Footer";
 import WalletRedirector from "./components/WalletRedirector";
 import ConditionalFooter from "./components/ConditionalFooter";
+import AppProviders from "./components/AppProviders";
 
 export const metadata = {
   title: "Keythings Wallet",
@@ -24,12 +25,14 @@ export default function RootLayout({ children }) {
   return (
     <html lang="en">
       <body className={`antialiased font-sans`}>
-        <WalletRedirector />
-        <Navbar />
-        <div className="pt-16 min-h-screen flex flex-col">
-          <main className="flex-1">{children}</main>
-          <ConditionalFooter />
-        </div>
+        <AppProviders>
+          <WalletRedirector />
+          <Navbar />
+          <div className="pt-16 min-h-screen flex flex-col">
+            <main className="flex-1">{children}</main>
+            <ConditionalFooter />
+          </div>
+        </AppProviders>
       </body>
     </html>
   );
