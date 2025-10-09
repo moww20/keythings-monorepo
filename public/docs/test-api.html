@@ -221,6 +221,67 @@ keeta.on('disconnect', () => {
         <div id="event-result"></div>
     </div>
 
+    <div class="test-section">
+        <h2>9. Base Token Information</h2>
+        <button onclick="testGetBaseToken()">Get Base Token Info</button>
+        <details>
+            <summary>Show Code</summary>
+            <pre><code>// Get base token (KTA) information
+const baseToken = await keeta.getBaseToken();
+console.log('Base Token Address:', baseToken.address);
+console.log('Base Token Name:', baseToken.name);
+console.log('Base Token Ticker:', baseToken.ticker);
+console.log('Base Token Decimals:', baseToken.decimals);</code></pre>
+        </details>
+        <div id="base-token-result"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>10. Token Metadata</h2>
+        <button onclick="testGetTokenMetadata()">Get Token Metadata</button>
+        <details>
+            <summary>Show Code</summary>
+            <pre><code>// Get metadata for a specific token
+const tokenAddress = 'keeta_token_address_here';
+const metadata = await keeta.getTokenMetadata(tokenAddress);
+console.log('Token Metadata:', metadata);</code></pre>
+        </details>
+        <div id="token-metadata-result"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>11. Wallet Lock State</h2>
+        <button onclick="testIsLocked()">Check if Wallet is Locked</button>
+        <details>
+            <summary>Show Code</summary>
+            <pre><code>// Check if wallet is currently locked
+const isLocked = await keeta.isLocked();
+console.log('Wallet Locked:', isLocked);
+
+// This is useful for showing appropriate UI to users
+if (isLocked) {
+    alert('Please unlock your wallet to continue');
+}</code></pre>
+        </details>
+        <div id="lock-state-result"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>12. KTA Price from CoinGecko</h2>
+        <button onclick="testGetKtaPrice()">Get KTA Price</button>
+        <details>
+            <summary>Show Code</summary>
+            <pre><code>// Get current KTA price from CoinGecko
+const priceData = await keeta.getKtaPrice();
+console.log('KTA Price (USD):', priceData.usd);
+console.log('24h Change:', priceData.usd_24h_change + '%');
+console.log('24h Volume:', priceData.usd_24h_vol);
+console.log('Market Cap:', priceData.usd_market_cap);
+console.log('Last Updated:', new Date(priceData.lastUpdated));</code></pre>
+        </details>
+        <div id="kta-price-result"></div>
+    </div>
+
     <script>
         let keeta = null;
 
@@ -768,6 +829,132 @@ keeta.on('disconnect', () => {
                 log('event-result', '✅ Event listeners setup complete', 'success');
             } catch (error) {
                 log('event-result', `❌ Setup event listeners failed: ${error.message}`, 'error');
+            }
+        }
+
+        async function testGetBaseToken() {
+            const resultDiv = document.getElementById('base-token-result');
+            resultDiv.innerHTML = '';
+
+            if (!keeta) {
+                log('base-token-result', '❌ Wallet not detected.', 'error');
+                return;
+            }
+
+            try {
+                log('base-token-result', '🔄 Fetching base token info...', 'info');
+                const baseToken = await keeta.getBaseToken();
+                
+                if (baseToken) {
+                    log('base-token-result', '✅ Base Token Information:', 'success');
+                    log('base-token-result', `Address: ${baseToken.address}`, 'info');
+                    log('base-token-result', `Name: ${baseToken.name || 'N/A'}`, 'info');
+                    log('base-token-result', `Ticker: ${baseToken.ticker || 'N/A'}`, 'info');
+                    log('base-token-result', `Decimals: ${baseToken.decimals || 'N/A'}`, 'info');
+                    log('base-token-result', `Full Response: ${JSON.stringify(baseToken, null, 2)}`, 'info');
+                } else {
+                    log('base-token-result', '⚠️ Base token info not available', 'error');
+                }
+            } catch (error) {
+                log('base-token-result', `❌ Get base token failed: ${error.message}`, 'error');
+            }
+        }
+
+        async function testGetTokenMetadata() {
+            const resultDiv = document.getElementById('token-metadata-result');
+            resultDiv.innerHTML = '';
+
+            if (!keeta) {
+                log('token-metadata-result', '❌ Wallet not detected.', 'error');
+                return;
+            }
+
+            try {
+                // First get base token address to use as example
+                log('token-metadata-result', '🔄 Getting base token address...', 'info');
+                const baseToken = await keeta.getBaseToken();
+                
+                if (!baseToken || !baseToken.address) {
+                    log('token-metadata-result', '⚠️ No token address available. Please connect wallet and try again.', 'error');
+                    return;
+                }
+
+                const tokenAddress = baseToken.address;
+                log('token-metadata-result', `🔄 Fetching metadata for: ${tokenAddress}`, 'info');
+                
+                const metadata = await keeta.getTokenMetadata(tokenAddress);
+                
+                if (metadata) {
+                    log('token-metadata-result', '✅ Token Metadata:', 'success');
+                    log('token-metadata-result', `Name: ${metadata.name || 'N/A'}`, 'info');
+                    log('token-metadata-result', `Ticker: ${metadata.ticker || 'N/A'}`, 'info');
+                    log('token-metadata-result', `Has Metadata: ${metadata.metadata ? 'Yes' : 'No'}`, 'info');
+                    log('token-metadata-result', `Full Response: ${JSON.stringify(metadata, null, 2)}`, 'info');
+                } else {
+                    log('token-metadata-result', '⚠️ No metadata available for this token', 'error');
+                }
+            } catch (error) {
+                log('token-metadata-result', `❌ Get token metadata failed: ${error.message}`, 'error');
+            }
+        }
+
+        async function testIsLocked() {
+            const resultDiv = document.getElementById('lock-state-result');
+            resultDiv.innerHTML = '';
+
+            if (!keeta) {
+                log('lock-state-result', '❌ Wallet not detected.', 'error');
+                return;
+            }
+
+            try {
+                log('lock-state-result', '🔄 Checking wallet lock state...', 'info');
+                const isLocked = await keeta.isLocked();
+                
+                if (isLocked === true) {
+                    log('lock-state-result', '🔒 Wallet is LOCKED', 'error');
+                    log('lock-state-result', 'Please unlock your wallet extension to continue', 'info');
+                } else if (isLocked === false) {
+                    log('lock-state-result', '🔓 Wallet is UNLOCKED', 'success');
+                    log('lock-state-result', 'You can perform transactions', 'info');
+                } else {
+                    log('lock-state-result', '⚠️ Lock state unknown', 'error');
+                }
+            } catch (error) {
+                log('lock-state-result', `❌ Check lock state failed: ${error.message}`, 'error');
+            }
+        }
+
+        async function testGetKtaPrice() {
+            const resultDiv = document.getElementById('kta-price-result');
+            resultDiv.innerHTML = '';
+
+            if (!keeta) {
+                log('kta-price-result', '❌ Wallet not detected.', 'error');
+                return;
+            }
+
+            try {
+                log('kta-price-result', '🔄 Fetching KTA price from CoinGecko...', 'info');
+                const priceData = await keeta.getKtaPrice();
+                
+                if (priceData) {
+                    log('kta-price-result', '✅ KTA Price Data:', 'success');
+                    log('kta-price-result', `💵 Price: $${priceData.usd.toFixed(4)} USD`, 'success');
+                    
+                    const changeColor = priceData.usd_24h_change >= 0 ? 'success' : 'error';
+                    const changeSymbol = priceData.usd_24h_change >= 0 ? '+' : '';
+                    log('kta-price-result', `📈 24h Change: ${changeSymbol}${priceData.usd_24h_change.toFixed(2)}%`, changeColor);
+                    
+                    log('kta-price-result', `📊 24h Volume: $${priceData.usd_24h_vol.toLocaleString()} USD`, 'info');
+                    log('kta-price-result', `💰 Market Cap: $${priceData.usd_market_cap.toLocaleString()} USD`, 'info');
+                    log('kta-price-result', `🕐 Last Updated: ${new Date(priceData.lastUpdated).toLocaleString()}`, 'info');
+                } else {
+                    log('kta-price-result', '⚠️ Price data not available', 'error');
+                    log('kta-price-result', 'Note: KTA may not be listed on CoinGecko yet', 'info');
+                }
+            } catch (error) {
+                log('kta-price-result', `❌ Get KTA price failed: ${error.message}`, 'error');
             }
         }
 
