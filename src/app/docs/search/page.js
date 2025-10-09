@@ -1,5 +1,5 @@
 export const metadata = {
-  title: "Search & Discovery — Twatter.Army Docs",
+  title: "Search & Discovery — Keythings Website Docs",
   description: "Master advanced search with NIP-50 full-text support, smart ranking, and powerful query language.",
   alternates: { canonical: "/docs/search" },
 }
@@ -13,7 +13,7 @@ export default function SearchPage() {
 
         <h2>Search Overview</h2>
         <p>
-          Twatter.Army's search system combines multiple technologies to deliver fast, relevant results:
+          Keythings's search system combines multiple technologies to deliver fast, relevant results:
         </p>
         <ul>
           <li><strong>NIP-50 full-text search</strong>: When supported by relays</li>
@@ -95,7 +95,7 @@ export default function SearchPage() {
         </ul>
 
         <h2>Search Suggestions</h2>
-        <p>As you type, Twatter.Army suggests:</p>
+        <p>As you type, Keythings suggests:</p>
 
         <h3>Autocomplete Features</h3>
         <ul>
@@ -187,7 +187,7 @@ export default function SearchPage() {
         </ul>
 
         <h2>Search Tips & Tricks</h2>
-        <p>Make the most of Twatter.Army's search:</p>
+        <p>Make the most of Keythings's search:</p>
 
         <h3>Effective Searching</h3>
         <ul>
@@ -250,7 +250,7 @@ export default function SearchPage() {
         </ul>
 
         <h2>Search API</h2>
-        <p>For developers building on Twatter.Army:</p>
+        <p>For developers building on Keythings:</p>
 
         <h3>REST Endpoints</h3>
         <ul>
@@ -277,7 +277,7 @@ export default function SearchPage() {
         </ul>
 
         <blockquote>
-          Search is the gateway to discovery on Nostr. Twatter.Army's advanced search capabilities
+          Search is the gateway to discovery on Nostr. Keythings's advanced search capabilities
           make it easy to find exactly what you're looking for in the vast decentralized network.
         </blockquote>
 

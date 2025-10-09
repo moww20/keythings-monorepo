@@ -1,6 +1,6 @@
 export const metadata = {
-  title: "Nostr Basics — Twatter.Army Docs",
-  description: "Understanding the decentralized social protocol that powers Twatter.Army.",
+  title: "Nostr Basics — Keythings Website Docs",
+  description: "Understanding the decentralized social protocol that powers Keythings.",
   alternates: { canonical: "/docs/nostr-basics" },
 }
 
@@ -133,7 +133,7 @@ export default function NostrBasicsPage() {
 
         <h3>Choose Your Client</h3>
         <ul>
-          <li><strong>Twatter.Army</strong>: Full-featured web client with modern UX</li>
+          <li><strong>Keythings</strong>: Full-featured web client with modern UX</li>
           <li><strong>Damus</strong>: Native iOS app with great mobile experience</li>
           <li><strong>Amethyst</strong>: Android client with Material Design</li>
           <li><strong>Snort</strong>: Lightweight web client focused on performance</li>

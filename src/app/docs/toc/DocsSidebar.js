@@ -12,13 +12,13 @@ export default function DocsSidebar() {
   // Restore persisted state on mount (client-only) to avoid SSR mismatch
   useEffect(() => {
     try {
-      const raw = localStorage.getItem('twatter.docs.open')
+      const raw = localStorage.getItem('keythings.docs.open')
       if (raw) setOpen(JSON.parse(raw))
     } catch {}
   }, [])
 
   useEffect(() => {
-    try { localStorage.setItem('twatter.docs.open', JSON.stringify(open)) } catch {}
+    try { localStorage.setItem('keythings.docs.open', JSON.stringify(open)) } catch {}
   }, [open])
 
   // Auto-open the section containing the current page

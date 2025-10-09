@@ -1,6 +1,6 @@
 export const metadata = {
-  title: "Licensing — Twatter.Army Docs",
-  description: "Open source licenses for Twatter.Army code, documentation, and dependencies.",
+  title: "Licensing — Keythings Website Docs",
+  description: "Open source licenses for Keythings code, documentation, and dependencies.",
   alternates: { canonical: "/docs/licensing" },
 }
 
@@ -11,14 +11,14 @@ export default function LicensingPage() {
       <div className="docs-prose">
         <h2>Overview</h2>
         <p>
-          Twatter.Army is committed to open source and transparency. This page outlines the licensing
+          Keythings is committed to open source and transparency. This page outlines the licensing
           for our code, documentation, and third-party dependencies. All licenses are designed to
           promote collaboration and innovation in the decentralized social space.
         </p>
 
         <h2>Main Application Code</h2>
         <p>
-          The Twatter.Army web application is released under the <strong>MIT License</strong>, a
+          The Keythings web application is released under the <strong>MIT License</strong>, a
           permissive open-source license that allows for:
         </p>
         <ul>
@@ -34,13 +34,13 @@ export default function LicensingPage() {
         </p>
         <ul>
           <li>You may share and adapt the content</li>
-          <li>Attribution to Twatter.Army is required</li>
+          <li>Attribution to Keythings is required</li>
           <li>Derivative works must be shared under the same license</li>
           <li>Commercial use is permitted with attribution</li>
         </ul>
 
         <h2>Third-Party Dependencies</h2>
-        <p>Twatter.Army relies on several open-source libraries and frameworks:</p>
+        <p>Keythings relies on several open-source libraries and frameworks:</p>
 
         <h3>Core Dependencies</h3>
         <ul>
@@ -66,7 +66,7 @@ export default function LicensingPage() {
 
         <h2>Contributing & Forks</h2>
         <p>
-          When contributing to Twatter.Army or creating derivative works:
+          When contributing to Keythings or creating derivative works:
         </p>
         <ul>
           <li>All contributions are subject to the MIT License</li>
@@ -77,10 +77,10 @@ export default function LicensingPage() {
 
         <h2>Trademark & Branding</h2>
         <p>
-          The Twatter.Army name and logo are trademarks of the project. Usage guidelines:
+          The Keythings name and logo are trademarks of the project. Usage guidelines:
         </p>
         <ul>
-          <li>Do not use Twatter.Army branding to mislead users</li>
+          <li>Do not use Keythings branding to mislead users</li>
           <li>Personal and non-commercial use is permitted</li>
           <li>Commercial use requires written permission</li>
           <li>Fair use for commentary and news reporting is allowed</li>
@@ -91,14 +91,14 @@ export default function LicensingPage() {
           For licensing questions, legal concerns, or trademark inquiries:
         </p>
         <ul>
-          <li><strong>Email:</strong> legal@twatter.army</li>
+          <li><strong>Email:</strong> legal@keythings.com</li>
           <li><strong>Nostr:</strong> Direct message project maintainers</li>
           <li><strong>GitHub:</strong> Open an issue in the repository</li>
-          <li><strong>Discord:</strong> <a href="https://discord.gg/twatter" className="text-accent-gradient hover:underline">Community server</a></li>
+          <li><strong>Discord:</strong> <a href="https://discord.gg/keythings" className="text-accent-gradient hover:underline">Community server</a></li>
         </ul>
 
         <blockquote>
-          Open source is at the heart of Twatter.Army's mission to democratize social networking.
+          Open source is at the heart of Keythings's mission to democratize social networking.
           We believe in transparency, collaboration, and giving users control over their digital lives.
         </blockquote>
 

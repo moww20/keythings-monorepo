@@ -1,5 +1,5 @@
 export const metadata = {
-  title: "Authentication — Twatter.Army Docs",
+  title: "Authentication — Keythings Website Docs",
   description: "Learn about passkeys, WebAuthn, and wallet integration for secure, passwordless authentication.",
   alternates: { canonical: "/docs/authentication" },
 }
@@ -12,7 +12,7 @@ export default function AuthenticationPage() {
         <p><em>Secure, passwordless authentication with cutting-edge cryptography and seamless wallet integration.</em></p>
 
         <h2>Authentication Methods</h2>
-        <p>Twatter.Army offers multiple authentication options to suit different user preferences and security needs:</p>
+        <p>Keythings offers multiple authentication options to suit different user preferences and security needs:</p>
 
         <h3>1. Passkeys (WebAuthn) - Recommended</h3>
         <p>The most secure and user-friendly option for new users.</p>
@@ -33,7 +33,7 @@ export default function AuthenticationPage() {
 
         <h4>Setting Up Passkeys</h4>
         <ol>
-          <li>Visit <a href="https://twatter.army" className="text-accent-gradient hover:underline">twatter.army</a></li>
+          <li>Visit <a href="https://keythings.com" className="text-accent-gradient hover:underline">keythings.com</a></li>
           <li>Click "Sign Up" or "Create Account"</li>
           <li>Choose a username (this becomes your Nostr public key identifier)</li>
           <li>When prompted, use your device's biometric authentication</li>
@@ -52,7 +52,7 @@ export default function AuthenticationPage() {
         <p>For users who already have Nostr identities or prefer wallet-based authentication.</p>
 
         <h4>Supported Wallets</h4>
-        <p>Twatter.Army integrates with all NIP-07 compatible wallets:</p>
+        <p>Keythings integrates with all NIP-07 compatible wallets:</p>
         <ul>
           <li><strong>Alby</strong>: Popular browser extension with built-in Lightning Network</li>
           <li><strong>nos2x</strong>: Simple, open-source Nostr wallet extension</li>
@@ -64,7 +64,7 @@ export default function AuthenticationPage() {
         <ol>
           <li>Install your preferred NIP-07 wallet extension</li>
           <li>Create or import your Nostr key pair in the wallet</li>
-          <li>Visit Twatter.Army and click "Connect Wallet"</li>
+          <li>Visit Keythings and click "Connect Wallet"</li>
           <li>Approve the connection in your wallet popup</li>
           <li>You can now post, follow, and interact using your existing identity</li>
         </ol>
@@ -72,18 +72,18 @@ export default function AuthenticationPage() {
         <h4>Wallet Authentication Flow</h4>
         <p>When you connect a wallet:</p>
         <ul>
-          <li>Twatter.Army requests permission to sign events with your key</li>
+          <li>Keythings requests permission to sign events with your key</li>
           <li>Your wallet shows what permissions are being requested</li>
           <li>You approve or deny the connection</li>
-          <li>If approved, Twatter.Army can sign posts and other events on your behalf</li>
+          <li>If approved, Keythings can sign posts and other events on your behalf</li>
         </ul>
 
         <h3>3. Session Management</h3>
-        <p>How Twatter.Army handles authentication sessions for security and convenience.</p>
+        <p>How Keythings handles authentication sessions for security and convenience.</p>
 
         <h4>Server-Verified Sessions</h4>
         <p>
-          Unlike many web applications, Twatter.Army uses server-side session verification:
+          Unlike many web applications, Keythings uses server-side session verification:
         </p>
         <ul>
           <li><strong>HttpOnly cookies</strong>: Session tokens are stored server-side only</li>
@@ -93,7 +93,7 @@ export default function AuthenticationPage() {
         </ul>
 
         <h4>Automatic Reconnection</h4>
-        <p>Twatter.Army intelligently handles authentication state:</p>
+        <p>Keythings intelligently handles authentication state:</p>
         <ul>
           <li><strong>Graceful reconnects</strong>: Automatically reconnect after network interruptions</li>
           <li><strong>Session persistence</strong>: Stay logged in across browser sessions</li>
@@ -102,7 +102,7 @@ export default function AuthenticationPage() {
         </ul>
 
         <h2>Security Architecture</h2>
-        <p>Twatter.Army's authentication system is built on enterprise-grade security:</p>
+        <p>Keythings's authentication system is built on enterprise-grade security:</p>
 
         <h3>Cryptographic Foundations</h3>
         <ul>
@@ -134,7 +134,7 @@ export default function AuthenticationPage() {
 
         <h3>From Passkeys to Wallet</h3>
         <ol>
-          <li>Connect your preferred wallet to Twatter.Army</li>
+          <li>Connect your preferred wallet to Keythings</li>
           <li>Both authentication methods will be available</li>
           <li>Your posts and followers remain unchanged</li>
           <li>You can use either method going forward</li>
@@ -161,7 +161,7 @@ export default function AuthenticationPage() {
 
         <h4>"Origin not allowed"</h4>
         <ul>
-          <li>Make sure you're accessing Twatter.Army from the correct domain</li>
+          <li>Make sure you're accessing Keythings from the correct domain</li>
           <li>Check that you're not using an outdated bookmark</li>
           <li>Try clearing your browser cache</li>
         </ul>
@@ -197,7 +197,7 @@ export default function AuthenticationPage() {
         </ul>
 
         <h2>Best Practices</h2>
-        <p>Security recommendations for Twatter.Army users:</p>
+        <p>Security recommendations for Keythings users:</p>
 
         <h3>General Security</h3>
         <ul>
@@ -239,14 +239,14 @@ export default function AuthenticationPage() {
         <p>Need help with authentication?</p>
         <ul>
           <li><a href="/docs/getting-started" className="text-accent-gradient hover:underline">Quick Start Guide</a></li>
-          <li><a href="https://discord.gg/twatter" className="text-accent-gradient hover:underline">Community Discord</a></li>
+          <li><a href="https://discord.gg/keythings" className="text-accent-gradient hover:underline">Community Discord</a></li>
           <li><a href="/docs/privacy" className="text-accent-gradient hover:underline">Privacy & Security</a></li>
-          <li><strong>Email</strong>: security@twatter.army (for security-related concerns)</li>
+          <li><strong>Email</strong>: security@keythings.com (for security-related concerns)</li>
         </ul>
 
         <blockquote>
           Security isn't just a feature—it's the foundation of everything we build.
-          Twatter.Army combines cutting-edge cryptography with user-friendly design to make
+          Keythings combines cutting-edge cryptography with user-friendly design to make
           decentralized social networking both powerful and accessible.
         </blockquote>
       </div>

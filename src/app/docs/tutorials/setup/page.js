@@ -9,7 +9,7 @@ export default function SetupTutorialPage() {
     <div className="rounded-2xl p-6">
       <h1 className="text-2xl font-semibold tracking-tight mb-3">Setup Tutorial</h1>
       <div className="docs-prose">
-        <p><em>Complete step-by-step guide to set up your Twatter.Army account and get started with decentralized social networking.</em></p>
+        <p><em>Complete step-by-step guide to set up your Keythings account and get started with decentralized social networking.</em></p>
 
         <div className="bg-blue-500/10 border-l-4 border-blue-500 p-4 mb-6 rounded-r-lg">
           <div className="flex">
@@ -22,10 +22,10 @@ export default function SetupTutorialPage() {
           </div>
         </div>
 
-        <h2>Step 1: Access Twatter.Army</h2>
+        <h2>Step 1: Access Keythings</h2>
         <ol>
           <li>Open your web browser (Chrome, Firefox, Safari, or Edge recommended)</li>
-          <li>Navigate to <a href="https://twatter.army" className="text-accent-gradient hover:underline">https://twatter.army</a></li>
+          <li>Navigate to <a href="https://keythings.com" className="text-accent-gradient hover:underline">https://keythings.com</a></li>
           <li>The application loads instantly with our optimized Next.js build</li>
         </ol>
 
@@ -88,10 +88,10 @@ export default function SetupTutorialPage() {
 
         <h4>Connect Your Wallet</h4>
         <ol>
-          <li>After installing your wallet extension, refresh Twatter.Army</li>
+          <li>After installing your wallet extension, refresh Keythings</li>
           <li>Click <strong>"Connect Wallet"</strong> on the homepage</li>
           <li>Your wallet extension will show a popup asking for permission</li>
-          <li>Review the permissions (Twatter.Army needs to sign posts with your key)</li>
+          <li>Review the permissions (Keythings needs to sign posts with your key)</li>
           <li>Click <strong>"Approve"</strong> or <strong>"Connect"</strong></li>
           <li>You'll see a success message and can start using your existing Nostr identity</li>
         </ol>
@@ -120,7 +120,7 @@ export default function SetupTutorialPage() {
         </ul>
 
         <h2>Step 4: Configure Your Privacy Settings</h2>
-        <p>Twatter.Army gives you control over your privacy:</p>
+        <p>Keythings gives you control over your privacy:</p>
 
         <ol>
           <li>Go to your profile and click <strong>"Settings"</strong></li>
@@ -205,7 +205,7 @@ export default function SetupTutorialPage() {
         </ul>
 
         <h2>Step 8: Customize Your Experience</h2>
-        <p>Make Twatter.Army work the way you want:</p>
+        <p>Make Keythings work the way you want:</p>
 
         <h3>Interface Customization</h3>
         <ul>
@@ -314,14 +314,14 @@ export default function SetupTutorialPage() {
             <div className="ml-3">
               <p className="text-sm text-yellow-300">
                 <strong>Need help?</strong> Join our community on Discord for support and connect with other users.
-                <a href="https://discord.gg/twatter" className="text-accent-gradient hover:underline ml-1">Join Discord</a>
+                <a href="https://discord.gg/keythings" className="text-accent-gradient hover:underline ml-1">Join Discord</a>
               </p>
             </div>
           </div>
         </div>
 
         <blockquote>
-          Welcome to the future of social networking! You've successfully set up your Twatter.Army account
+          Welcome to the future of social networking! You've successfully set up your Keythings account
           and joined the decentralized social revolution. Your voice now exists on a censorship-resistant
           network owned by its users.
         </blockquote>

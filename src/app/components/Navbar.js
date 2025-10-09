@@ -186,7 +186,7 @@ export default function Navbar() {
         </div>
         <div className="flex items-center justify-end gap-3 flex-shrink-0">
           <a
-            href="https://x.com/twatter_army"
+            href="https://x.com/keythings"
             target="_blank"
             rel="noopener noreferrer"
             aria-label="X (Twitter)"
@@ -197,7 +197,7 @@ export default function Navbar() {
             </svg>
           </a>
           <a
-            href="https://discord.gg/twatter"
+            href="https://discord.gg/keythings"
             target="_blank"
             rel="noopener noreferrer"
             aria-label="Discord"
@@ -287,10 +287,10 @@ export default function Navbar() {
                       {walletConnected ? formatAddress(walletAddress) : 'Connect Wallet'}
                     </button>
                     <div className="flex items-center gap-3 pt-2">
-                      <a href="https://x.com/twatter_army" target="_blank" rel="noopener noreferrer" aria-label="X (Twitter)" className="inline-flex items-center justify-center w-9 h-9 rounded-full hover:bg-white/5 text-foreground/90">
+                      <a href="https://x.com/keythings" target="_blank" rel="noopener noreferrer" aria-label="X (Twitter)" className="inline-flex items-center justify-center w-9 h-9 rounded-full hover:bg-white/5 text-foreground/90">
                         <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor" role="img" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><path d={siX.path} /></svg>
                       </a>
-                      <a href="https://discord.gg/twatter" target="_blank" rel="noopener noreferrer" aria-label="Discord" className="inline-flex items-center justify-center w-9 h-9 rounded-full hover:bg-white/5 text-foreground/90">
+                      <a href="https://discord.gg/keythings" target="_blank" rel="noopener noreferrer" aria-label="Discord" className="inline-flex items-center justify-center w-9 h-9 rounded-full hover:bg-white/5 text-foreground/90">
                         <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor" role="img" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><path d={siDiscord.path} /></svg>
                       </a>
                     </div>

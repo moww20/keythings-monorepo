@@ -9,7 +9,7 @@ export default function PostingTutorialPage() {
     <div className="rounded-2xl p-6">
       <h1 className="text-2xl font-semibold tracking-tight mb-3">Posting Tutorial</h1>
       <div className="docs-prose">
-        <p><em>Master the art of content creation on Twatter.Army. Learn to craft engaging posts, upload media, and build your audience.</em></p>
+        <p><em>Master the art of content creation on Keythings. Learn to craft engaging posts, upload media, and build your audience.</em></p>
 
         <div className="bg-blue-500/10 border-l-4 border-blue-500 p-4 mb-6 rounded-r-lg">
           <div className="flex">
@@ -23,7 +23,7 @@ export default function PostingTutorialPage() {
         </div>
 
         <h2>The Composer Interface</h2>
-        <p>Twatter.Army's composer is your gateway to content creation:</p>
+        <p>Keythings's composer is your gateway to content creation:</p>
 
         <h3>Accessing the Composer</h3>
         <ul>
@@ -247,7 +247,7 @@ export default function PostingTutorialPage() {
 
         <h3>Cross-Platform Promotion</h3>
         <ul>
-          <li>Share your best Twatter.Army posts on other platforms</li>
+          <li>Share your best Keythings posts on other platforms</li>
           <li>Include your Nostr profile link in other bios</li>
           <li>Drive traffic from your website or blog</li>
           <li>Collaborate with other creators</li>
@@ -327,7 +327,7 @@ export default function PostingTutorialPage() {
         </ul>
 
         <h2>Advanced Features</h2>
-        <p>Unlock the full potential of Twatter.Army:</p>
+        <p>Unlock the full potential of Keythings:</p>
 
         <h3>Scheduled Posts</h3>
         <p>Plan your content calendar:</p>
@@ -380,7 +380,7 @@ export default function PostingTutorialPage() {
           <div className="border rounded-lg p-4">
             <h4 className="font-semibold">Community Resources</h4>
             <ul className="text-sm space-y-1">
-              <li><a href="https://discord.gg/twatter" className="text-accent-gradient hover:underline">Creator Community</a></li>
+              <li><a href="https://discord.gg/keythings" className="text-accent-gradient hover:underline">Creator Community</a></li>
               <li><a href="/docs/tutorials/community" className="text-accent-gradient hover:underline">Building Community</a></li>
               <li><a href="/docs/tutorials/search" className="text-accent-gradient hover:underline">Finding Inspiration</a></li>
             </ul>
@@ -388,7 +388,7 @@ export default function PostingTutorialPage() {
         </div>
 
         <blockquote>
-          Content creation on Twatter.Army is about building genuine connections in a decentralized world.
+          Content creation on Keythings is about building genuine connections in a decentralized world.
           Focus on authenticity, value, and community— the rest will follow naturally.
         </blockquote>
       </div>

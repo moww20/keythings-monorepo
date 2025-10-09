@@ -1,24 +1,24 @@
 import DocsShell from "./DocsShell"
 
 export const metadata = {
-  title: "Twatter.Army Docs",
-  description: "Documentation for Twatter.Army - The world's most advanced Nostr client.",
+  title: "Keythings Website Docs",
+  description: "Documentation for Keythings - The world's most advanced cryptocurrency wallet.",
   openGraph: {
-    title: "Twatter.Army Docs",
-    description: "Documentation for Twatter.Army - The world's most advanced Nostr client.",
+    title: "Keythings Website Docs",
+    description: "Documentation for Keythings - The world's most advanced cryptocurrency wallet.",
     url: "/docs",
-    siteName: "Twatter.Army Docs",
+    siteName: "Keythings Website Docs",
     images: [
-      { url: "/pixelmonsters.png", width: 1200, height: 630, alt: "Twatter.Army" },
+      { url: "/icons/kethingslogopng.png", width: 1200, height: 630, alt: "Keythings Website" },
     ],
     locale: "en_US",
     type: "website",
   },
   twitter: {
     card: "summary_large_image",
-    title: "Twatter.Army Docs",
-    description: "Documentation for Twatter.Army - The world's most advanced Nostr client.",
-    images: ["/pixelmonsters.png"],
+    title: "Keythings Website Docs",
+    description: "Documentation for Keythings - The world's most advanced cryptocurrency wallet.",
+    images: ["/icons/kethingslogopng.png"],
   },
 }
 
