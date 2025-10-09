@@ -24,6 +24,7 @@ export default function HomePage() {
   const [tokens, setTokens] = useState([]);
   const [loadingTokens, setLoadingTokens] = useState(false);
   const [activeTab, setActiveTab] = useState('holding');
+  const [showLockedNotification, setShowLockedNotification] = useState(false);
   
   // Ref to track pending fetch timeout to prevent multiple simultaneous fetches
   const fetchTimeoutRef = useRef(null);
@@ -158,6 +159,20 @@ export default function HomePage() {
       setTokens(validTokens);
     } catch (error) {
       console.error('Failed to fetch tokens:', error);
+      
+      // Check if wallet is locked when fetch fails
+      if (typeof window !== 'undefined' && window.keeta) {
+        try {
+          const isLocked = await window.keeta.isLocked();
+          if (isLocked) {
+            setShowLockedNotification(true);
+            setTimeout(() => setShowLockedNotification(false), 5000);
+          }
+        } catch (lockCheckError) {
+          // Ignore lock check errors
+        }
+      }
+      
       setTokens([]);
     } finally {
       setLoadingTokens(false);
@@ -199,6 +214,15 @@ export default function HomePage() {
           loading: false,
           isLocked: true,
         });
+        
+        // Show notification to unlock wallet
+        setShowLockedNotification(true);
+        
+        // Auto-dismiss notification after 5 seconds
+        setTimeout(() => {
+          setShowLockedNotification(false);
+        }, 5000);
+        
         return; // Stop here, don't fetch balance or network
       }
       
@@ -423,6 +447,34 @@ export default function HomePage() {
     <main className="relative overflow-hidden min-h-screen bg-[color:var(--background)]">
       <div className="absolute inset-0 -z-10 bg-[color:var(--background)]" />
       <div className="pointer-events-none absolute inset-x-0 top-[-20%] z-0 h-[480px] bg-gradient-to-b from-[color:color-mix(in_oklab,var(--foreground)_18%,transparent)] via-transparent to-transparent blur-3xl" />
+      
+      {/* Locked Wallet Notification */}
+      {showLockedNotification && (
+        <div className="fixed top-4 left-1/2 transform -translate-x-1/2 z-50 animate-slide-down">
+          <div className="glass rounded-lg border border-hairline shadow-[0_20px_60px_rgba(6,7,10,0.45)] p-4 max-w-md">
+            <div className="flex items-start gap-3">
+              <svg className="h-6 w-6 text-yellow-500 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+              </svg>
+              <div className="flex-1">
+                <h3 className="text-sm font-semibold text-foreground mb-1">Wallet Locked</h3>
+                <p className="text-sm text-muted">
+                  Please unlock your Keeta Wallet extension to view your balance and assets.
+                </p>
+              </div>
+              <button
+                onClick={() => setShowLockedNotification(false)}
+                className="text-muted hover:text-foreground transition-colors"
+                aria-label="Dismiss notification"
+              >
+                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       
       <div className="relative z-10 max-w-7xl mx-auto px-6 py-8">
         <div className="flex flex-col gap-8 xl:grid xl:grid-cols-[16rem_minmax(0,1fr)] xl:h-[calc(100vh-8rem)] xl:overflow-hidden">
