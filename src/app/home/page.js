@@ -174,15 +174,30 @@ export default function HomePage() {
 
     const provider = window.keeta;
     try {
-      // Check if wallet is locked
+      // Check if wallet is locked FIRST
       let isLocked = false;
       try {
         isLocked = await provider.isLocked();
+        console.log('checkWalletConnection: isLocked =', isLocked);
       } catch (lockError) {
         console.warn('Failed to check wallet lock state:', lockError);
       }
       
       const accounts = await provider.getAccounts();
+      console.log('checkWalletConnection: accounts =', accounts);
+      
+      // If wallet is locked but has accounts, show locked state
+      if (isLocked && accounts && accounts.length > 0) {
+        setWalletState({
+          connected: true,
+          accounts,
+          balance: null,
+          network: null,
+          loading: false,
+          isLocked: true,
+        });
+        return; // Stop here, don't fetch balance or network
+      }
       
       if (accounts && accounts.length > 0) {
         const balance = await provider.getBalance(accounts[0]);
@@ -194,12 +209,12 @@ export default function HomePage() {
           balance,
           network,
           loading: false,
-          isLocked,
+          isLocked: false,
         });
         
-        // Fetch tokens after successful connection if requested (and wallet is unlocked)
-        console.log('checkWalletConnection: shouldFetchTokens =', shouldFetchTokens, 'isLocked =', isLocked);
-        if (shouldFetchTokens && !isLocked) {
+        // Fetch tokens after successful connection if requested (wallet is unlocked)
+        console.log('checkWalletConnection: shouldFetchTokens =', shouldFetchTokens);
+        if (shouldFetchTokens) {
           console.log('checkWalletConnection: Scheduling fetchTokens in 1 second');
           setTimeout(() => {
             console.log('checkWalletConnection: Calling fetchTokens now with network:', network, 'account:', accounts[0]);
