@@ -174,8 +174,13 @@ export default function HomePage() {
         });
         
         // Fetch tokens after successful connection if requested
+        console.log('checkWalletConnection: shouldFetchTokens =', shouldFetchTokens);
         if (shouldFetchTokens) {
-          setTimeout(() => fetchTokens(), 1000);
+          console.log('checkWalletConnection: Scheduling fetchTokens in 1 second');
+          setTimeout(() => {
+            console.log('checkWalletConnection: Calling fetchTokens now');
+            fetchTokens();
+          }, 1000);
         }
       } else {
         setWalletState(prevState => ({ ...prevState, connected: false, loading: false }));
