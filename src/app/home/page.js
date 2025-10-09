@@ -238,10 +238,10 @@ export default function HomePage() {
 
       const handleAccountsChanged = (accounts) => {
         if (accounts && accounts.length > 0) {
-          // Use setTimeout to debounce the check
+          // Use setTimeout to debounce the check - longer delay to avoid rate limiting
           setTimeout(() => {
             checkWalletConnection(true, true);
-          }, 1500);
+          }, 2500);
         } else {
           setWalletState(prevState => ({ ...prevState, connected: false, accounts: [], balance: null }));
           setTokens([]);
@@ -249,10 +249,10 @@ export default function HomePage() {
       };
 
       const handleChainChanged = () => {
-        // Use setTimeout to debounce the check
+        // Use setTimeout to debounce the check - longer delay to avoid rate limiting
         setTimeout(() => {
           checkWalletConnection(true, true);
-        }, 1500);
+        }, 2500);
       };
 
       const handleDisconnect = () => {
