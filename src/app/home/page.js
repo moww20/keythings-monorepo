@@ -52,16 +52,19 @@ export default function HomePage() {
 
   const fetchTokens = useCallback(async () => {
     if (!walletState.connected || !walletState.accounts || walletState.accounts.length === 0) {
+      console.log('fetchTokens: Wallet not connected or no accounts');
       setTokens([]);
       return;
     }
 
     // Don't fetch if we're already loading
     if (loadingTokens) {
+      console.log('fetchTokens: Already loading tokens, skipping');
       return;
     }
 
     if (typeof window === 'undefined' || !window.keeta) {
+      console.log('fetchTokens: No wallet provider available');
       setTokens([]);
       return;
     }
@@ -70,11 +73,16 @@ export default function HomePage() {
     const provider = window.keeta;
 
     try {
+      console.log('fetchTokens: Calling getAllBalances...');
+      
       // Use getAllBalances from the wallet provider
       // This is cached by the extension and doesn't trigger rate limiting
       const balances = await provider.getAllBalances?.();
       
+      console.log('fetchTokens: getAllBalances result:', balances);
+      
       if (!balances || balances.length === 0) {
+        console.log('fetchTokens: No balances found');
         setTokens([]);
         setLoadingTokens(false);
         return;
@@ -89,7 +97,10 @@ export default function HomePage() {
         }
       });
 
+      console.log('fetchTokens: Non-zero balances:', nonZeroBalances.length);
+
       if (nonZeroBalances.length === 0) {
+        console.log('fetchTokens: All balances are zero');
         setTokens([]);
         setLoadingTokens(false);
         return;
@@ -97,6 +108,7 @@ export default function HomePage() {
 
       // Get base token address from network
       const baseTokenAddress = walletState.network?.baseToken || null;
+      console.log('fetchTokens: Base token address:', baseTokenAddress);
 
       // Process each token
       const processedTokens = await Promise.all(
@@ -124,6 +136,7 @@ export default function HomePage() {
         return a.name.localeCompare(b.name);
       });
 
+      console.log('fetchTokens: Processed tokens:', validTokens.length, validTokens);
       setTokens(validTokens);
     } catch (error) {
       console.error('Failed to fetch tokens:', error);
