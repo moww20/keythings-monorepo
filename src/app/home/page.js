@@ -51,13 +51,18 @@ export default function HomePage() {
   };
 
   const fetchTokens = useCallback(async () => {
-    if (typeof window === 'undefined' || !window.keeta || !walletState.connected) {
+    if (!walletState.connected || !walletState.accounts || walletState.accounts.length === 0) {
       setTokens([]);
       return;
     }
 
-    // Don't fetch if we're already loading or if we recently fetched
+    // Don't fetch if we're already loading
     if (loadingTokens) {
+      return;
+    }
+
+    if (typeof window === 'undefined' || !window.keeta) {
+      setTokens([]);
       return;
     }
 
@@ -65,10 +70,8 @@ export default function HomePage() {
     const provider = window.keeta;
 
     try {
-      // Wait a bit to avoid rate limiting from simultaneous calls
-      await new Promise(resolve => setTimeout(resolve, 500));
-
-      // Get all balances from the wallet
+      // Use getAllBalances from the wallet provider
+      // This is cached by the extension and doesn't trigger rate limiting
       const balances = await provider.getAllBalances?.();
       
       if (!balances || balances.length === 0) {
@@ -92,14 +95,8 @@ export default function HomePage() {
         return;
       }
 
-      // Get base token address
-      let baseTokenAddress = null;
-      try {
-        const network = await provider.getNetwork();
-        baseTokenAddress = network?.baseToken || null;
-      } catch (error) {
-        console.warn('Failed to get base token address:', error);
-      }
+      // Get base token address from network
+      const baseTokenAddress = walletState.network?.baseToken || null;
 
       // Process each token
       const processedTokens = await Promise.all(
@@ -134,7 +131,7 @@ export default function HomePage() {
     } finally {
       setLoadingTokens(false);
     }
-  }, [walletState.connected, loadingTokens]);
+  }, [walletState.connected, walletState.accounts, walletState.network, loadingTokens]);
 
   const checkWalletConnection = useCallback(async (forceCheck = false, shouldFetchTokens = false) => {
     if (typeof window === 'undefined' || !window.keeta) {
