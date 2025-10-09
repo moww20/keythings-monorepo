@@ -204,41 +204,41 @@ export default function SettingsPage() {
               <nav className="space-y-1">
                 <button
                   onClick={() => router.push('/home')}
-                  className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-muted hover:text-foreground hover:bg-surface-strong hover:border hover:border-hairline-strong rounded-lg w-full text-left group transition-none"
+                  className="flex items-center gap-2 px-3 py-2 text-base font-medium text-muted hover:text-foreground hover:bg-surface-strong hover:border hover:border-hairline-strong rounded-lg w-full text-left group transition-none"
                 >
-                  <LayoutDashboard className="h-4 w-4 flex-shrink-0 group-hover:text-foreground transition-none" />
+                  <LayoutDashboard className="h-5 w-5 flex-shrink-0 group-hover:text-foreground transition-none" />
                   <span className="truncate">Dashboard</span>
                 </button>
                 
                 <button
                   onClick={() => router.push('/assets')}
-                  className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-muted hover:text-foreground hover:bg-surface-strong hover:border hover:border-hairline-strong rounded-lg w-full text-left group transition-none"
+                  className="flex items-center gap-2 px-3 py-2 text-base font-medium text-muted hover:text-foreground hover:bg-surface-strong hover:border hover:border-hairline-strong rounded-lg w-full text-left group transition-none"
                 >
-                  <Wallet className="h-4 w-4 flex-shrink-0 group-hover:text-foreground transition-none" />
+                  <Wallet className="h-5 w-5 flex-shrink-0 group-hover:text-foreground transition-none" />
                   <span className="truncate">Assets</span>
                 </button>
 
                 <button
                   onClick={() => console.log('Orders clicked - TODO: implement')}
-                  className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-muted hover:text-foreground hover:bg-surface-strong hover:border hover:border-hairline-strong rounded-lg w-full text-left group transition-none"
+                  className="flex items-center gap-2 px-3 py-2 text-base font-medium text-muted hover:text-foreground hover:bg-surface-strong hover:border hover:border-hairline-strong rounded-lg w-full text-left group transition-none"
                 >
-                  <ShoppingCart className="h-4 w-4 flex-shrink-0 group-hover:text-foreground transition-none" />
+                  <ShoppingCart className="h-5 w-5 flex-shrink-0 group-hover:text-foreground transition-none" />
                   <span className="truncate">Orders</span>
                 </button>
 
                 <button
                   onClick={() => console.log('Account clicked - TODO: implement')}
-                  className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-muted hover:text-foreground hover:bg-surface-strong hover:border hover:border-hairline-strong rounded-lg w-full text-left group transition-none"
+                  className="flex items-center gap-2 px-3 py-2 text-base font-medium text-muted hover:text-foreground hover:bg-surface-strong hover:border hover:border-hairline-strong rounded-lg w-full text-left group transition-none"
                 >
-                  <UserCircle className="h-4 w-4 flex-shrink-0 group-hover:text-foreground transition-none" />
+                  <UserCircle className="h-5 w-5 flex-shrink-0 group-hover:text-foreground transition-none" />
                   <span className="truncate">Account</span>
                 </button>
 
                 <button
                   onClick={() => router.push('/settings')}
-                  className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-foreground bg-surface-strong rounded-lg w-full text-left transition-none"
+                  className="flex items-center gap-2 px-3 py-2 text-base font-medium text-foreground bg-surface-strong rounded-lg w-full text-left transition-none"
                 >
-                  <Settings className="h-4 w-4 flex-shrink-0" />
+                  <Settings className="h-5 w-5 flex-shrink-0" />
                   <span className="truncate">Settings</span>
                 </button>
               </nav>
@@ -282,41 +282,41 @@ export default function SettingsPage() {
                     <nav className="space-y-1">
                       <button
                         onClick={() => { router.push('/home'); setIsMobileMenuOpen(false); }}
-                        className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-muted hover:text-foreground hover:bg-surface-strong hover:border hover:border-hairline-strong rounded-lg w-full text-left group transition-none"
+                        className="flex items-center gap-2 px-3 py-2 text-base font-medium text-muted hover:text-foreground hover:bg-surface-strong hover:border hover:border-hairline-strong rounded-lg w-full text-left group transition-none"
                       >
-                        <LayoutDashboard className="h-4 w-4 flex-shrink-0 group-hover:text-foreground transition-none" />
+                        <LayoutDashboard className="h-5 w-5 flex-shrink-0 group-hover:text-foreground transition-none" />
                         <span className="truncate">Dashboard</span>
                       </button>
                       
                       <button
                         onClick={() => { router.push('/assets'); setIsMobileMenuOpen(false); }}
-                        className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-muted hover:text-foreground hover:bg-surface-strong hover:border hover:border-hairline-strong rounded-lg w-full text-left group transition-none"
+                        className="flex items-center gap-2 px-3 py-2 text-base font-medium text-muted hover:text-foreground hover:bg-surface-strong hover:border hover:border-hairline-strong rounded-lg w-full text-left group transition-none"
                       >
-                        <Wallet className="h-4 w-4 flex-shrink-0 group-hover:text-foreground transition-none" />
+                        <Wallet className="h-5 w-5 flex-shrink-0 group-hover:text-foreground transition-none" />
                         <span className="truncate">Assets</span>
                       </button>
 
                       <button
                         onClick={() => { console.log('Orders clicked - TODO: implement'); setIsMobileMenuOpen(false); }}
-                        className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-muted hover:text-foreground hover:bg-surface-strong hover:border hover:border-hairline-strong rounded-lg w-full text-left group transition-none"
+                        className="flex items-center gap-2 px-3 py-2 text-base font-medium text-muted hover:text-foreground hover:bg-surface-strong hover:border hover:border-hairline-strong rounded-lg w-full text-left group transition-none"
                       >
-                        <ShoppingCart className="h-4 w-4 flex-shrink-0 group-hover:text-foreground transition-none" />
+                        <ShoppingCart className="h-5 w-5 flex-shrink-0 group-hover:text-foreground transition-none" />
                         <span className="truncate">Orders</span>
                       </button>
 
                       <button
                         onClick={() => { console.log('Account clicked - TODO: implement'); setIsMobileMenuOpen(false); }}
-                        className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-muted hover:text-foreground hover:bg-surface-strong hover:border hover:border-hairline-strong rounded-lg w-full text-left group transition-none"
+                        className="flex items-center gap-2 px-3 py-2 text-base font-medium text-muted hover:text-foreground hover:bg-surface-strong hover:border hover:border-hairline-strong rounded-lg w-full text-left group transition-none"
                       >
-                        <UserCircle className="h-4 w-4 flex-shrink-0 group-hover:text-foreground transition-none" />
+                        <UserCircle className="h-5 w-5 flex-shrink-0 group-hover:text-foreground transition-none" />
                         <span className="truncate">Account</span>
                       </button>
 
                       <button
                         onClick={() => { router.push('/settings'); setIsMobileMenuOpen(false); }}
-                        className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-foreground bg-surface-strong rounded-lg w-full text-left transition-none"
+                        className="flex items-center gap-2 px-3 py-2 text-base font-medium text-foreground bg-surface-strong rounded-lg w-full text-left transition-none"
                       >
-                        <Settings className="h-4 w-4 flex-shrink-0" />
+                        <Settings className="h-5 w-5 flex-shrink-0" />
                         <span className="truncate">Settings</span>
                       </button>
                     </nav>
