@@ -50,9 +50,9 @@ export default function HomePage() {
     // TODO: Implement cash in functionality
   };
 
-  const fetchTokens = useCallback(async () => {
-    if (!walletState.connected || !walletState.accounts || walletState.accounts.length === 0) {
-      console.log('fetchTokens: Wallet not connected or no accounts');
+  const fetchTokens = useCallback(async (networkData = null) => {
+    if (typeof window === 'undefined' || !window.keeta) {
+      console.log('fetchTokens: No wallet provider available');
       setTokens([]);
       return;
     }
@@ -60,12 +60,6 @@ export default function HomePage() {
     // Don't fetch if we're already loading
     if (loadingTokens) {
       console.log('fetchTokens: Already loading tokens, skipping');
-      return;
-    }
-
-    if (typeof window === 'undefined' || !window.keeta) {
-      console.log('fetchTokens: No wallet provider available');
-      setTokens([]);
       return;
     }
 
@@ -106,8 +100,8 @@ export default function HomePage() {
         return;
       }
 
-      // Get base token address from network
-      const baseTokenAddress = walletState.network?.baseToken || null;
+      // Get base token address from network (use passed networkData or walletState)
+      const baseTokenAddress = networkData?.baseToken || walletState.network?.baseToken || null;
       console.log('fetchTokens: Base token address:', baseTokenAddress);
 
       // Process each token
@@ -144,7 +138,7 @@ export default function HomePage() {
     } finally {
       setLoadingTokens(false);
     }
-  }, [walletState.connected, walletState.accounts, walletState.network, loadingTokens]);
+  }, [walletState.network, loadingTokens]);
 
   const checkWalletConnection = useCallback(async (forceCheck = false, shouldFetchTokens = false) => {
     if (typeof window === 'undefined' || !window.keeta) {
@@ -178,8 +172,8 @@ export default function HomePage() {
         if (shouldFetchTokens) {
           console.log('checkWalletConnection: Scheduling fetchTokens in 1 second');
           setTimeout(() => {
-            console.log('checkWalletConnection: Calling fetchTokens now');
-            fetchTokens();
+            console.log('checkWalletConnection: Calling fetchTokens now with network:', network);
+            fetchTokens(network);
           }, 1000);
         }
       } else {
