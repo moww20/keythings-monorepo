@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { LayoutDashboard, Wallet, ShoppingCart, UserCircle, Settings, ArrowDownToLine, ArrowUpFromLine, Banknote, Search, Eye, EyeOff } from 'lucide-react';
 import EstimatedBalance from '../components/EstimatedBalance';
-import { throttleBalanceCheck, markBalanceCheckComplete } from '../lib/wallet-throttle';
+import { throttleBalanceCheck, markBalanceCheckComplete, isRateLimitedError } from '../lib/wallet-throttle';
 
 export default function AssetsPage() {
   const router = useRouter();
@@ -53,8 +53,14 @@ export default function AssetsPage() {
         setWalletState(prevState => ({ ...prevState, connected: false, loading: false }));
       }
     } catch (error) {
-      console.error('Error checking wallet connection:', error);
-      setWalletState(prevState => ({ ...prevState, connected: false, loading: false }));
+      // Handle throttling errors gracefully
+      if (isRateLimitedError(error)) {
+        console.debug('checkWalletConnection: Balance query rate-limited, will retry automatically');
+        // Don't disconnect on rate-limited errors
+      } else {
+        console.error('Error checking wallet connection:', error);
+        setWalletState(prevState => ({ ...prevState, connected: false, loading: false }));
+      }
     } finally {
       // Mark balance check as complete
       markBalanceCheckComplete();
@@ -75,16 +81,32 @@ export default function AssetsPage() {
       if (accounts && accounts.length > 0) {
         // Use throttling for balance check during connection
         if (throttleBalanceCheck(true, 'connect-wallet-assets')) {
-          const balance = await provider.getBalance(accounts[0]);
-          const network = await provider.getNetwork();
-          setWalletState({
-            connected: true,
-            accounts,
-            balance,
-            network,
-            loading: false,
-          });
-          markBalanceCheckComplete();
+          try {
+            const balance = await provider.getBalance(accounts[0]);
+            const network = await provider.getNetwork();
+            setWalletState({
+              connected: true,
+              accounts,
+              balance,
+              network,
+              loading: false,
+            });
+            markBalanceCheckComplete();
+          } catch (balanceError) {
+            // If balance query is rate-limited, still connect but without balance
+            if (isRateLimitedError(balanceError)) {
+              console.debug('connectWallet: Balance query rate-limited, connected without balance');
+              setWalletState({
+                connected: true,
+                accounts,
+                balance: null,
+                network: null,
+                loading: false,
+              });
+            } else {
+              throw balanceError; // Re-throw non-throttling errors
+            }
+          }
         } else {
           // If throttled, just set basic connection info
           setWalletState({
@@ -100,7 +122,8 @@ export default function AssetsPage() {
       console.error('Failed to connect wallet:', error);
       if (error.message?.includes('rejected') || error.message?.includes('denied')) {
         // User rejected the connection, no need to show error
-      } else {
+      } else if (!isRateLimitedError(error)) {
+        // Don't show alert for rate-limited errors
         alert('Failed to connect wallet. Please try again.');
       }
     } finally {
