@@ -174,8 +174,13 @@ export default function HomePage() {
         setWalletState(prevState => ({ ...prevState, connected: false, loading: false }));
       }
     } catch (error) {
-      console.error('Error checking wallet connection:', error);
-      setWalletState(prevState => ({ ...prevState, connected: false, loading: false }));
+      // Silently ignore throttling errors - they're expected in dev mode due to React Strict Mode
+      if (error.message && error.message.includes('throttled')) {
+        console.log('HomePage: Balance check throttled (expected in dev mode)');
+      } else {
+        console.error('Error checking wallet connection:', error);
+        setWalletState(prevState => ({ ...prevState, connected: false, loading: false }));
+      }
     } finally {
       // Mark balance check as complete
       markBalanceCheckComplete();
