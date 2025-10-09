@@ -606,7 +606,7 @@ export default function HomePage() {
                           <div className="flex items-center gap-3">
                             {token.icon ? (
                               // eslint-disable-next-line @next/next/no-img-element
-                              <img src={token.icon} alt={token.ticker} className="w-8 h-8 rounded-full" />
+                              <img src={token.icon} alt={token.ticker} className="w-8 h-8 rounded-full object-cover" />
                             ) : token.fallbackIcon ? (
                               <div 
                                 className="w-8 h-8 rounded-full flex items-center justify-center"
