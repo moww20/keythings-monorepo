@@ -1,190 +1,70 @@
 'use client';
 
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { LayoutDashboard, Wallet, ShoppingCart, UserCircle, Settings, ArrowDownToLine, ArrowUpFromLine, Banknote, Search, Eye, EyeOff } from 'lucide-react';
 import EstimatedBalance from '../components/EstimatedBalance';
-import { throttleBalanceCheck, markBalanceCheckComplete, isRateLimitedError } from '../lib/wallet-throttle';
+import { useWalletData } from '../hooks/useWalletData';
 
 export default function AssetsPage() {
   const router = useRouter();
-  const [walletState, setWalletState] = useState({
-    connected: false,
-    accounts: [],
-    balance: null,
-    network: null,
-    loading: true,
-  });
-  
+  const {
+    wallet,
+    isWalletLoading,
+    isWalletFetching,
+    walletError,
+    connectWallet,
+  } = useWalletData();
+
   const [isConnecting, setIsConnecting] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [hideSmallAssets, setHideSmallAssets] = useState(false);
 
-  const formatAddress = (address) => {
-    if (!address) return '';
-    return `${address.slice(0, 6)}...${address.slice(-4)}`;
-  };
+  const isWalletBusy = isWalletLoading || isWalletFetching;
 
-  const checkWalletConnection = useCallback(async (forceCheck = false) => {
-    if (typeof window === 'undefined' || !window.keeta) {
-      setWalletState(prevState => ({ ...prevState, connected: false, loading: false }));
-      return;
-    }
-
-    // Use shared throttling mechanism with source tracking
-    if (!throttleBalanceCheck(forceCheck, 'assets-page')) {
-      return; // Throttled
-    }
-
-    const provider = window.keeta;
-    try {
-      const accounts = await provider.getAccounts();
-      if (accounts && accounts.length > 0) {
-        const balance = await provider.getBalance(accounts[0]);
-        const network = await provider.getNetwork();
-        setWalletState({
-          connected: true,
-          accounts,
-          balance,
-          network,
-          loading: false,
-        });
-      } else {
-        setWalletState(prevState => ({ ...prevState, connected: false, loading: false }));
-      }
-    } catch (error) {
-      // Handle throttling errors gracefully
-      if (isRateLimitedError(error)) {
-        console.debug('checkWalletConnection: Balance query rate-limited, will retry automatically');
-        // Don't disconnect on rate-limited errors
-      } else {
-        console.error('Error checking wallet connection:', error);
-        setWalletState(prevState => ({ ...prevState, connected: false, loading: false }));
-      }
-    } finally {
-      // Mark balance check as complete
-      markBalanceCheckComplete();
-    }
-  }, []);
-
-  const connectWallet = useCallback(async () => {
-    if (typeof window === 'undefined' || !window.keeta) {
-      alert('Please install the Keythings wallet extension first!');
+  const handleConnectWallet = useCallback(async () => {
+    if (isConnecting) {
       return;
     }
 
     setIsConnecting(true);
-    const provider = window.keeta;
-    
+
     try {
-      const accounts = await provider.requestAccounts();
-      if (accounts && accounts.length > 0) {
-        // Use throttling for balance check during connection
-        if (throttleBalanceCheck(true, 'connect-wallet-assets')) {
-          try {
-            const balance = await provider.getBalance(accounts[0]);
-            const network = await provider.getNetwork();
-            setWalletState({
-              connected: true,
-              accounts,
-              balance,
-              network,
-              loading: false,
-            });
-            markBalanceCheckComplete();
-          } catch (balanceError) {
-            // If balance query is rate-limited, still connect but without balance
-            if (isRateLimitedError(balanceError)) {
-              console.debug('connectWallet: Balance query rate-limited, connected without balance');
-              setWalletState({
-                connected: true,
-                accounts,
-                balance: null,
-                network: null,
-                loading: false,
-              });
-            } else {
-              throw balanceError; // Re-throw non-throttling errors
-            }
-          }
-        } else {
-          // If throttled, just set basic connection info
-          setWalletState({
-            connected: true,
-            accounts,
-            balance: null,
-            network: null,
-            loading: false,
-          });
-        }
-      }
+      await connectWallet();
     } catch (error) {
       console.error('Failed to connect wallet:', error);
-      if (error.message?.includes('rejected') || error.message?.includes('denied')) {
-        // User rejected the connection, no need to show error
-      } else if (!isRateLimitedError(error)) {
-        // Don't show alert for rate-limited errors
+      const message = error?.message ?? '';
+      if (!/rejected|denied/i.test(message)) {
         alert('Failed to connect wallet. Please try again.');
       }
     } finally {
       setIsConnecting(false);
     }
-  }, []);
-
-  // Action handlers for EstimatedBalance component
-  const handleDeposit = () => {
-    console.log('Deposit clicked');
-    // TODO: Implement deposit functionality
-  };
-
-  const handleWithdraw = () => {
-    console.log('Withdraw clicked');
-    // TODO: Implement withdraw functionality
-  };
-
-  const handleCashIn = () => {
-    console.log('Cash In clicked');
-    // TODO: Implement cash in functionality
-  };
+  }, [connectWallet, isConnecting]);
 
   useEffect(() => {
-    checkWalletConnection(true);
-
-    if (typeof window !== 'undefined' && window.keeta) {
-      const provider = window.keeta;
-
-      const handleAccountsChanged = (accounts) => {
-        if (accounts && accounts.length > 0) {
-          setTimeout(() => checkWalletConnection(true), 200);
-        } else {
-          setWalletState(prevState => ({ ...prevState, connected: false, accounts: [], balance: null }));
-        }
-      };
-
-      const handleChainChanged = () => {
-        setTimeout(() => checkWalletConnection(true), 200);
-      };
-
-      const handleDisconnect = () => {
-        setWalletState(prevState => ({ ...prevState, connected: false, accounts: [], balance: null }));
-      };
-
-      provider.on?.('accountsChanged', handleAccountsChanged);
-      provider.on?.('chainChanged', handleChainChanged);
-      provider.on?.('disconnect', handleDisconnect);
-
-      return () => {
-        const remove = provider.removeListener?.bind(provider) || provider.off?.bind(provider);
-        if (remove) {
-          remove('accountsChanged', handleAccountsChanged);
-          remove('chainChanged', handleChainChanged);
-          remove('disconnect', handleDisconnect);
-        }
-      };
+    if (walletError) {
+      console.error('Wallet query error:', walletError);
     }
-  }, [checkWalletConnection]);
+  }, [walletError]);
 
-  if (walletState.loading) {
+  // Action handlers for EstimatedBalance component
+  const handleDeposit = useCallback(() => {
+    console.log('Deposit clicked');
+    // TODO: Implement deposit functionality
+  }, []);
+
+  const handleWithdraw = useCallback(() => {
+    console.log('Withdraw clicked');
+    // TODO: Implement withdraw functionality
+  }, []);
+
+  const handleCashIn = useCallback(() => {
+    console.log('Cash In clicked');
+    // TODO: Implement cash in functionality
+  }, []);
+
+  if (isWalletBusy && !wallet.connected && wallet.accounts.length === 0) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[color:var(--background)]">
         <p className="text-foreground">Loading wallet data...</p>
@@ -192,7 +72,7 @@ export default function AssetsPage() {
     );
   }
 
-  if (!walletState.connected) {
+  if (!wallet.connected) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-[color:var(--background)] text-center p-6">
         <h1 className="text-4xl font-bold text-foreground mb-4">Connect Your Keeta Wallet</h1>
@@ -200,7 +80,7 @@ export default function AssetsPage() {
           Please connect your Keeta Wallet to access your assets.
         </p>
         <button
-          onClick={connectWallet}
+          onClick={handleConnectWallet}
           disabled={isConnecting}
           className="mb-6 inline-flex items-center justify-center gap-2 rounded-full bg-white px-6 py-3 text-sm font-semibold text-black shadow-[0_20px_50px_rgba(15,15,20,0.35)] transition-all duration-200 hover:bg-white/90 hover:scale-[1.02] active:scale-[0.98] disabled:opacity-70 disabled:cursor-not-allowed disabled:transform-none"
         >
@@ -367,10 +247,10 @@ export default function AssetsPage() {
             )}
 
             {/* Estimated Balance Component */}
-            <EstimatedBalance 
-              balance={walletState.balance}
+            <EstimatedBalance
+              balance={wallet.balance}
               isConnecting={isConnecting}
-              onConnect={connectWallet}
+              onConnect={handleConnectWallet}
               onDeposit={handleDeposit}
               onWithdraw={handleWithdraw}
               onCashIn={handleCashIn}

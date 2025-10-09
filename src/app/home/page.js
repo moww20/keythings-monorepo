@@ -1,398 +1,98 @@
 'use client';
 
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import Image from 'next/image';
 import { LayoutDashboard, Wallet, ShoppingCart, UserCircle, Settings } from 'lucide-react';
 import EstimatedBalance from '../components/EstimatedBalance';
-import { throttleBalanceCheck, markBalanceCheckComplete, isRateLimitedError } from '../lib/wallet-throttle';
-import { processTokenForDisplay } from '../lib/token-utils';
+import { useWalletData } from '../hooks/useWalletData';
 
 export default function HomePage() {
   const router = useRouter();
-  const [walletState, setWalletState] = useState({
-    connected: false,
-    accounts: [],
-    balance: null,
-    network: null,
-    loading: true,
-    isLocked: false,
-  });
-  
+  const {
+    wallet,
+    tokens,
+    isWalletLoading,
+    isWalletFetching,
+    walletError,
+    isTokensLoading,
+    isTokensFetching,
+    tokensError,
+    connectWallet,
+    refreshWallet,
+  } = useWalletData();
+
   const [isConnecting, setIsConnecting] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [tokens, setTokens] = useState([]);
-  const [loadingTokens, setLoadingTokens] = useState(false);
   const [activeTab, setActiveTab] = useState('holding');
   const [showLockedNotification, setShowLockedNotification] = useState(false);
-  
-  // Ref to track pending fetch timeout to prevent multiple simultaneous fetches
-  const fetchTimeoutRef = useRef(null);
 
-  const formatAddress = (address) => {
-    if (!address) return '';
-    return `${address.slice(0, 6)}...${address.slice(-4)}`;
-  };
+  const isWalletBusy = isWalletLoading || isWalletFetching;
+  const tokensLoading = isTokensLoading || isTokensFetching;
 
-  const formatBalance = (balance) => {
-    if (balance === null) return '0.00';
-    return (Number(balance) / 10 ** 18).toFixed(2);
-  };
 
   // Action handlers for EstimatedBalance component
-  const handleDeposit = () => {
+  const handleDeposit = useCallback(() => {
     console.log('Deposit clicked');
     // TODO: Implement deposit functionality
-  };
+  }, []);
 
-  const handleWithdraw = () => {
+  const handleWithdraw = useCallback(() => {
     console.log('Withdraw clicked');
     // TODO: Implement withdraw functionality
-  };
+  }, []);
 
-  const handleCashIn = () => {
+  const handleCashIn = useCallback(() => {
     console.log('Cash In clicked');
     // TODO: Implement cash in functionality
-  };
+  }, []);
 
-  const fetchTokens = useCallback(async (networkData = null, accountAddress = null, currentBalance = null) => {
-    if (typeof window === 'undefined' || !window.keeta) {
-      console.log('fetchTokens: No wallet provider available');
-      setTokens([]);
-      return;
-    }
-
-    // Don't fetch if we're already loading
-    if (loadingTokens) {
-      console.log('fetchTokens: Already loading tokens, skipping');
-      return;
-    }
-
-    setLoadingTokens(true);
-    const provider = window.keeta;
-
-    try {
-      console.log('fetchTokens: Fetching all balances...');
-      
-      // Wait before calling getAllBalances to avoid throttling
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      
-      // Use getAllBalances from the wallet provider (not allBalances!)
-      const balances = await provider.getAllBalances();
-      
-      console.log('fetchTokens: getAllBalances result:', balances);
-      
-      if (!balances || balances.length === 0) {
-        console.log('fetchTokens: No balances found');
-        setTokens([]);
-        setLoadingTokens(false);
-        return;
-      }
-
-      // Get base token address from the provider
-      let baseTokenAddress = null;
-      try {
-        const baseTokenInfo = await provider.getBaseToken();
-        baseTokenAddress = baseTokenInfo?.address || null;
-        console.log('fetchTokens: Base token info:', baseTokenInfo);
-      } catch (error) {
-        console.warn('fetchTokens: Failed to get base token:', error);
-      }
-      console.log('fetchTokens: Base token address:', baseTokenAddress);
-
-      // Filter balances > 0
-      const nonZeroBalances = balances.filter(entry => {
-        try {
-          return entry.balance && BigInt(entry.balance) > 0n;
-        } catch {
-          return false;
-        }
-      });
-
-      console.log('fetchTokens: Non-zero balances:', nonZeroBalances.length);
-
-      if (nonZeroBalances.length === 0) {
-        console.log('fetchTokens: No non-zero balances');
-        setTokens([]);
-        setLoadingTokens(false);
-        return;
-      }
-
-      // Process each token
-      console.log('fetchTokens: Processing tokens...', nonZeroBalances);
-      const processedTokens = await Promise.all(
-        nonZeroBalances.map(async (entry, index) => {
-          try {
-            console.log(`fetchTokens: Processing token ${index + 1}/${nonZeroBalances.length}:`, {
-              token: entry.token,
-              balance: entry.balance,
-              hasMetadata: !!entry.metadata
-            });
-            const tokenData = await processTokenForDisplay(
-              entry.token,
-              entry.balance,
-              entry.metadata,
-              baseTokenAddress
-            );
-            console.log(`fetchTokens: Processed token ${index + 1}:`, tokenData);
-            return tokenData;
-          } catch (error) {
-            console.error('Failed to process token:', entry.token, error);
-            return null;
-          }
-        })
-      );
-
-      console.log('fetchTokens: All tokens processed:', processedTokens);
-
-      // Filter out failed tokens and sort (base token first, then by name)
-      const validTokens = processedTokens.filter(token => token !== null);
-      console.log('fetchTokens: Valid tokens after filtering:', validTokens);
-      
-      validTokens.sort((a, b) => {
-        if (a.isBaseToken) return -1;
-        if (b.isBaseToken) return 1;
-        return a.name.localeCompare(b.name);
-      });
-
-      console.log('fetchTokens: Final processed tokens (sorted):', validTokens);
-      setTokens(validTokens);
-    } catch (error) {
-      console.error('Failed to fetch tokens:', error);
-      
-      // Check if wallet is locked when fetch fails
-      if (typeof window !== 'undefined' && window.keeta) {
-        try {
-          const isLocked = await window.keeta.isLocked();
-          if (isLocked) {
-            setShowLockedNotification(true);
-            setTimeout(() => setShowLockedNotification(false), 5000);
-          }
-        } catch (lockCheckError) {
-          // Ignore lock check errors
-        }
-      }
-      
-      setTokens([]);
-    } finally {
-      setLoadingTokens(false);
-    }
-  }, [loadingTokens]);
-
-  const checkWalletConnection = useCallback(async (forceCheck = false, shouldFetchTokens = false) => {
-    if (typeof window === 'undefined' || !window.keeta) {
-      setWalletState(prevState => ({ ...prevState, connected: false, loading: false }));
-      return;
-    }
-
-    // Use shared throttling mechanism with source tracking
-    if (!throttleBalanceCheck(forceCheck, 'home-page')) {
-      return; // Throttled
-    }
-
-    const provider = window.keeta;
-    try {
-      // Check if wallet is locked FIRST
-      let isLocked = false;
-      try {
-        isLocked = await provider.isLocked();
-        console.log('checkWalletConnection: isLocked =', isLocked);
-      } catch (lockError) {
-        console.warn('Failed to check wallet lock state:', lockError);
-      }
-      
-      const accounts = await provider.getAccounts();
-      console.log('checkWalletConnection: accounts =', accounts);
-      
-      // If wallet is locked, show locked state (regardless of account count)
-      if (isLocked) {
-        setWalletState({
-          connected: true,
-          accounts: accounts || [],
-          balance: null,
-          network: null,
-          loading: false,
-          isLocked: true,
-        });
-        
-        // Show notification to unlock wallet
-        setShowLockedNotification(true);
-        
-        // Auto-dismiss notification after 5 seconds
-        setTimeout(() => {
-          setShowLockedNotification(false);
-        }, 5000);
-        
-        return; // Stop here, don't fetch balance or network
-      }
-      
-      if (accounts && accounts.length > 0) {
-        const balance = await provider.getBalance(accounts[0]);
-        const network = await provider.getNetwork();
-        
-        setWalletState({
-          connected: true,
-          accounts,
-          balance,
-          network,
-          loading: false,
-          isLocked: false,
-        });
-        
-        // Fetch tokens after successful connection if requested (wallet is unlocked)
-        console.log('checkWalletConnection: shouldFetchTokens =', shouldFetchTokens);
-        if (shouldFetchTokens) {
-          // Clear any pending fetch timeout to prevent multiple simultaneous fetches
-          if (fetchTimeoutRef.current) {
-            console.log('checkWalletConnection: Clearing existing fetch timeout');
-            clearTimeout(fetchTimeoutRef.current);
-            fetchTimeoutRef.current = null;
-          }
-          
-          console.log('checkWalletConnection: Scheduling fetchTokens in 1 second');
-          fetchTimeoutRef.current = setTimeout(() => {
-            console.log('checkWalletConnection: Calling fetchTokens now with network:', network, 'account:', accounts[0]);
-            fetchTimeoutRef.current = null;
-            fetchTokens(network, accounts[0]);
-          }, 1000);
-        }
-      } else {
-        setWalletState(prevState => ({ ...prevState, connected: false, loading: false, isLocked: false }));
-      }
-    } catch (error) {
-      // Handle throttling errors gracefully - don't disconnect wallet
-      if (isRateLimitedError(error)) {
-        // Rate-limited errors are expected behavior, silently ignore
-        console.debug('checkWalletConnection: Balance query rate-limited, will retry automatically');
-        // Don't change connection state, just mark as complete
-      } else {
-        console.error('Error checking wallet connection:', error);
-        // Only disconnect on actual errors, not throttling
-        setWalletState(prevState => ({ ...prevState, connected: false, loading: false }));
-      }
-    } finally {
-      // Mark balance check as complete
-      markBalanceCheckComplete();
-    }
-  }, [fetchTokens]);
-
-  const connectWallet = useCallback(async () => {
-    if (typeof window === 'undefined' || !window.keeta) {
-      alert('Please install the Keythings wallet extension first!');
+  const handleConnectWallet = useCallback(async () => {
+    if (isConnecting) {
       return;
     }
 
     setIsConnecting(true);
-    const provider = window.keeta;
-    
+
     try {
-      const accounts = await provider.requestAccounts();
-      if (accounts && accounts.length > 0) {
-        // Use throttling for balance check during connection
-        if (throttleBalanceCheck(true, 'connect-wallet')) {
-          try {
-            const balance = await provider.getBalance(accounts[0]);
-            const network = await provider.getNetwork();
-            setWalletState({
-              connected: true,
-              accounts,
-              balance,
-              network,
-              loading: false,
-            });
-            markBalanceCheckComplete();
-          } catch (balanceError) {
-            // If balance query is rate-limited, still connect but without balance
-            if (isRateLimitedError(balanceError)) {
-              console.debug('connectWallet: Balance query rate-limited, connected without balance');
-              setWalletState({
-                connected: true,
-                accounts,
-                balance: null,
-                network: null,
-                loading: false,
-              });
-            } else {
-              throw balanceError; // Re-throw non-throttling errors
-            }
-          }
-        } else {
-          // If throttled, just set basic connection info
-          setWalletState({
-            connected: true,
-            accounts,
-            balance: null,
-            network: null,
-            loading: false,
-          });
-        }
-      }
+      await connectWallet();
     } catch (error) {
       console.error('Failed to connect wallet:', error);
-      if (error.message?.includes('rejected') || error.message?.includes('denied')) {
-        // User rejected the connection, no need to show error
-      } else if (!isRateLimitedError(error)) {
-        // Don't show alert for rate-limited errors
+      const message = error?.message ?? '';
+      if (!/rejected|denied/i.test(message)) {
         alert('Failed to connect wallet. Please try again.');
       }
     } finally {
       setIsConnecting(false);
     }
-  }, []);
+  }, [connectWallet, isConnecting]);
 
   useEffect(() => {
-    // Initial check with force to ensure we get data on mount, and fetch tokens
-    checkWalletConnection(true, true);
-
-    if (typeof window !== 'undefined' && window.keeta) {
-      const provider = window.keeta;
-
-      const handleAccountsChanged = (accounts) => {
-        if (accounts && accounts.length > 0) {
-          // Use setTimeout to debounce the check - longer delay to avoid rate limiting
-          setTimeout(() => {
-            checkWalletConnection(true, true);
-          }, 2500);
-        } else {
-          setWalletState(prevState => ({ ...prevState, connected: false, accounts: [], balance: null }));
-          setTokens([]);
-        }
-      };
-
-      const handleChainChanged = () => {
-        // Use setTimeout to debounce the check - longer delay to avoid rate limiting
-        setTimeout(() => {
-          checkWalletConnection(true, true);
-        }, 2500);
-      };
-
-      const handleDisconnect = () => {
-        setWalletState(prevState => ({ ...prevState, connected: false, accounts: [], balance: null }));
-        setTokens([]);
-      };
-
-      provider.on?.('accountsChanged', handleAccountsChanged);
-      provider.on?.('chainChanged', handleChainChanged);
-      provider.on?.('disconnect', handleDisconnect);
-
-      return () => {
-        // Clear any pending fetch timeout on unmount
-        if (fetchTimeoutRef.current) {
-          clearTimeout(fetchTimeoutRef.current);
-          fetchTimeoutRef.current = null;
-        }
-        
-        const remove = provider.removeListener?.bind(provider) || provider.off?.bind(provider);
-        if (remove) {
-          remove('accountsChanged', handleAccountsChanged);
-          remove('chainChanged', handleChainChanged);
-          remove('disconnect', handleDisconnect);
-        }
-      };
+    if (walletError) {
+      console.error('Wallet query error:', walletError);
     }
-  }, [checkWalletConnection]);
+  }, [walletError]);
 
-  if (walletState.loading) {
+  useEffect(() => {
+    if (tokensError) {
+      console.error('Token query error:', tokensError);
+    }
+  }, [tokensError]);
+
+  useEffect(() => {
+    if (!wallet.isLocked) {
+      setShowLockedNotification(false);
+      return undefined;
+    }
+
+    setShowLockedNotification(true);
+    const timeout = setTimeout(() => {
+      setShowLockedNotification(false);
+    }, 5000);
+
+    return () => clearTimeout(timeout);
+  }, [wallet.isLocked]);
+
+  if (isWalletBusy && !wallet.connected && wallet.accounts.length === 0) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[color:var(--background)]">
         <p className="text-foreground">Loading wallet data...</p>
@@ -400,7 +100,7 @@ export default function HomePage() {
     );
   }
 
-  if (!walletState.connected) {
+  if (!wallet.connected) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-[color:var(--background)] text-center p-6">
         <h1 className="text-4xl font-bold text-foreground mb-4">Connect Your Keeta Wallet</h1>
@@ -408,7 +108,7 @@ export default function HomePage() {
           Please connect your Keeta Wallet to access the dashboard.
         </p>
         <button
-          onClick={connectWallet}
+          onClick={handleConnectWallet}
           disabled={isConnecting}
           className="mb-6 inline-flex items-center justify-center gap-2 rounded-full bg-white px-6 py-3 text-sm font-semibold text-black shadow-[0_20px_50px_rgba(15,15,20,0.35)] transition-all duration-200 hover:bg-white/90 hover:scale-[1.02] active:scale-[0.98] disabled:opacity-70 disabled:cursor-not-allowed disabled:transform-none"
         >
@@ -439,7 +139,7 @@ export default function HomePage() {
     );
   }
 
-  if (walletState.connected && walletState.isLocked) {
+  if (wallet.connected && wallet.isLocked) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-[color:var(--background)] text-center p-6">
         <div className="glass rounded-lg border border-hairline shadow-[0_20px_60px_rgba(6,7,10,0.45)] p-8 max-w-md">
@@ -451,7 +151,7 @@ export default function HomePage() {
             Your Keeta Wallet is currently locked. Please unlock your wallet extension to access the dashboard.
           </p>
           <button
-            onClick={() => checkWalletConnection(true, true)}
+            onClick={refreshWallet}
             className="inline-flex items-center justify-center gap-2 rounded-full bg-accent text-white px-6 py-3 text-sm font-semibold shadow-[0_20px_50px_rgba(15,15,20,0.35)] transition-all duration-200 hover:bg-accent/90"
           >
             Check Again
@@ -620,10 +320,10 @@ export default function HomePage() {
               </>
             )}
                     {/* Estimated Balance Component */}
-                    <EstimatedBalance 
-                      balance={walletState.balance}
+                    <EstimatedBalance
+                      balance={wallet.balance}
                       isConnecting={isConnecting}
-                      onConnect={connectWallet}
+                      onConnect={handleConnectWallet}
                       onDeposit={handleDeposit}
                       onWithdraw={handleWithdraw}
                       onCashIn={handleCashIn}
@@ -713,7 +413,7 @@ export default function HomePage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {loadingTokens ? (
+                  {tokensLoading ? (
                     <tr>
                       <td colSpan="5" className="py-12 text-center">
                         <div className="flex flex-col items-center gap-3">
