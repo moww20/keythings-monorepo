@@ -50,7 +50,7 @@ export default function HomePage() {
     // TODO: Implement cash in functionality
   };
 
-  const fetchTokens = useCallback(async (networkData = null) => {
+  const fetchTokens = useCallback(async (networkData = null, accountAddress = null) => {
     if (typeof window === 'undefined' || !window.keeta) {
       console.log('fetchTokens: No wallet provider available');
       setTokens([]);
@@ -64,16 +64,35 @@ export default function HomePage() {
     }
 
     setLoadingTokens(true);
-    const provider = window.keeta;
 
     try {
-      console.log('fetchTokens: Calling allBalances...');
+      console.log('fetchTokens: Using Keeta SDK to fetch balances...');
       
-      // Use allBalances from the wallet provider (not getAllBalances!)
-      // This is cached by the extension and doesn't trigger rate limiting
-      const balances = await provider.allBalances?.();
+      // Import the SDK dynamically to avoid server-side bundling issues
+      const KeetaNet = await import('@keetanetwork/keetanet-client');
       
-      console.log('fetchTokens: getAllBalances result:', balances);
+      // Get account address
+      const address = accountAddress || walletState.accounts?.[0];
+      if (!address) {
+        console.log('fetchTokens: No account address available');
+        setTokens([]);
+        setLoadingTokens(false);
+        return;
+      }
+
+      // Create account from public key string
+      const account = await KeetaNet.lib.Account.fromPublicKeyString(address);
+      
+      // Connect to network (read-only, no signer needed)
+      const networkName = networkData?.name?.toLowerCase()?.includes('test') ? 'test' : 'main';
+      console.log('fetchTokens: Creating UserClient for network:', networkName);
+      
+      const client = KeetaNet.UserClient.fromNetwork(networkName, null, { account });
+      
+      // Get all balances using SDK
+      const balances = await client.allBalances();
+      
+      console.log('fetchTokens: allBalances result:', balances);
       
       if (!balances || balances.length === 0) {
         console.log('fetchTokens: No balances found');
@@ -100,8 +119,8 @@ export default function HomePage() {
         return;
       }
 
-      // Get base token address from network (use passed networkData or walletState)
-      const baseTokenAddress = networkData?.baseToken || walletState.network?.baseToken || null;
+      // Get base token address from SDK client
+      const baseTokenAddress = client.baseToken?.publicKeyString?.toString() || null;
       console.log('fetchTokens: Base token address:', baseTokenAddress);
 
       // Process each token
@@ -172,8 +191,8 @@ export default function HomePage() {
         if (shouldFetchTokens) {
           console.log('checkWalletConnection: Scheduling fetchTokens in 1 second');
           setTimeout(() => {
-            console.log('checkWalletConnection: Calling fetchTokens now with network:', network);
-            fetchTokens(network);
+            console.log('checkWalletConnection: Calling fetchTokens now with network:', network, 'account:', accounts[0]);
+            fetchTokens(network, accounts[0]);
           }, 1000);
         }
       } else {
