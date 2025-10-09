@@ -1,5 +1,9 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  experimental: {
+    browserDebugInfoInTerminal: true,
+  },
+  // Turbopack handles Node.js built-ins automatically, no explicit config needed
   async headers() {
     return [
       {
@@ -21,20 +25,6 @@ const nextConfig = {
       //   ],
       // },
     ]
-  },
-  webpack: (config) => {
-    config.resolve = config.resolve || {}
-    config.resolve.alias = {
-      ...(config.resolve.alias || {}),
-      // Avoid bundling optional server-only pretty-printer in browser/runtime builds
-      'pino-pretty': false,
-      // Also guard common server modules if pulled transitively
-      'fs': false,
-      'path': false,
-      'os': false,
-      'worker_threads': false,
-    }
-    return config
   },
 };
 
