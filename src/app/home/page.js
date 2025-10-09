@@ -16,6 +16,7 @@ export default function HomePage() {
     balance: null,
     network: null,
     loading: true,
+    isLocked: false,
   });
   
   const [isConnecting, setIsConnecting] = useState(false);
@@ -173,6 +174,14 @@ export default function HomePage() {
 
     const provider = window.keeta;
     try {
+      // Check if wallet is locked
+      let isLocked = false;
+      try {
+        isLocked = await provider.isLocked();
+      } catch (lockError) {
+        console.warn('Failed to check wallet lock state:', lockError);
+      }
+      
       const accounts = await provider.getAccounts();
       
       if (accounts && accounts.length > 0) {
@@ -185,11 +194,12 @@ export default function HomePage() {
           balance,
           network,
           loading: false,
+          isLocked,
         });
         
-        // Fetch tokens after successful connection if requested
-        console.log('checkWalletConnection: shouldFetchTokens =', shouldFetchTokens);
-        if (shouldFetchTokens) {
+        // Fetch tokens after successful connection if requested (and wallet is unlocked)
+        console.log('checkWalletConnection: shouldFetchTokens =', shouldFetchTokens, 'isLocked =', isLocked);
+        if (shouldFetchTokens && !isLocked) {
           console.log('checkWalletConnection: Scheduling fetchTokens in 1 second');
           setTimeout(() => {
             console.log('checkWalletConnection: Calling fetchTokens now with network:', network, 'account:', accounts[0]);
@@ -197,7 +207,7 @@ export default function HomePage() {
           }, 1000);
         }
       } else {
-        setWalletState(prevState => ({ ...prevState, connected: false, loading: false }));
+        setWalletState(prevState => ({ ...prevState, connected: false, loading: false, isLocked: false }));
       }
     } catch (error) {
       // Silently ignore throttling errors - they're expected in dev mode due to React Strict Mode
@@ -347,6 +357,28 @@ export default function HomePage() {
               Install Keythings Wallet
             </a>
           </p>
+      </div>
+    );
+  }
+
+  if (walletState.connected && walletState.isLocked) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-[color:var(--background)] text-center p-6">
+        <div className="glass rounded-lg border border-hairline shadow-[0_20px_60px_rgba(6,7,10,0.45)] p-8 max-w-md">
+          <svg className="mx-auto h-16 w-16 text-accent mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+          </svg>
+          <h1 className="text-2xl font-bold text-foreground mb-4">Wallet Locked</h1>
+          <p className="text-base text-muted mb-6">
+            Your Keeta Wallet is currently locked. Please unlock your wallet extension to access the dashboard.
+          </p>
+          <button
+            onClick={() => checkWalletConnection(true, true)}
+            className="inline-flex items-center justify-center gap-2 rounded-full bg-accent text-white px-6 py-3 text-sm font-semibold shadow-[0_20px_50px_rgba(15,15,20,0.35)] transition-all duration-200 hover:bg-accent/90"
+          >
+            Check Again
+          </button>
+        </div>
       </div>
     );
   }
