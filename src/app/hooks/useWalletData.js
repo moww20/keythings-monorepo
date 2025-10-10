@@ -232,7 +232,9 @@ export function useWalletData() {
   const walletQuery = useQuery({
     queryKey: WALLET_QUERY_KEY,
     queryFn: fetchWalletState,
-    initialData: DEFAULT_WALLET_STATE,
+    placeholderData: DEFAULT_WALLET_STATE,
+    staleTime: 0, // Always check for fresh data
+    refetchOnMount: true, // Refetch when component mounts
   });
 
   const primaryAccount = walletQuery.data?.accounts?.[0] ?? null;
