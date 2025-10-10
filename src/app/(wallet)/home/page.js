@@ -1,10 +1,9 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, useRef } from 'react';
 import { Wallet } from 'lucide-react';
 import EstimatedBalance from '../../components/EstimatedBalance';
-import UnifiedLoadingScreen from '../../components/UnifiedLoadingScreen';
-import { useWalletData } from '../../hooks/useWalletData';
+import { useWallet } from '../../contexts/WalletContext';
 
 export default function HomePage() {
   const {
@@ -18,7 +17,10 @@ export default function HomePage() {
     tokensError,
     connectWallet,
     refreshWallet,
-  } = useWalletData();
+    isDisconnected,
+    isLocked,
+    isUnlocked,
+  } = useWallet();
 
   const [isConnecting, setIsConnecting] = useState(false);
   const [activeTab, setActiveTab] = useState('holding');
@@ -26,12 +28,10 @@ export default function HomePage() {
   const [showNullState, setShowNullState] = useState(false);
   const [ktaPriceData, setKtaPriceData] = useState(null);
   const [isLoadingPrice, setIsLoadingPrice] = useState(false);
+  const isFetchingPrice = useRef(false);
 
   const isWalletBusy = isWalletLoading || isWalletFetching;
   const tokensLoading = isTokensLoading || isTokensFetching;
-  
-  const isInitializing = wallet.isInitializing || isWalletBusy;
-  const isLoadingData = wallet.connected && !wallet.isLocked && tokensLoading;
 
   const handleReceive = useCallback(() => {
     console.log('Receive clicked');
@@ -46,8 +46,9 @@ export default function HomePage() {
   }, []);
 
   const fetchKtaPrice = useCallback(async () => {
-    if (!window.keeta || isLoadingPrice) return;
+    if (!window.keeta || isFetchingPrice.current) return;
     
+    isFetchingPrice.current = true;
     setIsLoadingPrice(true);
     try {
       const priceData = await window.keeta.getKtaPrice();
@@ -58,8 +59,9 @@ export default function HomePage() {
       console.debug('Failed to fetch KTA price:', error);
     } finally {
       setIsLoadingPrice(false);
+      isFetchingPrice.current = false;
     }
-  }, [isLoadingPrice]);
+  }, []);
 
   const handleConnectWallet = useCallback(async () => {
     if (isConnecting) return;
@@ -236,7 +238,7 @@ export default function HomePage() {
   }, [tokensError]);
 
   useEffect(() => {
-    if (wallet.connected && !wallet.isLocked && tokens.length === 0 && !tokensLoading) {
+    if (isUnlocked && tokens.length === 0 && !tokensLoading) {
       const timeoutId = setTimeout(() => {
         setShowNullState(true);
       }, 3000);
@@ -245,10 +247,10 @@ export default function HomePage() {
         clearTimeout(timeoutId);
       };
     }
-  }, [wallet.connected, wallet.isLocked, tokensLoading, tokens.length]);
+  }, [isUnlocked, tokensLoading, tokens.length]);
 
   useEffect(() => {
-    if (!wallet.connected || wallet.isLocked) {
+    if (!isUnlocked) {
       return undefined;
     }
 
@@ -258,10 +260,10 @@ export default function HomePage() {
     }, 60000);
 
     return () => clearInterval(intervalId);
-  }, [wallet.connected, wallet.isLocked]);
+  }, [isUnlocked, fetchKtaPrice]);
 
   useEffect(() => {
-    if (!wallet.isLocked) {
+    if (!isLocked) {
       setShowLockedNotification(false);
       return undefined;
     }
@@ -272,13 +274,9 @@ export default function HomePage() {
     }, 5000);
 
     return () => clearTimeout(timeout);
-  }, [wallet.isLocked]);
+  }, [isLocked]);
 
-  if (isInitializing || isLoadingData) {
-    return <UnifiedLoadingScreen message={isInitializing ? "Connecting to wallet..." : "Loading your assets..."} />;
-  }
-
-  if (!wallet.connected) {
+  if (isDisconnected) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
         <div className="glass rounded-lg border border-hairline shadow-[0_20px_60px_rgba(6,7,10,0.45)] p-8 max-w-md text-center">
@@ -299,7 +297,7 @@ export default function HomePage() {
     );
   }
 
-  if (wallet.isLocked) {
+  if (isLocked) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
         <div className="glass rounded-lg border border-hairline shadow-[0_20px_60px_rgba(6,7,10,0.45)] p-8 max-w-md">
@@ -365,7 +363,7 @@ export default function HomePage() {
 
       <div className="flex-shrink-0">
         <EstimatedBalance
-          balance={isInitializing ? null : wallet.balance}
+          balance={wallet.balance}
           isConnecting={isConnecting}
           onConnect={handleConnectWallet}
           onReceive={handleReceive}

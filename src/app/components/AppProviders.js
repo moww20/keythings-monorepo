@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import WalletEventsManager from './WalletEventsManager';
 import WalletAutoConnect from './WalletAutoConnect';
+import { WalletProvider } from '../contexts/WalletContext';
 import { isRateLimitedError } from '../lib/wallet-throttle';
 
 const defaultQueryOptions = {
@@ -40,7 +41,9 @@ export default function AppProviders({ children }) {
     <QueryClientProvider client={queryClient}>
       <WalletEventsManager />
       <WalletAutoConnect />
-      {children}
+      <WalletProvider>
+        {children}
+      </WalletProvider>
     </QueryClientProvider>
   );
 }

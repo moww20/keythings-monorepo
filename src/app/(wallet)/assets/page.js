@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowDownToLine, ArrowUpFromLine, Banknote, Search, Eye, EyeOff } from 'lucide-react';
 import EstimatedBalance from '../../components/EstimatedBalance';
-import { useWalletData } from '../../hooks/useWalletData';
+import { useWallet } from '../../contexts/WalletContext';
 
 export default function AssetsPage() {
   const router = useRouter();
@@ -14,7 +14,10 @@ export default function AssetsPage() {
     isWalletFetching,
     walletError,
     connectWallet,
-  } = useWalletData();
+    isDisconnected,
+    isLocked,
+    isUnlocked,
+  } = useWallet();
 
   const [isConnecting, setIsConnecting] = useState(false);
   const [hideSmallAssets, setHideSmallAssets] = useState(false);
@@ -63,15 +66,8 @@ export default function AssetsPage() {
     // TODO: Implement transfer functionality
   }, []);
 
-  if (isWalletBusy && !wallet.connected && wallet.accounts.length === 0) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-[color:var(--background)]">
-        <p className="text-foreground">Loading wallet data...</p>
-      </div>
-    );
-  }
 
-  if (!wallet.connected) {
+  if (isDisconnected) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-[color:var(--background)] text-center p-6">
         <h1 className="text-4xl font-bold text-foreground mb-4">Connect Your Keeta Wallet</h1>

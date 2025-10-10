@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { User, Bell, Globe, Clock, Zap } from 'lucide-react';
-import { useWalletData } from '../../hooks/useWalletData';
+import { useWallet } from '../../contexts/WalletContext';
 
 export default function SettingsPage() {
   const router = useRouter();
@@ -13,7 +13,10 @@ export default function SettingsPage() {
     isWalletFetching,
     walletError,
     connectWallet,
-  } = useWalletData();
+    isDisconnected,
+    isLocked,
+    isUnlocked,
+  } = useWallet();
 
   const [isConnecting, setIsConnecting] = useState(false);
 
@@ -45,15 +48,8 @@ export default function SettingsPage() {
     }
   }, [walletError]);
 
-  if (isWalletBusy && !wallet.connected && wallet.accounts.length === 0) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-[color:var(--background)]">
-        <p className="text-foreground">Loading wallet data...</p>
-      </div>
-    );
-  }
 
-  if (!wallet.connected) {
+  if (isDisconnected) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-[color:var(--background)] text-center p-6">
         <h1 className="text-4xl font-bold text-foreground mb-4">Connect Your Keeta Wallet</h1>

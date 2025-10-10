@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useMemo } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { processTokenForDisplay } from '../lib/token-utils';
 import { isRateLimitedError } from '../lib/wallet-throttle';
@@ -37,16 +37,37 @@ async function fetchWalletState() {
   let isLocked = false;
   try {
     if (typeof provider.isLocked === 'function') {
-      isLocked = await provider.isLocked();
+    isLocked = await provider.isLocked();
+    } else {
+      console.debug('Wallet provider does not have isLocked() method');
     }
   } catch (error) {
     console.debug('Failed to read wallet lock status:', error);
+    // If we can't check lock status and get session expired, assume locked
+    if (error?.message?.includes('Session expired') || error?.message?.includes('re-login')) {
+      console.debug('Cannot check lock status due to session expired, assuming wallet is locked');
+      isLocked = true;
+    }
   }
 
   let accounts = [];
   try {
     accounts = (await provider.getAccounts()) ?? [];
   } catch (error) {
+    // Handle session expiration - treat as locked wallet
+    if (error?.message?.includes('Session expired') || error?.message?.includes('re-login')) {
+      console.debug('Account query failed due to session expired, treating as locked wallet');
+      console.debug('Note: isLocked() API returned:', isLocked, 'but session is expired - wallet is in inconsistent state');
+      return {
+        connected: true, // Connected but locked
+        accounts: [],
+        balance: null,
+        network: null,
+        isLocked: true, // Force locked state despite API saying false
+        isInitializing: false,
+      };
+    }
+    
     // Silently handle rate-limiting errors - wallet is throttled but functional
     if (isRateLimitedError(error)) {
       console.debug('Account query throttled, will retry automatically');
@@ -92,14 +113,14 @@ async function fetchWalletState() {
   }
 
   if (!accounts.length) {
-    // If wallet is locked, it's technically "connected" but just locked
-    // This allows the UI to show the locked screen instead of connect screen
+    // If no accounts but wallet provider exists, treat as connected but potentially locked
+    // This handles cases where wallet is installed but not authorized or locked
     return {
-      connected: isLocked,
+      connected: true, // Always connected if wallet provider exists
       accounts: [],
       balance: null,
       network: null,
-      isLocked,
+      isLocked: isLocked || true, // Assume locked if we can't determine status
       isInitializing: false,
     };
   }
@@ -114,6 +135,21 @@ async function fetchWalletState() {
         provider.getNetwork(),
       ]);
     } catch (error) {
+      // Handle session expiration - treat as locked wallet
+      if (error?.message?.includes('Session expired') || error?.message?.includes('re-login')) {
+        console.debug('useWalletData: Balance/network fetch failed due to session expired, treating as locked wallet');
+        console.debug('Note: isLocked() API returned:', isLocked, 'but session is expired - wallet is in inconsistent state');
+        // Force locked state when session is expired, regardless of isLocked() API result
+        return {
+          connected: true, // Connected but locked
+          accounts: [],
+          balance: null,
+          network: null,
+          isLocked: true, // Force locked state
+          isInitializing: false,
+        };
+      }
+      
       // Silently handle rate-limiting errors - wallet is throttled but functional
       if (isRateLimitedError(error)) {
         console.debug('useWalletData: Balance query throttled, will retry automatically');
@@ -145,6 +181,11 @@ async function fetchTokenBalances({ queryKey }) {
   try {
     balances = await provider.getAllBalances();
   } catch (error) {
+    // Handle session expiration - throw so retry logic can catch it
+    if (error?.message?.includes('Session expired') || error?.message?.includes('re-login')) {
+      throw error; // Let the retry logic handle this
+    }
+    
     // Handle rate-limiting errors - throw so React Query can retry
     if (isRateLimitedError(error)) {
       console.debug('Token balance query throttled, retrying...');
@@ -213,6 +254,9 @@ async function fetchTokenBalances({ queryKey }) {
 
 export function useWalletData() {
   const queryClient = useQueryClient();
+  
+  // Track session expiration to force locked state
+  const [sessionExpired, setSessionExpired] = useState(false);
 
   const walletQuery = useQuery({
     queryKey: WALLET_QUERY_KEY,
@@ -235,6 +279,12 @@ export function useWalletData() {
     retry: (failureCount, error) => {
       // Don't retry on user rejection
       if (error?.code === 4001) return false;
+      
+      // Don't retry on session expiration - this indicates wallet is locked
+      if (error?.message?.includes('Session expired') || error?.message?.includes('re-login')) {
+        setSessionExpired(true);
+        return false;
+      }
       
       // Retry throttled requests up to 3 times
       if (isRateLimitedError(error)) {
@@ -259,6 +309,9 @@ export function useWalletData() {
     try {
       const accounts = await provider.requestAccounts();
       
+      // Reset session expired flag on successful connection
+      setSessionExpired(false);
+      
       await queryClient.invalidateQueries({ queryKey: WALLET_QUERY_KEY });
       await queryClient.invalidateQueries({ queryKey: ['wallet', 'tokens'] });
       
@@ -274,7 +327,21 @@ export function useWalletData() {
     queryClient.invalidateQueries({ queryKey: ['wallet', 'tokens'] });
   }, [queryClient]);
 
-  const wallet = walletQuery.data ?? DEFAULT_WALLET_STATE;
+  const wallet = useMemo(() => {
+    const baseWallet = walletQuery.data ?? DEFAULT_WALLET_STATE;
+    
+    // If session is expired, force locked state regardless of API response
+    if (sessionExpired) {
+      return {
+        ...baseWallet,
+        isLocked: true,
+        connected: true, // Still connected but locked
+      };
+    }
+    
+    return baseWallet;
+  }, [walletQuery.data, sessionExpired]);
+  
   const tokens = tokensQuery.data ?? [];
 
   const formattedBalance = useMemo(() => {

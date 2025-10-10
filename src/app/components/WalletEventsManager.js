@@ -31,11 +31,28 @@ export default function WalletEventsManager() {
     const handleChainChanged = () => invalidateWalletQueries();
     const handleDisconnect = () => invalidateWalletQueries();
     const handleConnect = () => invalidateWalletQueries();
+    const handleLocked = () => {
+      console.debug('Wallet locked event received');
+      invalidateWalletQueries();
+    };
+    const handleUnlocked = () => {
+      console.debug('Wallet unlocked event received');
+      invalidateWalletQueries();
+    };
 
+    // Listen for common wallet events
     provider.on('accountsChanged', handleAccountsChanged);
     provider.on('chainChanged', handleChainChanged);
     provider.on('disconnect', handleDisconnect);
     provider.on('connect', handleConnect);
+    
+    // Listen for lock state events (try multiple possible event names)
+    provider.on('locked', handleLocked);
+    provider.on('unlocked', handleUnlocked);
+    provider.on('lock', handleLocked);
+    provider.on('unlock', handleUnlocked);
+    provider.on('walletLocked', handleLocked);
+    provider.on('walletUnlocked', handleUnlocked);
 
     const remove = provider.removeListener?.bind(provider) || provider.off?.bind(provider);
 
@@ -47,6 +64,12 @@ export default function WalletEventsManager() {
       remove('chainChanged', handleChainChanged);
       remove('disconnect', handleDisconnect);
       remove('connect', handleConnect);
+      remove('locked', handleLocked);
+      remove('unlocked', handleUnlocked);
+      remove('lock', handleLocked);
+      remove('unlock', handleUnlocked);
+      remove('walletLocked', handleLocked);
+      remove('walletUnlocked', handleUnlocked);
     };
   }, [queryClient]);
 
