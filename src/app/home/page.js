@@ -27,6 +27,8 @@ export default function HomePage() {
   const [activeTab, setActiveTab] = useState('holding');
   const [showLockedNotification, setShowLockedNotification] = useState(false);
   const [showNullState, setShowNullState] = useState(false);
+  const [ktaPriceData, setKtaPriceData] = useState(null);
+  const [isLoadingPrice, setIsLoadingPrice] = useState(false);
 
   const isWalletBusy = isWalletLoading || isWalletFetching;
   const tokensLoading = isTokensLoading || isTokensFetching;
@@ -51,6 +53,22 @@ export default function HomePage() {
     console.log('Cash In clicked');
     // TODO: Implement cash in functionality
   }, []);
+
+  const fetchKtaPrice = useCallback(async () => {
+    if (!window.keeta || isLoadingPrice) return;
+    
+    setIsLoadingPrice(true);
+    try {
+      const priceData = await window.keeta.getKtaPrice();
+      if (priceData) {
+        setKtaPriceData(priceData);
+      }
+    } catch (error) {
+      console.debug('Failed to fetch KTA price:', error);
+    } finally {
+      setIsLoadingPrice(false);
+    }
+  }, [isLoadingPrice]);
 
   const handleConnectWallet = useCallback(async () => {
     if (isConnecting) {
@@ -104,6 +122,13 @@ export default function HomePage() {
       }
     };
   }, [wallet.connected, wallet.isLocked, tokensLoading, tokens.length]);
+
+  // Fetch KTA price when wallet is connected
+  useEffect(() => {
+    if (wallet.connected && !wallet.isLocked) {
+      fetchKtaPrice();
+    }
+  }, [wallet.connected, wallet.isLocked, fetchKtaPrice]);
 
   useEffect(() => {
     if (!wallet.isLocked) {
@@ -502,11 +527,32 @@ export default function HomePage() {
                           <div className="text-muted text-sm">{token.ticker}</div>
                         </td>
                         <td className="py-4 px-6 text-right">
-                          <div className="text-foreground font-medium">—</div>
-                          <div className="text-muted text-sm">—</div>
+                          {token.ticker === 'KTA' && ktaPriceData ? (
+                            <>
+                              <div className="text-foreground font-medium">
+                                ${ktaPriceData.usd.toFixed(4)}
+                              </div>
+                              <div className="text-muted text-sm">USD</div>
+                            </>
+                          ) : isLoadingPrice && token.ticker === 'KTA' ? (
+                            <>
+                              <div className="text-muted text-sm">Loading...</div>
+                            </>
+                          ) : (
+                            <>
+                              <div className="text-foreground font-medium">—</div>
+                              <div className="text-muted text-sm">—</div>
+                            </>
+                          )}
                         </td>
-                        <td className="py-4 px-6 text-right text-muted font-medium">
-                          —
+                        <td className="py-4 px-6 text-right font-medium">
+                          {token.ticker === 'KTA' && ktaPriceData ? (
+                            <span className={ktaPriceData.usd_24h_change >= 0 ? 'text-green-500' : 'text-red-500'}>
+                              {ktaPriceData.usd_24h_change >= 0 ? '+' : ''}{ktaPriceData.usd_24h_change.toFixed(2)}%
+                            </span>
+                          ) : (
+                            <span className="text-muted">—</span>
+                          )}
                         </td>
                         <td className="py-4 px-6 text-right">
                           <button className="text-accent hover:text-foreground transition-colors">
