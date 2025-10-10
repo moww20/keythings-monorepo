@@ -90,12 +90,14 @@ async function fetchWalletState() {
   }
 
   if (!accounts.length) {
+    // If wallet is locked, it's technically "connected" but just locked
+    // This allows the UI to show the locked screen instead of connect screen
     return {
-      connected: false,
+      connected: isLocked,
       accounts: [],
       balance: null,
       network: null,
-      isLocked: false,
+      isLocked,
       isInitializing: false,
     };
   }
