@@ -24,7 +24,7 @@ export default function UnifiedLoadingScreen({
           </div>
         )}
         
-        <div className="space-y-4">
+        <div className="space-y-4 text-center">
           <h1 className="text-2xl font-bold text-foreground animate-fade-in">
             {message}
           </h1>

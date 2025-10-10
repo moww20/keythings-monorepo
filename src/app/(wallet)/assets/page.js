@@ -2,9 +2,9 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { LayoutDashboard, Wallet, ShoppingCart, UserCircle, Settings, ArrowDownToLine, ArrowUpFromLine, Banknote, Search, Eye, EyeOff } from 'lucide-react';
-import EstimatedBalance from '../components/EstimatedBalance';
-import { useWalletData } from '../hooks/useWalletData';
+import { ArrowDownToLine, ArrowUpFromLine, Banknote, Search, Eye, EyeOff } from 'lucide-react';
+import EstimatedBalance from '../../components/EstimatedBalance';
+import { useWalletData } from '../../hooks/useWalletData';
 
 export default function AssetsPage() {
   const router = useRouter();
@@ -17,7 +17,6 @@ export default function AssetsPage() {
   } = useWalletData();
 
   const [isConnecting, setIsConnecting] = useState(false);
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [hideSmallAssets, setHideSmallAssets] = useState(false);
 
   const isWalletBusy = isWalletLoading || isWalletFetching;
@@ -49,19 +48,19 @@ export default function AssetsPage() {
   }, [walletError]);
 
   // Action handlers for EstimatedBalance component
-  const handleDeposit = useCallback(() => {
-    console.log('Deposit clicked');
-    // TODO: Implement deposit functionality
+  const handleReceive = useCallback(() => {
+    console.log('Receive clicked');
+    // TODO: Implement receive functionality
   }, []);
 
-  const handleWithdraw = useCallback(() => {
-    console.log('Withdraw clicked');
-    // TODO: Implement withdraw functionality
+  const handleSend = useCallback(() => {
+    console.log('Send clicked');
+    // TODO: Implement send functionality
   }, []);
 
-  const handleCashIn = useCallback(() => {
-    console.log('Cash In clicked');
-    // TODO: Implement cash in functionality
+  const handleTransfer = useCallback(() => {
+    console.log('Transfer clicked');
+    // TODO: Implement transfer functionality
   }, []);
 
   if (isWalletBusy && !wallet.connected && wallet.accounts.length === 0) {
@@ -112,148 +111,17 @@ export default function AssetsPage() {
   }
 
   return (
-    <main className="relative overflow-hidden min-h-screen bg-[color:var(--background)]">
-      <div className="absolute inset-0 -z-10 bg-[color:var(--background)]" />
-      <div className="pointer-events-none absolute inset-x-0 top-[-20%] z-0 h-[480px] bg-gradient-to-b from-[color:color-mix(in_oklab,var(--foreground)_18%,transparent)] via-transparent to-transparent blur-3xl" />
-      
-      <div className="relative z-10 max-w-7xl mx-auto px-6 py-8">
-        <div className="flex flex-col gap-8 xl:grid xl:grid-cols-[16rem_minmax(0,1fr)] xl:h-[calc(100vh-8rem)] xl:overflow-hidden">
-          {/* Sidebar */}
-          <aside className="hidden xl:block sticky top-[8rem] h-[calc(100vh-8rem)] w-64 flex-shrink-0 overflow-auto glass border border-hairline rounded-2xl">
-            <div className="p-4">
-              <nav className="space-y-1">
-                        <button
-                          onClick={() => router.push('/home')}
-                          className="flex items-center gap-2 px-3 py-2 text-base font-medium text-muted hover:text-foreground hover:bg-surface-strong hover:border hover:border-hairline-strong rounded-lg w-full text-left group transition-none"
-                        >
-                          <LayoutDashboard className="h-5 w-5 flex-shrink-0 group-hover:text-foreground transition-none" />
-                          <span className="truncate">Dashboard</span>
-                        </button>
-                        
-                        <a
-                          href="#assets"
-                          className="flex items-center gap-2 px-3 py-2 text-base font-medium text-foreground bg-surface-strong rounded-lg w-full text-left transition-none"
-                        >
-                          <Wallet className="h-5 w-5 flex-shrink-0" />
-                          <span className="truncate">Assets</span>
-                        </a>
-
-                        <button
-                          onClick={() => console.log('Orders clicked - TODO: implement')}
-                          className="flex items-center gap-2 px-3 py-2 text-base font-medium text-muted hover:text-foreground hover:bg-surface-strong hover:border hover:border-hairline-strong rounded-lg w-full text-left group transition-none"
-                        >
-                          <ShoppingCart className="h-5 w-5 flex-shrink-0 group-hover:text-foreground transition-none" />
-                          <span className="truncate">Orders</span>
-                        </button>
-
-                        <button
-                          onClick={() => console.log('Account clicked - TODO: implement')}
-                          className="flex items-center gap-2 px-3 py-2 text-base font-medium text-muted hover:text-foreground hover:bg-surface-strong hover:border hover:border-hairline-strong rounded-lg w-full text-left group transition-none"
-                        >
-                          <UserCircle className="h-5 w-5 flex-shrink-0 group-hover:text-foreground transition-none" />
-                          <span className="truncate">Account</span>
-                        </button>
-
-                        <button
-                          onClick={() => router.push('/settings')}
-                          className="flex items-center gap-2 px-3 py-2 text-base font-medium text-muted hover:text-foreground hover:bg-surface-strong hover:border hover:border-hairline-strong rounded-lg w-full text-left group transition-none"
-                        >
-                          <Settings className="h-5 w-5 flex-shrink-0 group-hover:text-foreground transition-none" />
-                          <span className="truncate">Settings</span>
-                        </button>
-              </nav>
-            </div>
-          </aside>
-
-          {/* Main Content */}
-          <div className="flex-1 min-w-0 h-full overflow-auto xl:w-full">
-            {/* Mobile Menu Toggle */}
-            <div className="xl:hidden mb-4">
-              <button 
-                onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-                className="glass rounded-lg border border-hairline p-3 text-foreground hover:bg-surface transition-colors"
-              >
-                <svg className="h-6 w-6" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M3 12h18M3 6h18M3 18h18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-              </button>
-            </div>
-            
-            {/* Mobile Sidebar */}
-            {isMobileMenuOpen && (
-              <>
-                <div 
-                  className="fixed inset-0 bg-black/50 z-40 xl:hidden"
-                  onClick={() => setIsMobileMenuOpen(false)}
-                />
-                <div className="fixed inset-y-0 left-0 w-64 glass border-r border-hairline z-50 xl:hidden overflow-auto">
-                  <div className="p-4">
-                    <div className="flex items-center justify-between mb-4">
-                      <h2 className="text-lg font-semibold text-foreground">Menu</h2>
-                      <button 
-                        onClick={() => setIsMobileMenuOpen(false)}
-                        className="p-2 hover:bg-surface rounded-lg transition-colors"
-                      >
-                        <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                        </svg>
-                      </button>
-                    </div>
-                    <nav className="space-y-1">
-                      <button
-                        onClick={() => { router.push('/home'); setIsMobileMenuOpen(false); }}
-                        className="flex items-center gap-2 px-3 py-2 text-base font-medium text-muted hover:text-foreground hover:bg-surface-strong hover:border hover:border-hairline-strong rounded-lg w-full text-left group transition-none"
-                      >
-                        <LayoutDashboard className="h-5 w-5 flex-shrink-0 group-hover:text-foreground transition-none" />
-                        <span className="truncate">Dashboard</span>
-                      </button>
-                      
-                      <a
-                        href="#assets"
-                        onClick={() => setIsMobileMenuOpen(false)}
-                        className="flex items-center gap-2 px-3 py-2 text-base font-medium text-foreground bg-surface-strong rounded-lg w-full text-left transition-none"
-                      >
-                        <Wallet className="h-5 w-5 flex-shrink-0" />
-                        <span className="truncate">Assets</span>
-                      </a>
-
-                      <button
-                        onClick={() => { console.log('Orders clicked - TODO: implement'); setIsMobileMenuOpen(false); }}
-                        className="flex items-center gap-2 px-3 py-2 text-base font-medium text-muted hover:text-foreground hover:bg-surface-strong hover:border hover:border-hairline-strong rounded-lg w-full text-left group transition-none"
-                      >
-                        <ShoppingCart className="h-5 w-5 flex-shrink-0 group-hover:text-foreground transition-none" />
-                        <span className="truncate">Orders</span>
-                      </button>
-
-                      <button
-                        onClick={() => { console.log('Account clicked - TODO: implement'); setIsMobileMenuOpen(false); }}
-                        className="flex items-center gap-2 px-3 py-2 text-base font-medium text-muted hover:text-foreground hover:bg-surface-strong hover:border hover:border-hairline-strong rounded-lg w-full text-left group transition-none"
-                      >
-                        <UserCircle className="h-5 w-5 flex-shrink-0 group-hover:text-foreground transition-none" />
-                        <span className="truncate">Account</span>
-                      </button>
-
-                      <button
-                        onClick={() => { router.push('/settings'); setIsMobileMenuOpen(false); }}
-                        className="flex items-center gap-2 px-3 py-2 text-base font-medium text-muted hover:text-foreground hover:bg-surface-strong hover:border hover:border-hairline-strong rounded-lg w-full text-left group transition-none"
-                      >
-                        <Settings className="h-5 w-5 flex-shrink-0 group-hover:text-foreground transition-none" />
-                        <span className="truncate">Settings</span>
-                      </button>
-                    </nav>
-                  </div>
-                </div>
-              </>
-            )}
-
-            {/* Estimated Balance Component */}
+    <>
+      {/* Estimated Balance Component */}
             <EstimatedBalance
               balance={wallet.balance}
               isConnecting={isConnecting}
               onConnect={handleConnectWallet}
-              onDeposit={handleDeposit}
-              onWithdraw={handleWithdraw}
-              onCashIn={handleCashIn}
+              onReceive={handleReceive}
+              onSend={handleSend}
+              onTransfer={handleTransfer}
+              tokens={[]}
+              ktaPriceData={null}
             />
 
             {/* My Assets Section */}
@@ -322,7 +190,7 @@ export default function AssetsPage() {
                       </th>
                       <th className="text-right py-4 px-6 text-muted text-sm font-medium">
                         <div className="flex items-center justify-end gap-1">
-                          Coin Price / Cost Price
+                          Coin Price / Total Value
                           <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
                             <path d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                           </svg>
@@ -358,7 +226,7 @@ export default function AssetsPage() {
                       </td>
                       <td className="py-4 px-6 text-right">
                         <div className="text-foreground font-medium">$1.00</div>
-                        <div className="text-muted text-sm">--</div>
+                        <div className="text-muted text-sm">$129.83</div>
                       </td>
                       <td className="py-4 px-6 text-right">
                         <div className="text-muted">--</div>
@@ -384,7 +252,7 @@ export default function AssetsPage() {
                       </td>
                       <td className="py-4 px-6 text-right">
                         <div className="text-foreground font-medium">$3.53</div>
-                        <div className="text-muted text-sm">$3.41</div>
+                        <div className="text-muted text-sm">$0.02</div>
                       </td>
                       <td className="py-4 px-6 text-right">
                         <div className="text-green-500 font-medium">+ $0.00</div>
@@ -410,7 +278,7 @@ export default function AssetsPage() {
                       </td>
                       <td className="py-4 px-6 text-right">
                         <div className="text-foreground font-medium">$0.06</div>
-                        <div className="text-muted text-sm">$0.35</div>
+                        <div className="text-muted text-sm">$0.00</div>
                       </td>
                       <td className="py-4 px-6 text-right">
                         <div className="text-green-500 font-medium">+ $0.00</div>
@@ -436,7 +304,7 @@ export default function AssetsPage() {
                       </td>
                       <td className="py-4 px-6 text-right">
                         <div className="text-foreground font-medium">$0.84</div>
-                        <div className="text-muted text-sm">$0.35</div>
+                        <div className="text-muted text-sm">$0.00</div>
                       </td>
                       <td className="py-4 px-6 text-right">
                         <div className="text-green-500 font-medium">+ $0.00</div>
@@ -549,9 +417,6 @@ export default function AssetsPage() {
                 </table>
               </div>
             </div>
-          </div>
-        </div>
-      </div>
-    </main>
+    </>
   );
 }

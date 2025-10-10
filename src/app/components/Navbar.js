@@ -5,7 +5,7 @@ import { AnimatePresence, motion } from "framer-motion"
 import { createPortal } from "react-dom"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
-import { BookOpen } from "lucide-react"
+import { BookOpen, Wallet, LogOut } from "lucide-react"
 // Connect button removed from header per request
 import SearchBar from "./SearchBar"
 import ThemeToggle from "./ThemeToggle"
@@ -156,9 +156,21 @@ export default function Navbar() {
     }
   }
 
-  const disconnectWallet = () => {
-    setWalletConnected(false)
-    setWalletAddress(null)
+  const disconnectWallet = async () => {
+    try {
+      // Clear local state
+      setWalletConnected(false)
+      setWalletAddress(null)
+      
+      // If the wallet provider has a disconnect method, call it
+      if (typeof window !== 'undefined' && window.keeta) {
+        // Most wallets don't have a programmatic disconnect, but we can clear the state
+        // The user would need to disconnect from the extension itself for full disconnect
+        console.log('Wallet disconnected from app')
+      }
+    } catch (error) {
+      console.error('Error disconnecting wallet:', error)
+    }
   }
 
   const formatAddress = (address) => {
@@ -217,13 +229,28 @@ export default function Navbar() {
           >
             <BookOpen className="w-5 h-5" />
           </a>
-          <button
-            type="button"
-            onClick={walletConnected ? disconnectWallet : connectWallet}
-            className="px-4 py-2 flex-shrink-0 rounded-full border border-transparent bg-white/10 hover:bg-white/20 hover:shadow-lg hover:shadow-white/10 text-foreground text-sm font-medium transition-all duration-200 max-[519px]:hidden [html[data-theme='light']_&]:border-gray-300 [html[data-theme='light']_&]:hover:shadow-gray-300/50"
-          >
-            {walletConnected ? formatAddress(walletAddress) : 'Connect Wallet'}
-          </button>
+          {walletConnected ? (
+            <div className="flex items-center gap-2 px-4 py-2 flex-shrink-0 rounded-full border border-hairline bg-white/10 text-foreground text-sm font-medium max-[519px]:hidden">
+              <Wallet className="w-4 h-4" />
+              <span>{formatAddress(walletAddress)}</span>
+              <button
+                type="button"
+                onClick={disconnectWallet}
+                aria-label="Disconnect wallet"
+                className="ml-1 inline-flex items-center justify-center w-5 h-5 rounded-full hover:bg-white/20 text-foreground/70 hover:text-foreground transition-colors"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={connectWallet}
+              className="px-4 py-2 flex-shrink-0 rounded-full border border-transparent bg-white/10 hover:bg-white/20 hover:shadow-lg hover:shadow-white/10 text-foreground text-sm font-medium transition-all duration-200 max-[519px]:hidden [html[data-theme='light']_&]:border-gray-300 [html[data-theme='light']_&]:hover:shadow-gray-300/50"
+            >
+              Connect Wallet
+            </button>
+          )}
           <button
             type="button"
             aria-label="Open menu"
@@ -279,13 +306,28 @@ export default function Navbar() {
                       <BookOpen className="w-4 h-4" />
                       <span>Docs</span>
                     </a>
-                    <button
-                      type="button"
-                      onClick={walletConnected ? disconnectWallet : connectWallet}
-                      className="px-4 py-2 rounded-full bg-white/10 hover:bg-white/20 hover:shadow-lg hover:shadow-white/10 text-foreground text-sm font-medium transition-all duration-200 text-left [html[data-theme='light']_&]:border [html[data-theme='light']_&]:border-gray-300 [html[data-theme='light']_&]:hover:shadow-gray-300/50"
-                    >
-                      {walletConnected ? formatAddress(walletAddress) : 'Connect Wallet'}
-                    </button>
+                    {walletConnected ? (
+                      <div className="flex items-center gap-2 px-4 py-2 rounded-full border border-hairline bg-white/10 text-foreground text-sm font-medium">
+                        <Wallet className="w-4 h-4" />
+                        <span className="flex-1">{formatAddress(walletAddress)}</span>
+                        <button
+                          type="button"
+                          onClick={disconnectWallet}
+                          aria-label="Disconnect wallet"
+                          className="ml-1 inline-flex items-center justify-center w-5 h-5 rounded-full hover:bg-white/20 text-foreground/70 hover:text-foreground transition-colors"
+                        >
+                          <LogOut className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={connectWallet}
+                        className="px-4 py-2 rounded-full bg-white/10 hover:bg-white/20 hover:shadow-lg hover:shadow-white/10 text-foreground text-sm font-medium transition-all duration-200 text-left [html[data-theme='light']_&]:border [html[data-theme='light']_&]:border-gray-300 [html[data-theme='light']_&]:hover:shadow-gray-300/50"
+                      >
+                        Connect Wallet
+                      </button>
+                    )}
                     <div className="flex items-center gap-3 pt-2">
                       <a href="https://x.com/keythings" target="_blank" rel="noopener noreferrer" aria-label="X (Twitter)" className="inline-flex items-center justify-center w-9 h-9 rounded-full hover:bg-white/5 text-foreground/90">
                         <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor" role="img" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><path d={siX.path} /></svg>

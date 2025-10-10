@@ -1,18 +1,57 @@
 'use client';
 
-import { ArrowDownToLine, ArrowUpFromLine, Banknote } from 'lucide-react';
+import { ArrowDownLeft, ArrowUpRight, ArrowRightLeft } from 'lucide-react';
 
 export default function EstimatedBalance({ 
   balance, 
   isConnecting, 
   onConnect, 
-  onDeposit, 
-  onWithdraw, 
-  onCashIn 
+  onReceive, 
+  onSend, 
+  onTransfer,
+  tokens = [],
+  ktaPriceData = null
 }) {
   const formatBalance = (balance) => {
     if (balance === null) return '0.00';
     return (Number(balance) / 10 ** 18).toFixed(2);
+  };
+
+  // Calculate total USD value across all tokens
+  const calculateTotalUsdValue = () => {
+    if (!tokens || tokens.length === 0) return 0;
+    
+    let total = 0;
+    
+    tokens.forEach(token => {
+      // Only calculate for KTA tokens if we have price data
+      if (token.ticker === 'KTA' && ktaPriceData) {
+        const amount = parseFloat(token.formattedAmount.replace(/,/g, ''));
+        const tokenValue = amount * ktaPriceData.usd;
+        total += tokenValue;
+      }
+      // Add logic for other tokens here when price data becomes available
+    });
+    
+    return total;
+  };
+
+  // Calculate KTA equivalent of total portfolio value
+  const calculateKtaEquivalent = () => {
+    const totalUsd = calculateTotalUsdValue();
+    
+    if (!ktaPriceData || ktaPriceData.usd === 0) {
+      return '0.00';
+    }
+    
+    const ktaEquivalent = totalUsd / ktaPriceData.usd;
+    
+    // Format with commas
+    const formatted = ktaEquivalent.toFixed(2);
+    const [integerPart, decimalPart] = formatted.split('.');
+    const formattedInteger = integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    
+    return decimalPart ? `${formattedInteger}.${decimalPart}` : formattedInteger;
   };
 
   return (
@@ -43,7 +82,7 @@ export default function EstimatedBalance({
             ) : (
               <>
                 <span className="text-3xl font-bold text-foreground">
-                  {formatBalance(balance)}
+                  {calculateKtaEquivalent()}
                 </span>
                 <span className="text-lg text-muted">KTA</span>
                 <svg className="h-4 w-4 text-muted" fill="currentColor" viewBox="0 0 24 24">
@@ -53,7 +92,7 @@ export default function EstimatedBalance({
             )}
           </div>
           <div className="text-sm text-muted mb-2">
-            ~ $237.65
+            ~ ${calculateTotalUsdValue().toFixed(2)}
           </div>
           <div className="flex items-center gap-1 text-sm">
             <span className="text-muted">Today&apos;s PnL</span>
@@ -66,25 +105,25 @@ export default function EstimatedBalance({
 
         <div className="flex flex-col sm:flex-row gap-3">
           <button 
-            onClick={onDeposit}
-            className="inline-flex items-center justify-center gap-2 bg-accent text-white px-6 py-2.5 rounded-md font-medium hover:bg-accent/90 transition-colors min-w-[120px]"
+            onClick={onReceive}
+            className="inline-flex items-center justify-center gap-2 bg-accent text-white px-6 py-2.5 rounded-md font-medium hover:bg-accent/90 hover:shadow-lg transition-all duration-200 min-w-[120px]"
           >
-            <ArrowDownToLine className="h-4 w-4" />
-            Deposit
+            <ArrowDownLeft className="h-4 w-4" />
+            Receive
           </button>
           <button 
-            onClick={onWithdraw}
-            className="inline-flex items-center justify-center gap-2 bg-surface border border-hairline text-foreground px-6 py-2.5 rounded-md font-medium hover:bg-surface-strong transition-colors min-w-[120px]"
+            onClick={onSend}
+            className="inline-flex items-center justify-center gap-2 bg-surface border border-hairline text-foreground px-6 py-2.5 rounded-md font-medium hover:bg-surface-strong hover:border-soft transition-all duration-200 min-w-[120px]"
           >
-            <ArrowUpFromLine className="h-4 w-4" />
-            Withdraw
+            <ArrowUpRight className="h-4 w-4" />
+            Send
           </button>
           <button 
-            onClick={onCashIn}
-            className="inline-flex items-center justify-center gap-2 bg-surface border border-hairline text-foreground px-6 py-2.5 rounded-md font-medium hover:bg-surface-strong transition-colors min-w-[120px]"
+            onClick={onTransfer}
+            className="inline-flex items-center justify-center gap-2 bg-surface border border-hairline text-foreground px-6 py-2.5 rounded-md font-medium hover:bg-surface-strong hover:border-soft transition-all duration-200 min-w-[120px]"
           >
-            <Banknote className="h-4 w-4" />
-            Cash In
+            <ArrowRightLeft className="h-4 w-4" />
+            Transfer
           </button>
         </div>
       </div>
