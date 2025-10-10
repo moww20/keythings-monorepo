@@ -33,6 +33,19 @@ export default function WalletAutoConnect() {
       try {
         const provider = window.keeta;
 
+        // Quick check: if accounts already exist, we're good
+        if (typeof provider.getAccounts === 'function') {
+          try {
+            const accounts = await provider.getAccounts();
+            if (Array.isArray(accounts) && accounts.length > 0) {
+              // Already connected, no need to do anything
+              return;
+            }
+          } catch (error) {
+            console.debug('getAccounts() check failed:', error);
+          }
+        }
+
         // Check if the wallet was previously connected
         let shouldAttemptConnect = false;
 
@@ -45,16 +58,6 @@ export default function WalletAutoConnect() {
           }
         } else if (typeof provider.isConnected === 'boolean') {
           shouldAttemptConnect = provider.isConnected;
-        }
-
-        // Method 2: Check if accounts already exist (permission previously granted)
-        if (!shouldAttemptConnect && typeof provider.getAccounts === 'function') {
-          try {
-            const accounts = await provider.getAccounts();
-            shouldAttemptConnect = Array.isArray(accounts) && accounts.length > 0;
-          } catch (error) {
-            console.debug('getAccounts() check failed:', error);
-          }
         }
 
         if (shouldAttemptConnect) {

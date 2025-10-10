@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { LayoutDashboard, Wallet, ShoppingCart, UserCircle, Settings } from 'lucide-react';
 import EstimatedBalance from '../components/EstimatedBalance';
+import UnifiedLoadingScreen from '../components/UnifiedLoadingScreen';
 import { useWalletData } from '../hooks/useWalletData';
 
 export default function HomePage() {
@@ -28,6 +29,10 @@ export default function HomePage() {
 
   const isWalletBusy = isWalletLoading || isWalletFetching;
   const tokensLoading = isTokensLoading || isTokensFetching;
+  
+  // Show unified loading screen during initialization or when loading data
+  const isInitializing = wallet.isInitializing || isWalletBusy;
+  const isLoadingData = wallet.connected && !wallet.isLocked && tokensLoading;
 
 
   // Action handlers for EstimatedBalance component
@@ -92,12 +97,14 @@ export default function HomePage() {
     return () => clearTimeout(timeout);
   }, [wallet.isLocked]);
 
-  if (isWalletBusy && !wallet.connected && wallet.accounts.length === 0) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-[color:var(--background)]">
-        <p className="text-foreground">Loading wallet data...</p>
-      </div>
-    );
+  // Show unified loading screen during initialization
+  if (isInitializing) {
+    return <UnifiedLoadingScreen message="Connecting to your wallet..." />;
+  }
+
+  // Show unified loading screen while loading tokens (but wallet is connected)
+  if (isLoadingData) {
+    return <UnifiedLoadingScreen message="Loading your assets..." showWalletIcon={false} />;
   }
 
   if (!wallet.connected) {
@@ -413,19 +420,7 @@ export default function HomePage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {tokensLoading ? (
-                    <tr>
-                      <td colSpan="5" className="py-12 text-center">
-                        <div className="flex flex-col items-center gap-3">
-                          <svg className="animate-spin h-8 w-8 text-accent" fill="none" viewBox="0 0 24 24">
-                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                          </svg>
-                          <span className="text-muted">Loading tokens...</span>
-                        </div>
-                      </td>
-                    </tr>
-                  ) : tokens.length === 0 ? (
+                  {tokens.length === 0 ? (
                     <tr>
                       <td colSpan="5" className="py-12 text-center">
                         <div className="flex flex-col items-center gap-3">

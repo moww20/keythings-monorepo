@@ -11,6 +11,7 @@ const DEFAULT_WALLET_STATE = Object.freeze({
   balance: null,
   network: null,
   isLocked: false,
+  isInitializing: true, // Track if we're still checking connection
 });
 
 const WALLET_QUERY_KEY = ['wallet', 'state'];
@@ -26,7 +27,10 @@ async function fetchWalletState() {
   const provider = getWalletProvider();
 
   if (!provider) {
-    return DEFAULT_WALLET_STATE;
+    return {
+      ...DEFAULT_WALLET_STATE,
+      isInitializing: false,
+    };
   }
 
   let isLocked = false;
@@ -60,6 +64,7 @@ async function fetchWalletState() {
       balance: null,
       network: null,
       isLocked,
+      isInitializing: false,
     };
   }
 
@@ -91,6 +96,7 @@ async function fetchWalletState() {
       balance: null,
       network: null,
       isLocked: false,
+      isInitializing: false,
     };
   }
 
@@ -119,6 +125,7 @@ async function fetchWalletState() {
     balance,
     network,
     isLocked,
+    isInitializing: false,
   };
 }
 
