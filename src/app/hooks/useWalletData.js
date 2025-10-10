@@ -3,6 +3,7 @@
 import { useCallback, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { processTokenForDisplay } from '../lib/token-utils';
+import { isRateLimitedError } from '../lib/wallet-throttle';
 
 const DEFAULT_WALLET_STATE = Object.freeze({
   connected: false,
@@ -41,6 +42,17 @@ async function fetchWalletState() {
   try {
     accounts = (await provider.getAccounts()) ?? [];
   } catch (error) {
+    // Silently handle rate-limiting errors - wallet is throttled but functional
+    if (isRateLimitedError(error)) {
+      console.debug('useWalletData: Account query throttled, will retry automatically');
+      return {
+        connected: false,
+        accounts: [],
+        balance: null,
+        network: null,
+        isLocked,
+      };
+    }
     console.error('useWalletData: Failed to fetch accounts', error);
     return {
       connected: false,
@@ -49,6 +61,27 @@ async function fetchWalletState() {
       network: null,
       isLocked,
     };
+  }
+
+  // If no accounts, try checking if we should auto-connect
+  // This happens when the user has previously granted permission
+  if (!accounts.length) {
+    try {
+      // Check if the provider has a method to check previous permissions
+      if (typeof provider.isConnected === 'function') {
+        const wasConnected = await provider.isConnected();
+        if (wasConnected) {
+          console.log('Wallet was previously connected, attempting to reconnect...');
+          // Try to reconnect silently
+          accounts = (await provider.getAccounts()) ?? [];
+        }
+      } else if (typeof provider.isConnected === 'boolean' && provider.isConnected) {
+        console.log('Wallet shows connected state, attempting to fetch accounts...');
+        accounts = (await provider.getAccounts()) ?? [];
+      }
+    } catch (error) {
+      console.debug('Auto-connect check failed:', error);
+    }
   }
 
   if (!accounts.length) {
@@ -71,7 +104,12 @@ async function fetchWalletState() {
         provider.getNetwork(),
       ]);
     } catch (error) {
-      console.error('useWalletData: Failed to resolve balance/network', error);
+      // Silently handle rate-limiting errors - wallet is throttled but functional
+      if (isRateLimitedError(error)) {
+        console.debug('useWalletData: Balance query throttled, will retry automatically');
+      } else {
+        console.error('useWalletData: Failed to resolve balance/network', error);
+      }
     }
   }
 
@@ -96,11 +134,21 @@ async function fetchTokenBalances({ queryKey }) {
   try {
     balances = await provider.getAllBalances();
   } catch (error) {
-    console.error('useWalletData: Failed to fetch token balances', error);
+    // Handle rate-limiting errors - throw so React Query can retry
+    if (isRateLimitedError(error)) {
+      console.debug('Token balance query throttled, retrying...');
+      throw error; // Let React Query handle the retry
+    }
+    console.error('Failed to fetch token balances:', error);
+    throw error; // Let React Query handle other errors too
+  }
+
+  if (!Array.isArray(balances)) {
+    console.warn('getAllBalances() returned non-array:', typeof balances);
     return [];
   }
 
-  if (!Array.isArray(balances) || balances.length === 0) {
+  if (balances.length === 0) {
     return [];
   }
 
@@ -116,7 +164,7 @@ async function fetchTokenBalances({ queryKey }) {
     try {
       return entry.balance && BigInt(entry.balance) > 0n;
     } catch (error) {
-      console.warn('useWalletData: Unable to parse balance for token', entry?.token, error);
+      console.warn('Unable to parse balance for token', entry?.token);
       return false;
     }
   });
@@ -135,7 +183,7 @@ async function fetchTokenBalances({ queryKey }) {
           baseTokenAddress
         );
       } catch (error) {
-        console.error('useWalletData: Failed to process token metadata', entry?.token, error);
+        console.error('Failed to process token:', entry?.token, error);
         return null;
       }
     })
@@ -164,11 +212,29 @@ export function useWalletData() {
   const primaryAccount = walletQuery.data?.accounts?.[0] ?? null;
   const networkId = walletQuery.data?.network?.chainId ?? null;
 
+  const isQueryEnabled = Boolean(walletQuery.data?.connected && !walletQuery.data?.isLocked && primaryAccount);
+
   const tokensQuery = useQuery({
     queryKey: ['wallet', 'tokens', { account: primaryAccount, networkId }],
     queryFn: fetchTokenBalances,
-    enabled: Boolean(walletQuery.data?.connected && !walletQuery.data?.isLocked && primaryAccount),
+    enabled: isQueryEnabled,
     placeholderData: () => [],
+    retry: (failureCount, error) => {
+      // Don't retry on user rejection
+      if (error?.code === 4001) return false;
+      
+      // Retry throttled requests up to 3 times
+      if (isRateLimitedError(error)) {
+        return failureCount < 3;
+      }
+      
+      // Retry other errors once
+      return failureCount < 1;
+    },
+    retryDelay: (attemptIndex) => {
+      // Use exponential backoff: 2s, 4s, 8s
+      return Math.min(1000 * 2 ** attemptIndex, 8000);
+    },
   });
 
   const connectWallet = useCallback(async () => {
