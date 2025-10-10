@@ -97,26 +97,13 @@ export default function HomePage() {
     return () => clearTimeout(timeout);
   }, [wallet.isLocked]);
 
-  // Debug logging for loading states
-  console.log('🔍 HomePage: Loading states:', {
-    isInitializing,
-    isLoadingData,
-    walletConnected: wallet.connected,
-    walletLocked: wallet.isLocked,
-    walletInitializing: wallet.isInitializing,
-    isWalletBusy,
-    tokensLoading
-  });
-
   // Show unified loading screen during initialization
   if (isInitializing) {
-    console.log('🔍 HomePage: Showing initialization loading screen');
     return <UnifiedLoadingScreen message="Connecting to your wallet..." />;
   }
 
   // Show unified loading screen while loading tokens (but wallet is connected)
   if (isLoadingData) {
-    console.log('🔍 HomePage: Showing token loading screen');
     return <UnifiedLoadingScreen message="Loading your assets..." showWalletIcon={false} />;
   }
 

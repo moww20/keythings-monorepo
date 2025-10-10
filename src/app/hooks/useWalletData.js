@@ -17,54 +17,39 @@ const DEFAULT_WALLET_STATE = Object.freeze({
 const WALLET_QUERY_KEY = ['wallet', 'state'];
 
 function getWalletProvider() {
-  console.log('🔍 getWalletProvider: Checking for wallet provider...');
-  console.log('🔍 getWalletProvider: typeof window:', typeof window);
-  
   if (typeof window === 'undefined') {
-    console.log('🔍 getWalletProvider: Window is undefined (SSR)');
     return null;
   }
   
-  console.log('🔍 getWalletProvider: window.keeta:', window.keeta);
-  const provider = window.keeta ?? null;
-  console.log('🔍 getWalletProvider: Returning provider:', provider);
-  return provider;
+  return window.keeta ?? null;
 }
 
 async function fetchWalletState() {
-  console.log('🔍 fetchWalletState: Starting wallet state fetch...');
   const provider = getWalletProvider();
 
   if (!provider) {
-    console.log('🔍 fetchWalletState: No provider found, returning default state');
     return {
       ...DEFAULT_WALLET_STATE,
       isInitializing: false,
     };
   }
-  
-  console.log('🔍 fetchWalletState: Provider found, checking wallet state...');
 
   let isLocked = false;
   try {
     if (typeof provider.isLocked === 'function') {
-      console.log('🔍 fetchWalletState: Checking if wallet is locked...');
       isLocked = await provider.isLocked();
-      console.log('🔍 fetchWalletState: Wallet locked status:', isLocked);
     }
   } catch (error) {
-    console.log('🔍 fetchWalletState: Failed to read lock status:', error);
+    console.debug('Failed to read wallet lock status:', error);
   }
 
   let accounts = [];
   try {
-    console.log('🔍 fetchWalletState: Fetching accounts...');
     accounts = (await provider.getAccounts()) ?? [];
-    console.log('🔍 fetchWalletState: Accounts fetched:', accounts);
   } catch (error) {
     // Silently handle rate-limiting errors - wallet is throttled but functional
     if (isRateLimitedError(error)) {
-      console.log('🔍 fetchWalletState: Account query throttled, will retry automatically');
+      console.debug('Account query throttled, will retry automatically');
       return {
         connected: false,
         accounts: [],
@@ -74,7 +59,7 @@ async function fetchWalletState() {
         isInitializing: false,
       };
     }
-    console.log('🔍 fetchWalletState: Failed to fetch accounts:', error);
+    console.debug('Failed to fetch accounts:', error);
     return {
       connected: false,
       accounts: [],
@@ -266,26 +251,20 @@ export function useWalletData() {
   });
 
   const connectWallet = useCallback(async () => {
-    console.log('🔍 connectWallet: Starting wallet connection...');
     const provider = getWalletProvider();
     if (!provider) {
-      console.log('🔍 connectWallet: No provider found, throwing error');
       throw new Error('Keeta wallet provider not found.');
     }
 
-    console.log('🔍 connectWallet: Provider found, calling requestAccounts...');
     try {
       const accounts = await provider.requestAccounts();
-      console.log('🔍 connectWallet: requestAccounts result:', accounts);
       
-      console.log('🔍 connectWallet: Invalidating queries...');
       await queryClient.invalidateQueries({ queryKey: WALLET_QUERY_KEY });
       await queryClient.invalidateQueries({ queryKey: ['wallet', 'tokens'] });
       
-      console.log('🔍 connectWallet: Connection successful, returning accounts:', accounts);
       return accounts;
     } catch (error) {
-      console.log('🔍 connectWallet: requestAccounts failed:', error);
+      console.error('Failed to connect wallet:', error);
       throw error;
     }
   }, [queryClient]);
