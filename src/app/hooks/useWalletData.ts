@@ -4,7 +4,7 @@ import { useCallback, useMemo, useState, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { QueryFunctionContext, QueryObserverResult } from "@tanstack/react-query";
 
-import type { KeetaBalanceEntry, KeetaNetworkInfo, KeetaProvider } from "@/types/keeta";
+import type { KeetaBalanceEntry, KeetaNetworkInfo, KeetaProvider, KeetaUserClient } from "@/types/keeta";
 import { processTokenForDisplay, type ProcessedToken } from "../lib/token-utils";
 import { isRateLimitedError } from "../lib/wallet-throttle";
 
@@ -38,6 +38,7 @@ export interface WalletData {
   refetchTokens: () => Promise<QueryObserverResult<ProcessedToken[], unknown>>;
   connectWallet: () => Promise<string[]>;
   refreshWallet: () => void;
+  userClient: KeetaUserClient | null;
 }
 
 const DEFAULT_WALLET_STATE: WalletState = {
@@ -50,6 +51,10 @@ const DEFAULT_WALLET_STATE: WalletState = {
 };
 
 const WALLET_QUERY_KEY = ['wallet', 'state'] as const;
+
+function isPromiseLike<T>(value: unknown): value is PromiseLike<T> {
+  return Boolean(value) && typeof (value as PromiseLike<T>).then === 'function';
+}
 
 function getWalletProvider(): KeetaProvider | null {
   if (typeof window === 'undefined') {
@@ -314,6 +319,7 @@ export function useWalletData(): WalletData {
 
   // Track session expiration to force locked state
   const [sessionExpired, setSessionExpired] = useState(false);
+  const [userClient, setUserClient] = useState<KeetaUserClient | null>(null);
 
   const walletQuery = useQuery<WalletState>({
     queryKey: WALLET_QUERY_KEY,
@@ -384,6 +390,41 @@ export function useWalletData(): WalletData {
     void queryClient.invalidateQueries({ queryKey: ['wallet', 'tokens'] });
   }, [queryClient]);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    const resolveUserClient = async () => {
+      const provider = getWalletProvider();
+      const factory = provider?.createUserClient ?? provider?.getUserClient;
+
+      if (!factory) {
+        if (!cancelled) {
+          setUserClient(null);
+        }
+        return;
+      }
+
+      try {
+        const maybeClient = factory();
+        const resolved = isPromiseLike<KeetaUserClient>(maybeClient) ? await maybeClient : maybeClient;
+        if (!cancelled) {
+          setUserClient(resolved ?? null);
+        }
+      } catch (error) {
+        console.debug('useWalletData: Failed to initialize user client', error);
+        if (!cancelled) {
+          setUserClient(null);
+        }
+      }
+    };
+
+    void resolveUserClient();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [walletQuery.data?.connected, walletQuery.data?.accounts, sessionExpired]);
+
   // Reset session expired flag when wallet is successfully unlocked
   useEffect(() => {
     const baseWallet = walletQuery.data ?? DEFAULT_WALLET_STATE;
@@ -432,5 +473,6 @@ export function useWalletData(): WalletData {
     refetchTokens: tokensQuery.refetch,
     connectWallet,
     refreshWallet,
+    userClient,
   };
 }

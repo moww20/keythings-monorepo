@@ -25,6 +25,11 @@ export const docsItems: DocsSection[] = [
     children: [
       { href: "/docs/developer/api-reference", label: "API Reference", description: "Complete API documentation for dApp integration." },
       { href: "/docs/developer/integration", label: "Integration Guide", description: "Build dApps that work with Keythings Wallet." },
+      {
+        href: "/docs/developer/integration/smart-accounts",
+        label: "Smart Account Architecture",
+        description: "Phase 3 storage accounts and delegated permission workflows.",
+      },
       { href: "/docs/developer/security", label: "Security for Developers", description: "Security considerations for dApp development." },
     ],
   },

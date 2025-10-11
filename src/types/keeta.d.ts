@@ -14,6 +14,54 @@ export interface KeetaBaseTokenInfo {
   [key: string]: unknown;
 }
 
+export interface KeetaPublicKeyLike {
+  toString(): string;
+}
+
+export interface KeetaAccountRef {
+  publicKeyString: string | KeetaPublicKeyLike;
+  [key: string]: unknown;
+}
+
+export interface KeetaPermissionDescriptor {
+  base?: { flags?: string[] };
+  [key: string]: unknown;
+}
+
+export interface KeetaACLRecord {
+  entity: KeetaAccountRef;
+  principal: KeetaAccountRef;
+  permissions: KeetaPermissionDescriptor;
+  target?: KeetaAccountRef | null;
+  [key: string]: unknown;
+}
+
+export interface KeetaBuilderPublishResult {
+  account?: KeetaAccountRef | null;
+  accounts?: KeetaAccountRef[] | null;
+  blocks?: Array<{ hash?: string | KeetaPublicKeyLike | null }> | null;
+  [key: string]: unknown;
+}
+
+export interface KeetaBuilder {
+  generateIdentifier?: (...args: unknown[]) => Promise<{ account: KeetaAccountRef }> | { account: KeetaAccountRef };
+  generateStorageAccount?: () => Promise<KeetaAccountRef> | KeetaAccountRef;
+  createStorageAccount?: () => Promise<KeetaAccountRef> | KeetaAccountRef;
+  computeBlocks?: () => Promise<void> | void;
+  setInfo?: (info: Record<string, unknown>, context?: Record<string, unknown>) => Promise<void> | void;
+  updatePermissions?: (...args: unknown[]) => Promise<void> | void;
+  send?: (...args: unknown[]) => Promise<void> | void;
+  [key: string]: unknown;
+}
+
+export interface KeetaUserClient {
+  initBuilder: () => KeetaBuilder;
+  publishBuilder: (builder: KeetaBuilder) => Promise<KeetaBuilderPublishResult>;
+  listACLsByPrincipal?: (params?: Record<string, unknown>) => Promise<KeetaACLRecord[]>;
+  listACLsByEntity?: (params: { account: KeetaAccountRef }) => Promise<KeetaACLRecord[]>;
+  [key: string]: unknown;
+}
+
 export interface KeetaProvider {
   isKeeta?: boolean;
   isAvailable?: boolean;
@@ -34,6 +82,8 @@ export interface KeetaProvider {
   on?: (event: string, listener: (...args: unknown[]) => void) => void;
   removeListener?: (event: string, listener: (...args: unknown[]) => void) => void;
   off?: (event: string, listener: (...args: unknown[]) => void) => void;
+  createUserClient?: () => KeetaUserClient | Promise<KeetaUserClient>;
+  getUserClient?: () => KeetaUserClient | Promise<KeetaUserClient>;
 }
 
 declare global {
