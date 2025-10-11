@@ -1,4 +1,4 @@
-use actix::{Actor, ActorContext, AsyncContext, Handler, Message, StreamHandler};
+use actix::{Actor, ActorContext, AsyncContext, StreamHandler};
 use actix_web::{web, Error, HttpRequest, HttpResponse};
 use actix_web_actors::ws;
 use log::{info, warn};
@@ -122,12 +122,15 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for TradingWebSocket 
             }
             Ok(ws::Message::Text(text)) => {
                 info!("Received message: {}", text);
-                
+
                 if let Ok(subscribe_msg) = serde_json::from_str::<SubscribeMessage>(&text) {
                     if subscribe_msg.msg_type == "subscribe" {
                         self.subscribed_channels = subscribe_msg.channels.clone();
-                        info!("Client subscribed to channels: {:?}", self.subscribed_channels);
-                        
+                        info!(
+                            "Client subscribed to channels: {:?}",
+                            self.subscribed_channels
+                        );
+
                         // Send initial data for each subscribed channel
                         for channel in &self.subscribed_channels {
                             if let Some(market) = channel.strip_prefix("orderbook:") {
@@ -136,7 +139,7 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for TradingWebSocket 
                                 self.send_mock_trade(ctx, market);
                             }
                         }
-                        
+
                         // Send acknowledgment
                         let ack = serde_json::json!({
                             "type": "subscribed",
@@ -160,12 +163,11 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for TradingWebSocket 
     }
 }
 
-pub async fn ws_trade(
-    req: HttpRequest,
-    stream: web::Payload,
-) -> Result<HttpResponse, Error> {
-    info!("New WebSocket connection request from {:?}", req.peer_addr());
+pub async fn ws_trade(req: HttpRequest, stream: web::Payload) -> Result<HttpResponse, Error> {
+    info!(
+        "New WebSocket connection request from {:?}",
+        req.peer_addr()
+    );
     let resp = ws::start(TradingWebSocket::new(), &req, stream)?;
     Ok(resp)
 }
-

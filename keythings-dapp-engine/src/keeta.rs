@@ -1,6 +1,7 @@
 use std::env;
 
 use log::{info, warn};
+use uuid::Uuid;
 
 use crate::models::{DepositAddress, WithdrawRequest};
 
@@ -28,13 +29,13 @@ impl KeetaClient {
         }
     }
 
-    pub async fn send_on_behalf(&self, request: &WithdrawRequest) -> Result<(), KeetaError> {
+    pub async fn send_on_behalf(&self, request: &WithdrawRequest) -> Result<String, KeetaError> {
         info!(
             "[settlement] send_on_behalf user={} token={} amount={} to={} via {}",
             request.user_id, request.token, request.amount, request.to, self.rpc_url
         );
         if self.rpc_url.starts_with("http") {
-            Ok(())
+            Ok(Uuid::new_v4().to_string())
         } else {
             Err(KeetaError::Rpc("invalid rpc url".into()))
         }
