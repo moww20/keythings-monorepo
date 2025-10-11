@@ -12,7 +12,7 @@ interface WalletState {
   connected: boolean;
   accounts: string[];
   balance: string | number | bigint | null;
-  network: KeetaNetworkInfo | null;
+  network: KeetaNetworkInfo | null | undefined;
   isLocked: boolean;
   isInitializing: boolean;
 }
@@ -183,7 +183,7 @@ async function fetchWalletState(): Promise<WalletState> {
   }
 
   let balance: string | number | bigint | null = null;
-  let network: KeetaNetworkInfo | null = null;
+  let network: KeetaNetworkInfo | null | undefined = null;
 
   if (!isLocked) {
     try {
@@ -271,7 +271,7 @@ async function fetchTokenBalances({ queryKey }: QueryFunctionContext<TokenQueryK
 
   const nonZeroBalances = balances.filter((entry) => {
     try {
-      return Boolean(entry.balance) && BigInt(entry.balance) > 0n;
+      return Boolean(entry.balance) && BigInt(entry.balance) > BigInt(0);
     } catch (error) {
       console.warn('Unable to parse balance for token', entry?.token, error);
       return false;
@@ -328,7 +328,7 @@ export function useWalletData(): WalletData {
 
   const isQueryEnabled = Boolean(walletQuery.data?.connected && !walletQuery.data?.isLocked && primaryAccount);
 
-  const tokensQuery = useQuery<ProcessedToken[]>({
+  const tokensQuery = useQuery<ProcessedToken[], Error, ProcessedToken[], TokenQueryKey>({
     queryKey: ['wallet', 'tokens', { account: primaryAccount, networkId }],
     queryFn: fetchTokenBalances,
     enabled: isQueryEnabled,

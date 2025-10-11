@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { docsItems, flatDocs, type DocsNavItem } from "../docs/toc/items";
@@ -16,7 +16,7 @@ const hrefToSection = (() => {
   return map;
 })();
 
-export default function SearchBar(): JSX.Element {
+export default function SearchBar(): React.JSX.Element {
   const router = useRouter();
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);

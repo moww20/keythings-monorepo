@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
 
 const KEYWORDS = new Set<string>([
   "const",
@@ -285,7 +285,7 @@ interface CodeBlockProps {
   className?: string;
 }
 
-export default function CodeBlock({ code, language = "javascript", className = "" }: CodeBlockProps): JSX.Element {
+export default function CodeBlock({ code, language = "javascript", className = "" }: CodeBlockProps): React.JSX.Element {
   const [copied, setCopied] = useState(false);
 
   const highlighted = useMemo(() => highlight(code, language), [code, language]);

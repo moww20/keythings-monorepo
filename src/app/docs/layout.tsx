@@ -1,3 +1,4 @@
+import React from "react";
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 
@@ -29,7 +30,7 @@ interface DocsLayoutProps {
   children: ReactNode;
 }
 
-export default function DocsLayout({ children }: DocsLayoutProps): JSX.Element {
+export default function DocsLayout({ children }: DocsLayoutProps): React.JSX.Element {
   return (
     <main className="min-h-[80vh] max-w-7xl mx-auto px-6 py-10" role="main">
       <DocsShell>{children}</DocsShell>

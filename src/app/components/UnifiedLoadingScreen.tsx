@@ -1,5 +1,6 @@
 "use client";
 
+import React from "react";
 import { Wallet } from "lucide-react";
 
 /**
@@ -14,7 +15,7 @@ interface UnifiedLoadingScreenProps {
 export default function UnifiedLoadingScreen({
   message = "Loading your wallet...",
   showWalletIcon = true,
-}: UnifiedLoadingScreenProps): JSX.Element {
+}: UnifiedLoadingScreenProps): React.JSX.Element {
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-[color:var(--background)] text-center p-6 animate-fade-in">
       <div className="glass rounded-lg border border-hairline shadow-[0_20px_60px_rgba(6,7,10,0.45)] p-8 max-w-md animate-slide-up">

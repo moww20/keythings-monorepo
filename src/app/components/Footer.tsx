@@ -1,5 +1,6 @@
 "use client";
 
+import React from "react";
 import Link from "next/link";
 import { siX, siDiscord, siGithub } from "simple-icons";
 
@@ -13,7 +14,7 @@ interface FooterSection {
   links: FooterLink[];
 }
 
-export default function Footer(): JSX.Element {
+export default function Footer(): React.JSX.Element {
   const currentYear = new Date().getFullYear();
 
   const footerSections: FooterSection[] = [

@@ -4,12 +4,20 @@ import { useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { LayoutDashboard, Wallet, ShoppingCart, UserCircle, Settings, ArrowLeftRight, TrendingUp, Rocket, Image, Droplets } from 'lucide-react';
 
-export default function WalletLayout({ children }) {
+interface MenuItem {
+  path: string | null;
+  label: string;
+  icon: React.ComponentType<any>;
+  enabled: boolean;
+  onClick?: () => void;
+}
+
+export default function WalletLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
-  const isActive = (path) => pathname === path;
+  const isActive = (path: string) => pathname === path;
 
   const menuItems = [
     { path: '/home', label: 'Dashboard', icon: LayoutDashboard, enabled: true },
@@ -24,7 +32,7 @@ export default function WalletLayout({ children }) {
     { path: '/settings', label: 'Settings', icon: Settings, enabled: true },
   ];
 
-  const handleMenuClick = (item) => {
+  const handleMenuClick = (item: MenuItem) => {
     if (!item.enabled) return;
     
     if (item.path) {
@@ -49,7 +57,7 @@ export default function WalletLayout({ children }) {
               <nav className="space-y-1">
                 {menuItems.map((item, index) => {
                   const Icon = item.icon;
-                  const active = isActive(item.path);
+                  const active = item.path ? isActive(item.path) : false;
                   
                   return (
                     <button
@@ -110,7 +118,7 @@ export default function WalletLayout({ children }) {
                     <nav className="space-y-1">
                       {menuItems.map((item, index) => {
                         const Icon = item.icon;
-                        const active = isActive(item.path);
+                        const active = item.path ? isActive(item.path) : false;
                         
                         return (
                           <button

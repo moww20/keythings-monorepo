@@ -1,10 +1,11 @@
 "use client";
 
+import React from "react";
 import { usePathname } from "next/navigation";
 
 import Footer from "./Footer";
 
-export default function ConditionalFooter(): JSX.Element | null {
+export default function ConditionalFooter(): React.JSX.Element | null {
   const pathname = usePathname();
 
   // Pages where footer should NOT be shown

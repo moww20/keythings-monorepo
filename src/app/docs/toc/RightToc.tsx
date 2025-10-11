@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 
 interface TocHeading {
@@ -8,7 +8,7 @@ interface TocHeading {
   text: string;
 }
 
-export default function RightToc(): JSX.Element | null {
+export default function RightToc(): React.JSX.Element | null {
   const [headings, setHeadings] = useState<TocHeading[]>([]);
   const [active, setActive] = useState<string | null>(null);
   const pathname = usePathname();

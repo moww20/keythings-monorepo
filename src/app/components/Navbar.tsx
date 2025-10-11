@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { createPortal } from "react-dom";
 import Link from "next/link";
@@ -12,7 +12,7 @@ import type { KeetaProvider } from "@/types/keeta";
 import SearchBar from "./SearchBar";
 import ThemeToggle from "./ThemeToggle";
 
-export default function Navbar(): JSX.Element {
+export default function Navbar(): React.JSX.Element {
   const pathname = usePathname();
   const router = useRouter();
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -75,7 +75,8 @@ export default function Navbar(): JSX.Element {
     if (typeof window !== "undefined" && window.keeta) {
       const provider = window.keeta;
 
-      const handleAccountsChanged = (accounts: string[]) => {
+      const handleAccountsChanged = (...args: unknown[]) => {
+        const accounts = args[0] as string[];
         if (accounts && accounts.length > 0) {
           setWalletConnected(true);
           setWalletAddress(accounts[0] ?? null);
@@ -86,11 +87,11 @@ export default function Navbar(): JSX.Element {
         }
       };
 
-      const handleChainChanged = () => {
+      const handleChainChanged = (...args: unknown[]) => {
         void checkWalletConnection();
       };
 
-      const handleDisconnect = () => {
+      const handleDisconnect = (...args: unknown[]) => {
         setWalletConnected(false);
         setWalletAddress(null);
       };

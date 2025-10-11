@@ -2,11 +2,11 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect } from "react";
+import React, { useEffect } from "react";
 
 import { flatDocs } from "../toc/items";
 
-export default function DocNav(): JSX.Element | null {
+export default function DocNav(): React.JSX.Element | null {
   const pathname = usePathname();
   const router = useRouter();
   const index = flatDocs.findIndex((item) => pathname.startsWith(item.href));

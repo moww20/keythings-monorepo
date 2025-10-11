@@ -95,7 +95,7 @@ export function formatTokenAmount(rawAmount: string | number | bigint, decimals 
     const quotient = amount / divisor;
     const remainder = amount % divisor;
 
-    if (remainder === 0n) {
+    if (remainder === BigInt(0)) {
       return quotient.toString();
     }
 

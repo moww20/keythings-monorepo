@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { usePathname } from "next/navigation";
 
@@ -15,7 +15,7 @@ interface DocsShellProps {
   children: ReactNode;
 }
 
-export default function DocsShell({ children }: DocsShellProps): JSX.Element {
+export default function DocsShell({ children }: DocsShellProps): React.JSX.Element {
   const [mobileOpen, setMobileOpen] = useState(false);
   const pathname = usePathname();
 

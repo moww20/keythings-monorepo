@@ -1,5 +1,6 @@
 "use client";
 
+import React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -18,7 +19,7 @@ function findCrumbs(pathname: string): BreadcrumbItem[] {
   return [{ href: "/docs", label: "Docs" }];
 }
 
-export default function Breadcrumbs(): JSX.Element {
+export default function Breadcrumbs(): React.JSX.Element {
   const pathname = usePathname();
   const crumbs = findCrumbs(pathname);
   return (

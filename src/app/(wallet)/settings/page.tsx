@@ -33,7 +33,7 @@ export default function SettingsPage() {
       await connectWallet();
     } catch (error) {
       console.error('Failed to connect wallet:', error);
-      const message = error?.message ?? '';
+      const message = (error as Error)?.message ?? '';
       if (!/rejected|denied/i.test(message)) {
         alert('Failed to connect wallet. Please try again.');
       }

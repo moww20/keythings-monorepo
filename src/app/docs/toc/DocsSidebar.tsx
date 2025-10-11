@@ -2,13 +2,13 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 
 import { docsItems } from "./items";
 
 type OpenState = Record<string, boolean>;
 
-export default function DocsSidebar(): JSX.Element {
+export default function DocsSidebar(): React.JSX.Element {
   const pathname = usePathname();
   const [open, setOpen] = useState<OpenState>({});
 

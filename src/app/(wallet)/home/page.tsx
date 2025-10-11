@@ -26,7 +26,7 @@ export default function HomePage() {
   const [activeTab, setActiveTab] = useState('holding');
   const [showLockedNotification, setShowLockedNotification] = useState(false);
   const [showNullState, setShowNullState] = useState(false);
-  const [ktaPriceData, setKtaPriceData] = useState(null);
+  const [ktaPriceData, setKtaPriceData] = useState<{ price: number } | null>(null);
   const [isLoadingPrice, setIsLoadingPrice] = useState(false);
   const isFetchingPrice = useRef(false);
 
@@ -51,7 +51,7 @@ export default function HomePage() {
     isFetchingPrice.current = true;
     setIsLoadingPrice(true);
     try {
-      const priceData = await window.keeta.getKtaPrice();
+      const priceData = await window.keeta?.getKtaPrice?.();
       if (priceData) {
         setKtaPriceData(priceData);
       }
@@ -71,7 +71,7 @@ export default function HomePage() {
       await connectWallet();
     } catch (error) {
       console.error('Failed to connect wallet:', error);
-      const message = error?.message ?? '';
+      const message = (error as Error)?.message ?? '';
       if (!/rejected|denied/i.test(message)) {
         alert('Failed to connect wallet. Please try again.');
       }
@@ -108,7 +108,7 @@ export default function HomePage() {
 
       // Check wallet lock status before attempting unlock
       try {
-        const isLocked = await provider.isLocked();
+        const isLocked = await provider.isLocked?.();
         console.log('🔒 Wallet lock status:', isLocked);
       } catch (error) {
         console.log('⚠️ Could not check lock status:', error);
@@ -148,7 +148,7 @@ export default function HomePage() {
       try {
         // Method 1: Direct requestAccounts call
         console.log('🔄 Method 1: Direct requestAccounts...');
-        accounts = await Promise.race([requestPromise, timeoutPromise]);
+        accounts = await Promise.race([requestPromise, timeoutPromise]) as string[];
         
         if (accounts.length === 0) {
           console.log('⚠️ Method 1 failed, trying Method 2...');
@@ -176,7 +176,7 @@ export default function HomePage() {
             console.log('🔄 Method 3: Trying to get balance to trigger unlock...');
             await provider.getBalance('0x0000000000000000000000000000000000000000');
           } catch (error) {
-            console.log('⚠️ Method 3 failed (expected):', error.message);
+            console.log('⚠️ Method 3 failed (expected):', (error as Error).message);
             // This is expected to fail, but might trigger unlock popup
           }
         }
@@ -192,7 +192,7 @@ export default function HomePage() {
       
       // Check lock status again after unlock attempt
       try {
-        const isLockedAfter = await provider.isLocked();
+        const isLockedAfter = await provider.isLocked?.();
         console.log('🔓 Wallet lock status after unlock:', isLockedAfter);
       } catch (error) {
         console.log('⚠️ Could not check lock status after unlock:', error);
@@ -212,7 +212,7 @@ export default function HomePage() {
       return accounts;
     } catch (error) {
       console.error('❌ Failed to unlock wallet:', error);
-      const message = error?.message ?? '';
+      const message = (error as Error)?.message ?? '';
       
       // Don't show alert for user rejection
       if (!/rejected|denied|cancelled/i.test(message)) {
@@ -370,7 +370,7 @@ export default function HomePage() {
           onSend={handleSend}
           onTransfer={handleTransfer}
           tokens={tokens}
-          ktaPriceData={ktaPriceData}
+          ktaPriceData={ktaPriceData?.price ? { usd: ktaPriceData.price } : null}
         />
       </div>
 
@@ -460,7 +460,7 @@ export default function HomePage() {
             <tbody>
               {tokensLoading ? (
                 <tr>
-                  <td colSpan="5" className="py-12 text-center">
+                  <td colSpan={5} className="py-12 text-center">
                     <div className="flex flex-col items-center gap-3">
                       <svg className="animate-spin h-8 w-8 text-accent" fill="none" viewBox="0 0 24 24">
                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
@@ -472,7 +472,7 @@ export default function HomePage() {
                 </tr>
               ) : tokens.length === 0 && showNullState ? (
                 <tr>
-                  <td colSpan="5" className="py-12 text-center">
+                  <td colSpan={5} className="py-12 text-center">
                     <div className="flex flex-col items-center gap-3">
                       <Wallet className="h-12 w-12 text-muted opacity-50" />
                       <span className="text-muted">No tokens found in your wallet</span>
@@ -481,7 +481,7 @@ export default function HomePage() {
                 </tr>
               ) : tokens.length === 0 && !showNullState ? (
                 <tr>
-                  <td colSpan="5" className="py-12 text-center">
+                  <td colSpan={5} className="py-12 text-center">
                     <div className="flex flex-col items-center gap-3">
                       <svg className="animate-spin h-8 w-8 text-accent" fill="none" viewBox="0 0 24 24">
                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
@@ -528,13 +528,13 @@ export default function HomePage() {
                       <div className="text-muted text-sm">{token.ticker}</div>
                     </td>
                     <td className="py-4 px-6 text-right">
-                      {token.ticker === 'KTA' && ktaPriceData ? (
+                      {token.ticker === 'KTA' && ktaPriceData?.price ? (
                         <>
                           <div className="text-foreground font-medium">
-                            ${ktaPriceData.usd.toFixed(4)}
+                            ${ktaPriceData.price.toFixed(4)}
                           </div>
                           <div className="text-muted text-sm">
-                            ${(parseFloat(token.formattedAmount.replace(/,/g, '')) * ktaPriceData.usd).toFixed(2)}
+                            ${(parseFloat(token.formattedAmount.replace(/,/g, '')) * ktaPriceData.price).toFixed(2)}
                           </div>
                         </>
                       ) : isLoadingPrice && token.ticker === 'KTA' ? (
@@ -549,10 +549,8 @@ export default function HomePage() {
                       )}
                     </td>
                     <td className="py-4 px-6 text-right font-medium">
-                      {token.ticker === 'KTA' && ktaPriceData ? (
-                        <span className={ktaPriceData.usd_24h_change >= 0 ? 'text-green-500' : 'text-red-500'}>
-                          {ktaPriceData.usd_24h_change >= 0 ? '+' : ''}{ktaPriceData.usd_24h_change.toFixed(2)}%
-                        </span>
+                      {token.ticker === 'KTA' && ktaPriceData?.price ? (
+                        <span className="text-muted">N/A</span>
                       ) : (
                         <span className="text-muted">—</span>
                       )}

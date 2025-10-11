@@ -1,5 +1,6 @@
 "use client";
 
+import React from "react";
 import { ArrowDownLeft, ArrowUpRight, ArrowRightLeft } from "lucide-react";
 
 import type { ProcessedToken } from "../lib/token-utils";
@@ -26,7 +27,7 @@ export default function EstimatedBalance({
   onTransfer,
   tokens = [],
   ktaPriceData = null,
-}: EstimatedBalanceProps): JSX.Element {
+}: EstimatedBalanceProps): React.JSX.Element {
   const calculateTotalUsdValue = (): number => {
     if (!tokens || tokens.length === 0) return 0;
 

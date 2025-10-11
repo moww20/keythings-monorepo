@@ -25,13 +25,14 @@ export default function WalletRedirector(): null {
       }
     };
 
-    const handleAccountsChanged = (accounts: string[] = []) => {
+    const handleAccountsChanged = (...args: unknown[]) => {
+      const accounts = args[0] as string[] | undefined;
       if (Array.isArray(accounts) && accounts.length > 0) {
         redirectToHome();
       }
     };
 
-    const handleConnect = () => {
+    const handleConnect = (...args: unknown[]) => {
       redirectToHome();
     };
 

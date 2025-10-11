@@ -39,7 +39,7 @@ export default function WalletAutoConnect() {
         const provider = window.keeta;
 
         // Quick check: if accounts already exist, we're good
-        if (typeof provider.getAccounts === 'function') {
+        if (provider && typeof provider.getAccounts === 'function') {
           try {
             const accounts = await provider.getAccounts();
             
@@ -55,13 +55,13 @@ export default function WalletAutoConnect() {
         let shouldAttemptConnect = false;
 
         // Method 1: Check if provider has isConnected method
-        if (typeof provider.isConnected === 'function') {
+        if (provider && typeof provider.isConnected === 'function') {
           try {
             shouldAttemptConnect = await provider.isConnected();
           } catch (error) {
             console.debug('Auto-connect: isConnected check failed:', error);
           }
-        } else if (typeof provider.isConnected === 'boolean') {
+        } else if (provider && typeof provider.isConnected === 'boolean') {
           shouldAttemptConnect = provider.isConnected;
         }
 

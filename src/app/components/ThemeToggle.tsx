@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Sun, Moon } from "lucide-react";
 
 type ThemeMode = "light" | "dark";
@@ -20,7 +20,7 @@ function applyTheme(theme: ThemeMode): void {
   }
 }
 
-export default function ThemeToggle(): JSX.Element {
+export default function ThemeToggle(): React.JSX.Element {
   const [theme, setTheme] = useState<ThemeMode>("dark");
 
   useEffect(() => {
