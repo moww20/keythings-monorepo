@@ -1,0 +1,17 @@
+[package]
+name = "keeta-backend"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+actix-web = "4"
+actix-rt = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+uuid = { version = "1", features = ["v4"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "sync", "time"] }
+dashmap = "5"
+thiserror = "1"
+env_logger = "0.11"
+log = "0.4"
+futures = "0.3"
