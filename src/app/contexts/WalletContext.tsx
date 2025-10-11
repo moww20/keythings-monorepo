@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useMemo } from "react";
+import { createContext, useCallback, useContext, useMemo } from "react";
 import type { ReactNode } from "react";
 
 import { useWalletData, type WalletData } from "../hooks/useWalletData";
@@ -9,6 +9,9 @@ interface WalletContextValue extends WalletData {
   isDisconnected: boolean;
   isLocked: boolean;
   isUnlocked: boolean;
+  isConnected: boolean;
+  publicKey: string | null;
+  signMessage: ((message: string) => Promise<string>) | null;
 }
 
 const WalletContext = createContext<WalletContextValue | null>(null);
@@ -25,33 +28,50 @@ interface WalletProviderProps {
 
 export function WalletProvider({ children }: WalletProviderProps) {
   const walletData = useWalletData();
+  const signMessage = useCallback(async (message: string) => {
+    if (typeof window === 'undefined') {
+      throw new Error('signMessage is only available in the browser context');
+    }
+
+    const provider = window.keeta;
+    if (!provider || typeof provider.signMessage !== 'function') {
+      throw new Error('Keeta provider does not support message signing');
+    }
+
+    return provider.signMessage(message);
+  }, []);
 
   // Derive clear, unambiguous state indicators
   const contextValue = useMemo<WalletContextValue>(() => {
     const { wallet } = walletData;
+    const primaryAccount = wallet.accounts?.[0] ?? null;
 
     // Three distinct states:
     // 1. isDisconnected: No wallet connected at all
     // 2. isLocked: Wallet connected but locked (user needs to unlock)
     // 3. isUnlocked: Wallet connected and unlocked (ready to use)
-    
+
     const isDisconnected = !wallet.connected;
     const isLocked = wallet.connected && wallet.isLocked;
     const isUnlocked = wallet.connected && !wallet.isLocked;
+    const isConnected = wallet.connected && !wallet.isLocked;
 
     return {
       // Spread all original wallet data
       ...walletData,
-      
+
       // Add clear state indicators
       isDisconnected,
       isLocked,
       isUnlocked,
-      
+      isConnected,
+      publicKey: primaryAccount,
+      signMessage: !primaryAccount ? null : signMessage,
+
       // Keep wallet object for backward compatibility
       wallet,
     };
-  }, [walletData]);
+  }, [signMessage, walletData]);
 
   return <WalletContext.Provider value={contextValue}>{children}</WalletContext.Provider>;
 }

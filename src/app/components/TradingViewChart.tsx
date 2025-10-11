@@ -1,12 +1,14 @@
 'use client';
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 
-interface TradingViewChartProps {
-  symbol: string;
-  timeframe: '1s' | '15m' | '1H' | '4H' | '1D' | '1W';
+export type TradingViewTimeframe = '1s' | '15m' | '1H' | '4H' | '1D' | '1W';
+
+export interface TradingViewChartProps {
+  pair: string;
+  timeframe?: TradingViewTimeframe;
   height?: number;
-  width?: number;
+  className?: string;
 }
 
 interface TradingViewWidget {
@@ -20,324 +22,295 @@ declare global {
   }
 }
 
-export default function TradingViewChart({ 
-  symbol, 
-  timeframe, 
-  height = 400, 
-  width 
+function getTradingViewInterval(timeframe: TradingViewTimeframe): string {
+  switch (timeframe) {
+    case '1s':
+      return '1';
+    case '15m':
+      return '15';
+    case '1H':
+      return '60';
+    case '4H':
+      return '240';
+    case '1W':
+      return '1W';
+    case '1D':
+    default:
+      return '1D';
+  }
+}
+
+export function TradingViewChart({
+  pair,
+  timeframe = '1D',
+  height = 400,
+  className,
 }: TradingViewChartProps): React.JSX.Element {
   const containerRef = useRef<HTMLDivElement>(null);
   const widgetRef = useRef<TradingViewWidget | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const symbol = useMemo(() => pair.replace('/', ''), [pair]);
 
-  // Map our timeframes to TradingView format
-  const getTradingViewInterval = (tf: string) => {
-    switch (tf) {
-      case '1s': return '1';
-      case '15m': return '15';
-      case '1H': return '60';
-      case '4H': return '240';
-      case '1D': return '1D';
-      case '1W': return '1W';
-      default: return '1D';
-    }
-  };
-
-  // Load TradingView script
   useEffect(() => {
-    const script = document.createElement('script');
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    const existingScript = document.querySelector<HTMLScriptElement>(
+      'script[src="https://s3.tradingview.com/tv.js"]',
+    );
+
+    if (existingScript && window.TradingView) {
+      setIsLoading(false);
+      return;
+    }
+
+    const script = existingScript ?? document.createElement('script');
     script.src = 'https://s3.tradingview.com/tv.js';
     script.async = true;
-    script.onload = () => {
-      console.log('TradingView script loaded');
+
+    const handleLoad = () => {
       setIsLoading(false);
     };
-    script.onerror = () => {
+
+    const handleError = () => {
       console.error('Failed to load TradingView script');
       setError('Failed to load TradingView chart');
       setIsLoading(false);
     };
-    document.head.appendChild(script);
+
+    script.addEventListener('load', handleLoad, { once: true });
+    script.addEventListener('error', handleError, { once: true });
+
+    if (!existingScript) {
+      document.head.appendChild(script);
+    }
 
     return () => {
-      if (document.head.contains(script)) {
-        document.head.removeChild(script);
-      }
+      script.removeEventListener('load', handleLoad);
+      script.removeEventListener('error', handleError);
     };
   }, []);
 
-  // Create/update widget
   useEffect(() => {
-    if (isLoading || error || !window.TradingView) return;
+    if (isLoading || error || typeof window === 'undefined' || !window.TradingView) {
+      return;
+    }
 
     const initializeWidget = () => {
-      // Clean up previous widget
       if (widgetRef.current) {
         try {
           widgetRef.current.remove();
-        } catch (e) {
-          console.warn('Error removing previous widget:', e);
+        } catch (removalError) {
+          console.warn('Failed to remove TradingView widget', removalError);
         }
         widgetRef.current = null;
       }
 
-      // Ensure container exists and is mounted
-      if (!containerRef.current) {
-        console.warn('TradingView container ref is null');
+      const container = containerRef.current;
+      if (!container || !container.parentNode) {
         return;
       }
 
-      if (!containerRef.current.parentNode) {
-        console.warn('TradingView container not mounted to DOM');
-        return;
-      }
-
-      // Check if container has dimensions
-      const rect = containerRef.current.getBoundingClientRect();
+      const rect = container.getBoundingClientRect();
       if (rect.width === 0 || rect.height === 0) {
-        console.warn('TradingView container has no dimensions, retrying...');
         setTimeout(initializeWidget, 200);
         return;
       }
 
       try {
-        console.log('Initializing TradingView widget...');
         const widget = new window.TradingView.widget({
-        symbol: symbol,
-        interval: getTradingViewInterval(timeframe),
-        container: containerRef.current,
-        datafeed: {
-          onReady: (callback: any) => {
-            console.log('Datafeed ready');
-            callback({
-              exchanges: [
-                {
-                  value: '',
-                  name: 'Keeta Network',
-                  desc: 'Keeta Network Exchange',
-                },
-              ],
-              symbols_types: [
-                {
-                  name: 'crypto',
-                  value: 'crypto',
-                },
-              ],
-              supported_resolutions: ['1', '5', '15', '30', '60', '240', '1D', '1W', '1M'],
-              supports_marks: false,
-              supports_timescale_marks: false,
-            });
-          },
-          searchSymbols: (userInput: string, exchange: string, symbolType: string, onResultReadyCallback: any) => {
-            console.log('Search symbols:', userInput, exchange, symbolType);
-            onResultReadyCallback([]);
-          },
-          resolveSymbol: (symbolName: string, onSymbolResolvedCallback: any, onResolveErrorCallback: any) => {
-            console.log('Resolve symbol:', symbolName);
-            
-            // Mock symbol resolution for demo
-            const symbolInfo = {
-              ticker: symbolName,
-              name: symbolName,
-              description: `${symbolName} on Keeta Network`,
-              type: 'crypto',
-              session: '24x7',
-              timezone: 'Etc/UTC',
-              exchange: 'Keeta Network',
-              minmov: 1,
-              pricescale: 100,
-              has_intraday: true,
-              has_no_volume: false,
-              has_weekly_and_monthly: true,
-              supported_resolutions: ['1', '5', '15', '30', '60', '240', '1D', '1W', '1M'],
-              volume_precision: 2,
-              data_status: 'streaming',
-            };
-
-            onSymbolResolvedCallback(symbolInfo);
-          },
-          getBars: (symbolInfo: any, resolution: string, periodParams: any, onHistoryCallback: any, onErrorCallback: any) => {
-            console.log('Get bars:', symbolInfo, resolution, periodParams);
-            
-            // Mock historical data for demo
-            const bars: any[] = [];
-            const now = Date.now();
-            const intervalMs = resolution === '1D' ? 24 * 60 * 60 * 1000 : 
-                             resolution === '1H' ? 60 * 60 * 1000 :
-                             resolution === '15' ? 15 * 60 * 1000 : 1000;
-
-            for (let i = 100; i >= 0; i--) {
-              const time = now - (i * intervalMs);
-              const basePrice = 100000 + Math.sin(i * 0.1) * 10000;
-              const open = basePrice + (Math.random() - 0.5) * 1000;
-              const close = open + (Math.random() - 0.5) * 2000;
-              const high = Math.max(open, close) + Math.random() * 500;
-              const low = Math.min(open, close) - Math.random() * 500;
-              const volume = Math.random() * 1000;
-
-              bars.push({
-                time: time,
-                open: open,
-                high: high,
-                low: low,
-                close: close,
-                volume: volume,
+          symbol,
+          interval: getTradingViewInterval(timeframe),
+          container,
+          autosize: true,
+          locale: 'en',
+          theme: 'dark',
+          style: '1',
+          toolbar_bg: '#1e1e1e',
+          disabled_features: [
+            'use_localstorage_for_settings',
+            'volume_force_overlay',
+            'create_volume_indicator_by_default',
+            'main_series_scale_menu',
+            'header_compare',
+            'header_symbol_search',
+            'symbol_search_hot_key',
+            'compare_symbol',
+            'display_market_status',
+            'header_widget_dom_node',
+          ],
+          enabled_features: ['hide_left_toolbar', 'hide_legend', 'hide_side_toolbar'],
+          datafeed: {
+            onReady: (callback: any) => {
+              callback({
+                exchanges: [
+                  { value: '', name: 'Keeta Network', desc: 'Keeta Network Exchange' },
+                ],
+                symbols_types: [{ name: 'crypto', value: 'crypto' }],
+                supported_resolutions: ['1', '5', '15', '30', '60', '240', '1D', '1W', '1M'],
+                supports_marks: false,
+                supports_timescale_marks: false,
               });
-            }
+            },
+            searchSymbols: (_userInput: string, _exchange: string, _symbolType: string, onResultReadyCallback: any) => {
+              onResultReadyCallback([]);
+            },
+            resolveSymbol: (
+              symbolName: string,
+              onSymbolResolvedCallback: any,
+              onResolveErrorCallback: any,
+            ) => {
+              try {
+                onSymbolResolvedCallback({
+                  ticker: symbolName,
+                  name: symbolName,
+                  description: `${symbolName} on Keeta Network`,
+                  type: 'crypto',
+                  session: '24x7',
+                  timezone: 'Etc/UTC',
+                  exchange: 'Keeta Network',
+                  minmov: 1,
+                  pricescale: 100,
+                  has_intraday: true,
+                  has_no_volume: false,
+                  has_weekly_and_monthly: true,
+                  supported_resolutions: ['1', '5', '15', '30', '60', '240', '1D', '1W', '1M'],
+                  volume_precision: 2,
+                  data_status: 'streaming',
+                });
+              } catch (resolveError) {
+                console.error('Failed to resolve TradingView symbol', resolveError);
+                onResolveErrorCallback?.('resolve_error');
+              }
+            },
+            getBars: (
+              _symbolInfo: any,
+              _resolution: string,
+              periodParams: any,
+              onHistoryCallback: any,
+              onErrorCallback: any,
+            ) => {
+              try {
+                const { from, to } = periodParams ?? {};
+                const bars = [] as Array<{ time: number; open: number; high: number; low: number; close: number; volume: number }>;
+                const now = Date.now();
+                const start = typeof from === 'number' ? from * 1000 : now - 1000 * 60 * 60 * 24;
+                const end = typeof to === 'number' ? to * 1000 : now;
+                const step = Math.max(Math.floor((end - start) / 50), 60_000);
 
-            onHistoryCallback(bars, { noData: false });
-          },
-          subscribeBars: (symbolInfo: any, resolution: string, onRealtimeCallback: any, subscribeUID: string, onResetCacheNeededCallback: any) => {
-            console.log('Subscribe bars:', symbolInfo, resolution, subscribeUID);
-            // Mock real-time data
-            const interval = setInterval(() => {
-              const now = Date.now();
-              const basePrice = 100000 + Math.sin(now * 0.0001) * 10000;
-              const open = basePrice + (Math.random() - 0.5) * 100;
-              const close = open + (Math.random() - 0.5) * 200;
-              const high = Math.max(open, close) + Math.random() * 50;
-              const low = Math.min(open, close) - Math.random() * 50;
-              const volume = Math.random() * 100;
+                for (let t = start; t <= end; t += step) {
+                  const base = Math.sin(t / 1000000) * 5 + 50;
+                  const open = base + Math.random();
+                  const close = open + (Math.random() - 0.5) * 2;
+                  const high = Math.max(open, close) + Math.random() * 2;
+                  const low = Math.min(open, close) - Math.random() * 2;
+                  const volume = Math.abs(Math.random() * 1000);
+                  bars.push({ time: Math.floor(t / 1000), open, high, low, close, volume });
+                }
 
-              onRealtimeCallback({
-                time: now,
-                open: open,
-                high: high,
-                low: low,
-                close: close,
-                volume: volume,
-              });
-            }, 5000);
+                onHistoryCallback(bars, { noData: false });
+              } catch (barsError) {
+                console.error('Failed to generate mock bars', barsError);
+                onErrorCallback?.(barsError);
+              }
+            },
+            subscribeBars: (
+              _symbolInfo: any,
+              _resolution: string,
+              onRealtimeCallback: any,
+              subscribeUID: string,
+              _onResetCacheNeededCallback: any,
+            ) => {
+              const interval = window.setInterval(() => {
+                const time = Math.floor(Date.now() / 1000);
+                const base = Math.sin(Date.now() / 1000000) * 5 + 50;
+                const open = base + Math.random();
+                const close = open + (Math.random() - 0.5) * 2;
+                const high = Math.max(open, close) + Math.random() * 2;
+                const low = Math.min(open, close) - Math.random() * 2;
+                const volume = Math.abs(Math.random() * 1000);
+                onRealtimeCallback({ time, open, high, low, close, volume });
+              }, 5000);
 
-            // Store interval for cleanup
-            (widget as any)._intervals = (widget as any)._intervals || {};
-            (widget as any)._intervals[subscribeUID] = interval;
+              (widget as any)._intervals = (widget as any)._intervals || {};
+              (widget as any)._intervals[subscribeUID] = interval;
+            },
+            unsubscribeBars: (_subscribeUID: string) => {
+              const intervals = (widget as any)._intervals;
+              if (!intervals) return;
+              const interval = intervals[_subscribeUID];
+              if (interval) {
+                clearInterval(interval);
+                delete intervals[_subscribeUID];
+              }
+            },
           },
-          unsubscribeBars: (subscribeUID: string) => {
-            console.log('Unsubscribe bars:', subscribeUID);
-            if ((widget as any)._intervals && (widget as any)._intervals[subscribeUID]) {
-              clearInterval((widget as any)._intervals[subscribeUID]);
-              delete (widget as any)._intervals[subscribeUID];
-            }
+          overrides: {
+            'paneProperties.background': '#0b0b0f',
+            'paneProperties.vertGridProperties.color': '#1a1a1a',
+            'paneProperties.horzGridProperties.color': '#1a1a1a',
+            'symbolWatermarkProperties.transparency': 90,
+            'scalesProperties.textColor': '#9aa0a6',
+            'mainSeriesProperties.candleStyle.upColor': '#26a69a',
+            'mainSeriesProperties.candleStyle.downColor': '#ef5350',
+            'mainSeriesProperties.candleStyle.borderUpColor': '#26a69a',
+            'mainSeriesProperties.candleStyle.borderDownColor': '#ef5350',
+            'mainSeriesProperties.candleStyle.wickUpColor': '#26a69a',
+            'mainSeriesProperties.candleStyle.wickDownColor': '#ef5350',
           },
-        },
-        width: width || '100%',
-        height: height,
-        locale: 'en',
-        disabled_features: [
-          'use_localstorage_for_settings',
-          'volume_force_overlay',
-          'create_volume_indicator_by_default',
-          'main_series_scale_menu',
-          'header_compare',
-          'header_symbol_search',
-          'symbol_search_hot_key',
-          'compare_symbol',
-          'display_market_status',
-          'header_widget_dom_node',
-        ],
-        enabled_features: [
-          'hide_left_toolbar',
-          'hide_legend',
-          'hide_side_toolbar',
-        ],
-        autosize: true,
-        theme: 'dark',
-        style: '1',
-        toolbar_bg: '#1e1e1e',
-        loading_screen: { backgroundColor: 'transparent', foregroundColor: '#ccc' },
-        overrides: {
-          'paneProperties.background': '#0b0b0f',
-          'paneProperties.vertGridProperties.color': '#1a1a1a',
-          'paneProperties.horzGridProperties.color': '#1a1a1a',
-          'symbolWatermarkProperties.transparency': 90,
-          'scalesProperties.textColor': '#9aa0a6',
-          'mainSeriesProperties.candleStyle.upColor': '#26a69a',
-          'mainSeriesProperties.candleStyle.downColor': '#ef5350',
-          'mainSeriesProperties.candleStyle.borderUpColor': '#26a69a',
-          'mainSeriesProperties.candleStyle.borderDownColor': '#ef5350',
-          'mainSeriesProperties.candleStyle.wickUpColor': '#26a69a',
-          'mainSeriesProperties.candleStyle.wickDownColor': '#ef5350',
-        },
         });
 
         widgetRef.current = widget;
-        console.log('TradingView widget created successfully');
-      } catch (err) {
-        console.error('Error creating TradingView widget:', err);
-        setError('Failed to create chart');
-        // Retry after a delay if widget creation fails
-        setTimeout(() => {
-          if (containerRef.current && containerRef.current.parentNode) {
-            console.log('Retrying widget creation...');
-            initializeWidget();
-          }
-        }, 1000);
+      } catch (widgetError) {
+        console.error('TradingView widget initialization failed:', widgetError);
+        setError('Failed to render TradingView chart');
       }
     };
 
-    // Add a longer delay to ensure DOM is fully ready
-    const timer = setTimeout(() => {
-      initializeWidget();
-    }, 500); // Increased delay for better reliability
+    initializeWidget();
+
+    const resizeObserver = new ResizeObserver(() => {
+      if (!isLoading && !error) {
+        initializeWidget();
+      }
+    });
+
+    if (containerRef.current) {
+      resizeObserver.observe(containerRef.current);
+    }
 
     return () => {
-      clearTimeout(timer);
+      resizeObserver.disconnect();
       if (widgetRef.current) {
         widgetRef.current.remove();
         widgetRef.current = null;
       }
     };
-  }, [symbol, timeframe, height, width, isLoading, error]);
+  }, [error, isLoading, symbol, timeframe]);
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-full">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-accent mx-auto mb-2"></div>
-          <p className="text-muted text-sm">Loading chart...</p>
-        </div>
+      <div className="flex h-full items-center justify-center">
+        <div className="text-sm text-muted">Loading chart...</div>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="flex items-center justify-center h-full">
-        <div className="text-center">
-          <div className="mb-2">
-            <svg className="h-12 w-12 text-muted mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
-            </svg>
-          </div>
-          <p className="text-muted text-sm">{error}</p>
-          <button 
-            onClick={() => {
-              setError(null);
-              setIsLoading(true);
-              // Trigger a re-initialization
-              setTimeout(() => {
-                setIsLoading(false);
-              }, 100);
-            }}
-            className="mt-2 text-accent hover:text-accent/80 text-sm px-3 py-1 border border-accent rounded hover:bg-accent/10"
-          >
-            Retry
-          </button>
-        </div>
+      <div className="flex h-full items-center justify-center">
+        <div className="text-sm text-red-400">{error}</div>
       </div>
     );
   }
 
   return (
-    <div className="h-full w-full">
-      <div 
-        ref={containerRef} 
-        className="w-full h-full"
-        data-min-height={height}
-        data-min-height-px={height}
-      />
+    <div className={className} style={{ minHeight: height }}>
+      <div ref={containerRef} className="h-full w-full" />
     </div>
   );
 }
+
+export default TradingViewChart;

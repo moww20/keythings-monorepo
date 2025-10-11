@@ -30,6 +30,7 @@ export interface KeetaProvider {
   requestCapabilities?: (capabilities: string[]) => Promise<unknown>;
   sendTransaction?: (transaction: unknown) => Promise<unknown>;
   switchNetwork?: (network: string) => Promise<void>;
+  signMessage?: (message: string) => Promise<string>;
   on?: (event: string, listener: (...args: unknown[]) => void) => void;
   removeListener?: (event: string, listener: (...args: unknown[]) => void) => void;
   off?: (event: string, listener: (...args: unknown[]) => void) => void;
