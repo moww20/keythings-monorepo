@@ -32,9 +32,9 @@ export default function Navbar(): React.JSX.Element {
 
   const menuItems: MenuItem[] = [
     { path: '/home', label: 'Dashboard', icon: LayoutDashboard, enabled: true },
+    { path: '/trade', label: 'Trade', icon: TrendingUp, enabled: true },
     { path: null, label: 'Open Orders', icon: ShoppingCart, enabled: false },
     { path: null, label: 'OTC Swap', icon: ArrowLeftRight, enabled: false },
-    { path: '/trade', label: 'Trade', icon: TrendingUp, enabled: true },
     { path: null, label: 'Launchpad', icon: Rocket, enabled: false },
     { path: null, label: 'NFT Marketplace', icon: Image, enabled: false },
     { path: null, label: 'Liquidity Pools (Beta)', icon: Droplets, enabled: false },
@@ -305,7 +305,7 @@ export default function Navbar(): React.JSX.Element {
         </div>
         
         {/* Bottom Row - Navigation Tabs */}
-        <div className="flex items-center gap-1 overflow-x-auto">
+        <div className="flex items-center justify-between overflow-x-auto gap-1">
           {menuItems.map((item, index) => {
             const Icon = item.icon;
             const active = item.path ? isActive(item.path) : false;
@@ -315,12 +315,12 @@ export default function Navbar(): React.JSX.Element {
                 key={index}
                 onClick={() => handleMenuClick(item)}
                 disabled={!item.enabled}
-                className={`flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg whitespace-nowrap transition-all duration-200 ${
+                className={`flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg whitespace-nowrap ${
                   !item.enabled
                     ? 'text-muted/40 cursor-not-allowed opacity-50'
                     : active
                     ? 'text-foreground bg-surface-strong border border-hairline'
-                    : 'text-muted hover:text-foreground hover:bg-surface hover:border hover:border-hairline'
+                    : 'text-muted hover:text-foreground hover:bg-white/10'
                 }`}
               >
                 <Icon className="h-4 w-4 flex-shrink-0" />

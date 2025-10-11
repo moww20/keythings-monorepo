@@ -61,21 +61,23 @@ export default function HomePage() {
     setIsLoadingPrice(true);
     try {
       const priceData = await window.keeta?.getKtaPrice?.();
+      console.log('Price data received:', priceData);
       if (priceData) {
         // Transform the API response to match our expected structure
         // The API returns { price: number } but we need the full structure
-        setKtaPriceData({
-          usd: priceData.price || 0,
-          usd_24h_change: 0, // API doesn't provide this yet
-          usd_market_cap: undefined, // API doesn't provide this yet
-          usd_24h_vol: undefined, // API doesn't provide this yet
-        });
+        const transformedData = {
+          usd: priceData.usd || 0,
+          usd_24h_change: priceData.usd_24h_change || 0,
+          usd_market_cap: priceData.usd_market_cap,
+          usd_24h_vol: priceData.usd_24h_vol,
+        };
+        console.log('Setting KTA price data:', transformedData);
+        setKtaPriceData(transformedData);
+      } else {
+        console.log('No price data received from wallet API');
       }
     } catch (error) {
       console.error('Failed to fetch KTA price:', error);
-      // Set a fallback price data structure to prevent undefined errors
-      // For development, you can uncomment the line below to show mock data
-      // setKtaPriceData({ price: 0.1234 });
       setKtaPriceData(null);
     } finally {
       setIsLoadingPrice(false);
@@ -353,7 +355,7 @@ export default function HomePage() {
   }
 
   return (
-    <div className="h-full flex flex-col">
+    <div className="h-full flex flex-col gap-1">
       {showLockedNotification && (
         <div className="fixed top-4 left-1/2 transform -translate-x-1/2 z-50 animate-slide-down">
           <div className="glass rounded-lg border border-hairline shadow-[0_20px_60px_rgba(6,7,10,0.45)] p-4 max-w-md">
@@ -527,15 +529,17 @@ export default function HomePage() {
                           // eslint-disable-next-line @next/next/no-img-element
                           <img src={token.icon} alt={token.ticker} className="w-8 h-8 rounded-full object-cover" />
                         ) : token.fallbackIcon ? (
-                          <div 
-                            className="w-8 h-8 rounded-full flex items-center justify-center"
-                            style={{ 
-                              backgroundColor: token.fallbackIcon.bgColor,
-                              color: token.fallbackIcon.textColor
-                            }}
-                          >
-                            <span className="text-xs font-bold">{token.fallbackIcon.letter}</span>
-                          </div>
+                          <>
+                            <div
+                              className="w-8 h-8 rounded-full flex items-center justify-center"
+                              style={{ 
+                                backgroundColor: token.fallbackIcon.bgColor,
+                                color: token.fallbackIcon.textColor
+                              } as React.CSSProperties}
+                            >
+                              <span className="text-xs font-bold">{token.fallbackIcon.letter}</span>
+                            </div>
+                          </>
                         ) : (
                           <div className="w-8 h-8 rounded-full bg-gray-500 flex items-center justify-center">
                             <span className="text-white text-xs font-bold">?</span>
