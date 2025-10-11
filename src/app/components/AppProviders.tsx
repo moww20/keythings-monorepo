@@ -1,13 +1,16 @@
-'use client';
+"use client";
 
-import { useState } from 'react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import WalletEventsManager from './WalletEventsManager';
-import WalletAutoConnect from './WalletAutoConnect';
-import { WalletProvider } from '../contexts/WalletContext';
-import { isRateLimitedError } from '../lib/wallet-throttle';
+import type { ReactNode } from "react";
+import { useState } from "react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import type { QueryClientConfig } from "@tanstack/react-query";
 
-const defaultQueryOptions = {
+import WalletEventsManager from "./WalletEventsManager";
+import WalletAutoConnect from "./WalletAutoConnect";
+import { WalletProvider } from "../contexts/WalletContext";
+import { isRateLimitedError } from "../lib/wallet-throttle";
+
+const defaultQueryOptions: QueryClientConfig["defaultOptions"] = {
   queries: {
     staleTime: 60 * 1000,
     gcTime: 5 * 60 * 1000,
@@ -32,7 +35,11 @@ const defaultQueryOptions = {
   },
 };
 
-export default function AppProviders({ children }) {
+interface AppProvidersProps {
+  children: ReactNode;
+}
+
+export default function AppProviders({ children }: AppProvidersProps) {
   const [queryClient] = useState(() => new QueryClient({
     defaultOptions: defaultQueryOptions,
   }));

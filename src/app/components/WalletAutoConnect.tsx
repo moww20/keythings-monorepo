@@ -1,7 +1,8 @@
-'use client';
+"use client";
 
-import { useEffect, useRef } from 'react';
-import { useWalletData } from '../hooks/useWalletData';
+import { useEffect, useRef } from "react";
+
+import { useWalletData } from "../hooks/useWalletData";
 
 /**
  * WalletAutoConnect - Automatically attempts to connect to the wallet on page load

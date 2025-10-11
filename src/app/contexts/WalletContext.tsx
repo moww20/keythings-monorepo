@@ -1,9 +1,17 @@
-'use client';
+"use client";
 
-import { createContext, useContext, useMemo } from 'react';
-import { useWalletData } from '../hooks/useWalletData';
+import { createContext, useContext, useMemo } from "react";
+import type { ReactNode } from "react";
 
-const WalletContext = createContext(null);
+import { useWalletData, type WalletData } from "../hooks/useWalletData";
+
+interface WalletContextValue extends WalletData {
+  isDisconnected: boolean;
+  isLocked: boolean;
+  isUnlocked: boolean;
+}
+
+const WalletContext = createContext<WalletContextValue | null>(null);
 
 /**
  * WalletProvider - Centralized wallet state management
@@ -11,11 +19,15 @@ const WalletContext = createContext(null);
  * Provides a single source of truth for wallet state across the entire app.
  * Wraps the useWalletData hook and provides clear state indicators.
  */
-export function WalletProvider({ children }) {
+interface WalletProviderProps {
+  children: ReactNode;
+}
+
+export function WalletProvider({ children }: WalletProviderProps) {
   const walletData = useWalletData();
 
   // Derive clear, unambiguous state indicators
-  const contextValue = useMemo(() => {
+  const contextValue = useMemo<WalletContextValue>(() => {
     const { wallet } = walletData;
 
     // Three distinct states:
@@ -41,11 +53,7 @@ export function WalletProvider({ children }) {
     };
   }, [walletData]);
 
-  return (
-    <WalletContext.Provider value={contextValue}>
-      {children}
-    </WalletContext.Provider>
-  );
+  return <WalletContext.Provider value={contextValue}>{children}</WalletContext.Provider>;
 }
 
 /**
@@ -63,13 +71,13 @@ export function WalletProvider({ children }) {
  * @property {boolean} isWalletLoading - True if wallet is loading
  * @property {boolean} isTokensLoading - True if tokens are loading
  */
-export function useWallet() {
+export function useWallet(): WalletContextValue {
   const context = useContext(WalletContext);
-  
+
   if (!context) {
-    throw new Error('useWallet must be used within a WalletProvider');
+    throw new Error("useWallet must be used within a WalletProvider");
   }
-  
+
   return context;
 }
 
