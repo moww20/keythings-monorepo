@@ -89,7 +89,7 @@ export default function SettingsPage() {
   }
 
   return (
-    <>
+    <div className="h-full flex flex-col">
       {/* Settings Content */}
             <div className="space-y-8">
               {/* Profile Section */}
@@ -223,6 +223,6 @@ export default function SettingsPage() {
                 </div>
               </div>
       </div>
-    </>
+    </div>
   );
 }

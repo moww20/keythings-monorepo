@@ -5,12 +5,20 @@ import { AnimatePresence, motion } from "framer-motion";
 import { createPortal } from "react-dom";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { BookOpen, Wallet, LogOut } from "lucide-react";
+import { BookOpen, Wallet, LogOut, LayoutDashboard, ShoppingCart, ArrowLeftRight, TrendingUp, Rocket, Image, Droplets, UserCircle, Settings } from "lucide-react";
 import { siX, siDiscord } from "simple-icons";
 
 import type { KeetaProvider } from "@/types/keeta";
 import SearchBar from "./SearchBar";
 import ThemeToggle from "./ThemeToggle";
+
+interface MenuItem {
+  path: string | null;
+  label: string;
+  icon: React.ComponentType<any>;
+  enabled: boolean;
+  onClick?: () => void;
+}
 
 export default function Navbar(): React.JSX.Element {
   const pathname = usePathname();
@@ -19,6 +27,30 @@ export default function Navbar(): React.JSX.Element {
   const [mounted, setMounted] = useState(false);
   const [walletConnected, setWalletConnected] = useState(false);
   const [walletAddress, setWalletAddress] = useState<string | null>(null);
+
+  const isActive = (path: string) => pathname === path;
+
+  const menuItems: MenuItem[] = [
+    { path: '/home', label: 'Dashboard', icon: LayoutDashboard, enabled: true },
+    { path: null, label: 'Open Orders', icon: ShoppingCart, enabled: false },
+    { path: null, label: 'OTC Swap', icon: ArrowLeftRight, enabled: false },
+    { path: '/trade', label: 'Trade', icon: TrendingUp, enabled: true },
+    { path: null, label: 'Launchpad', icon: Rocket, enabled: false },
+    { path: null, label: 'NFT Marketplace', icon: Image, enabled: false },
+    { path: null, label: 'Liquidity Pools (Beta)', icon: Droplets, enabled: false },
+    { path: null, label: 'Account', icon: UserCircle, enabled: false },
+    { path: null, label: 'Settings', icon: Settings, enabled: false },
+  ];
+
+  const handleMenuClick = (item: MenuItem) => {
+    if (!item.enabled) return;
+    
+    if (item.path) {
+      router.push(item.path);
+    } else if (item.onClick) {
+      item.onClick();
+    }
+  };
 
   const redirectToHome = useCallback(() => {
     if (typeof window === "undefined") return;
@@ -193,16 +225,18 @@ export default function Navbar(): React.JSX.Element {
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.6 }}
     >
-      <div className="max-w-7xl mx-auto px-6 py-4 grid grid-cols-3 items-center">
-        <div className="flex items-center gap-6">
-          <Link href="/" className="flex items-center gap-3">
-            <span className="text-lg tracking-tight font-semibold text-foreground">Keythings Wallet</span>
-          </Link>
-        </div>
-        <div className="flex items-center justify-center">
-          <SearchBar />
-        </div>
-        <div className="flex items-center justify-end gap-3 flex-shrink-0">
+      <div className="max-w-7xl mx-auto px-6 py-4">
+        {/* Top Row - Logo, Search, Actions */}
+        <div className="grid grid-cols-3 items-center mb-3">
+          <div className="flex items-center gap-6">
+            <Link href="/" className="flex items-center gap-3">
+              <span className="text-lg tracking-tight font-semibold text-foreground">Keythings Wallet</span>
+            </Link>
+          </div>
+          <div className="flex items-center justify-center">
+            <SearchBar />
+          </div>
+          <div className="flex items-center justify-end gap-3 flex-shrink-0">
           <a
             href="https://x.com/keythings"
             target="_blank"
@@ -267,6 +301,34 @@ export default function Navbar(): React.JSX.Element {
               <path d="M4 7h16M4 12h16M4 17h16" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
             </svg>
           </button>
+          </div>
+        </div>
+        
+        {/* Bottom Row - Navigation Tabs */}
+        <div className="flex items-center gap-1 overflow-x-auto">
+          {menuItems.map((item, index) => {
+            const Icon = item.icon;
+            const active = item.path ? isActive(item.path) : false;
+            
+            return (
+              <button
+                key={index}
+                onClick={() => handleMenuClick(item)}
+                disabled={!item.enabled}
+                className={`flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg whitespace-nowrap transition-all duration-200 ${
+                  !item.enabled
+                    ? 'text-muted/40 cursor-not-allowed opacity-50'
+                    : active
+                    ? 'text-foreground bg-surface-strong border border-hairline'
+                    : 'text-muted hover:text-foreground hover:bg-surface hover:border hover:border-hairline'
+                }`}
+              >
+                <Icon className="h-4 w-4 flex-shrink-0" />
+                <span className="hidden sm:inline">{item.label}</span>
+                <span className="sm:hidden">{item.label.split(' ')[0]}</span>
+              </button>
+            );
+          })}
         </div>
       </div>
       {mounted && createPortal(

@@ -7,6 +7,8 @@ import type { ProcessedToken } from "../lib/token-utils";
 
 interface KtaPriceData {
   usd: number;
+  usd_market_cap?: number;
+  usd_24h_vol?: number;
 }
 
 interface EstimatedBalanceProps {
@@ -64,6 +66,18 @@ export default function EstimatedBalance({
     return decimalPart ? `${formattedInteger}.${decimalPart}` : formattedInteger;
   };
 
+  const formatLargeNumber = (num: number): string => {
+    if (num >= 1e9) {
+      return (num / 1e9).toFixed(2) + 'B';
+    } else if (num >= 1e6) {
+      return (num / 1e6).toFixed(2) + 'M';
+    } else if (num >= 1e3) {
+      return (num / 1e3).toFixed(2) + 'K';
+    } else {
+      return num.toFixed(2);
+    }
+  };
+
   return (
     <div className="mb-8 glass rounded-lg p-6 border border-hairline shadow-[0_20px_60px_rgba(6,7,10,0.45)]">
       <div className="flex items-center justify-between mb-4">
@@ -76,6 +90,18 @@ export default function EstimatedBalance({
             </svg>
           </button>
         </div>
+        
+        {/* Market Cap and Volume */}
+        {ktaPriceData && (ktaPriceData.usd_market_cap || ktaPriceData.usd_24h_vol) && (
+          <div className="flex items-center gap-4 text-sm text-muted">
+            {ktaPriceData.usd_market_cap && (
+              <span>MC: ${formatLargeNumber(ktaPriceData.usd_market_cap)}</span>
+            )}
+            {ktaPriceData.usd_24h_vol && (
+              <span>24h Vol: ${formatLargeNumber(ktaPriceData.usd_24h_vol)}</span>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-6">
@@ -116,21 +142,21 @@ export default function EstimatedBalance({
         <div className="flex flex-col sm:flex-row gap-3">
           <button 
             onClick={onReceive}
-            className="inline-flex items-center justify-center gap-2 bg-accent text-white px-6 py-2.5 rounded-md font-medium hover:bg-accent/90 hover:shadow-lg transition-all duration-200 min-w-[120px]"
+            className="inline-flex items-center justify-center gap-2 bg-black text-white border border-gray-700 px-6 py-2.5 rounded-md font-medium hover:bg-gray-900 hover:border-gray-600 transition-colors duration-200 min-w-[120px]"
           >
             <ArrowDownLeft className="h-4 w-4" />
             Receive
           </button>
           <button 
             onClick={onSend}
-            className="inline-flex items-center justify-center gap-2 bg-surface border border-hairline text-foreground px-6 py-2.5 rounded-md font-medium hover:bg-surface-strong hover:border-soft transition-all duration-200 min-w-[120px]"
+            className="inline-flex items-center justify-center gap-2 bg-black text-white border border-gray-700 px-6 py-2.5 rounded-md font-medium hover:bg-gray-900 hover:border-gray-600 transition-colors duration-200 min-w-[120px]"
           >
             <ArrowUpRight className="h-4 w-4" />
             Send
           </button>
           <button 
             onClick={onTransfer}
-            className="inline-flex items-center justify-center gap-2 bg-surface border border-hairline text-foreground px-6 py-2.5 rounded-md font-medium hover:bg-surface-strong hover:border-soft transition-all duration-200 min-w-[120px]"
+            className="inline-flex items-center justify-center gap-2 bg-black text-white border border-gray-700 px-6 py-2.5 rounded-md font-medium hover:bg-gray-900 hover:border-gray-600 transition-colors duration-200 min-w-[120px]"
           >
             <ArrowRightLeft className="h-4 w-4" />
             Transfer

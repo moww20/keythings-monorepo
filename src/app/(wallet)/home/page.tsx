@@ -26,12 +26,18 @@ export default function HomePage() {
   const [activeTab, setActiveTab] = useState('holding');
   const [showLockedNotification, setShowLockedNotification] = useState(false);
   const [showNullState, setShowNullState] = useState(false);
-  const [ktaPriceData, setKtaPriceData] = useState<{ price: number } | null>(null);
+  const [ktaPriceData, setKtaPriceData] = useState<{ 
+    usd: number; 
+    usd_24h_change: number;
+    usd_market_cap?: number;
+    usd_24h_vol?: number;
+  } | null>(null);
   const [isLoadingPrice, setIsLoadingPrice] = useState(false);
   const isFetchingPrice = useRef(false);
 
   const isWalletBusy = isWalletLoading || isWalletFetching;
   const tokensLoading = isTokensLoading || isTokensFetching;
+
 
   const handleReceive = useCallback(() => {
     console.log('Receive clicked');
@@ -46,17 +52,31 @@ export default function HomePage() {
   }, []);
 
   const fetchKtaPrice = useCallback(async () => {
-    if (!window.keeta || isFetchingPrice.current) return;
+    if (!window.keeta || isFetchingPrice.current) {
+      console.debug('fetchKtaPrice: Skipping - no wallet or already fetching');
+      return;
+    }
     
     isFetchingPrice.current = true;
     setIsLoadingPrice(true);
     try {
       const priceData = await window.keeta?.getKtaPrice?.();
       if (priceData) {
-        setKtaPriceData(priceData);
+        // Transform the API response to match our expected structure
+        // The API returns { price: number } but we need the full structure
+        setKtaPriceData({
+          usd: priceData.price || 0,
+          usd_24h_change: 0, // API doesn't provide this yet
+          usd_market_cap: undefined, // API doesn't provide this yet
+          usd_24h_vol: undefined, // API doesn't provide this yet
+        });
       }
     } catch (error) {
-      console.debug('Failed to fetch KTA price:', error);
+      console.error('Failed to fetch KTA price:', error);
+      // Set a fallback price data structure to prevent undefined errors
+      // For development, you can uncomment the line below to show mock data
+      // setKtaPriceData({ price: 0.1234 });
+      setKtaPriceData(null);
     } finally {
       setIsLoadingPrice(false);
       isFetchingPrice.current = false;
@@ -333,7 +353,7 @@ export default function HomePage() {
   }
 
   return (
-    <>
+    <div className="h-full flex flex-col">
       {showLockedNotification && (
         <div className="fixed top-4 left-1/2 transform -translate-x-1/2 z-50 animate-slide-down">
           <div className="glass rounded-lg border border-hairline shadow-[0_20px_60px_rgba(6,7,10,0.45)] p-4 max-w-md">
@@ -370,13 +390,17 @@ export default function HomePage() {
           onSend={handleSend}
           onTransfer={handleTransfer}
           tokens={tokens}
-          ktaPriceData={ktaPriceData?.price ? { usd: ktaPriceData.price } : null}
+          ktaPriceData={ktaPriceData?.usd ? { 
+            usd: ktaPriceData.usd,
+            usd_market_cap: ktaPriceData.usd_market_cap,
+            usd_24h_vol: ktaPriceData.usd_24h_vol
+          } : null}
         />
       </div>
 
       <div className="glass rounded-lg border border-hairline shadow-[0_20px_60px_rgba(6,7,10,0.45)] flex-1 flex flex-col overflow-hidden">
         <div className="p-6 border-b border-hairline flex-shrink-0">
-          <h2 className="text-xl font-bold text-foreground">Markets</h2>
+          <h2 className="text-xl font-bold text-foreground">Assets</h2>
         </div>
 
         <div className="px-6 py-4 border-b border-hairline flex-shrink-0">
@@ -390,28 +414,28 @@ export default function HomePage() {
               Holding
             </button>
             <button 
-              onClick={() => setActiveTab('hot')}
+              onClick={() => setActiveTab('storage')}
               className={`font-medium border-b-2 pb-2 transition-colors ${
-                activeTab === 'hot' ? 'text-accent border-accent' : 'text-muted hover:text-foreground border-transparent'
+                activeTab === 'storage' ? 'text-accent border-accent' : 'text-muted hover:text-foreground border-transparent'
               }`}
             >
-              Hot
+              Storage
             </button>
             <button 
-              onClick={() => setActiveTab('new-listing')}
+              onClick={() => setActiveTab('nfts')}
               className={`font-medium border-b-2 pb-2 transition-colors ${
-                activeTab === 'new-listing' ? 'text-accent border-accent' : 'text-muted hover:text-foreground border-transparent'
+                activeTab === 'nfts' ? 'text-accent border-accent' : 'text-muted hover:text-foreground border-transparent'
               }`}
             >
-              New Listing
+              NFTs
             </button>
             <button 
-              onClick={() => setActiveTab('favorite')}
+              onClick={() => setActiveTab('others')}
               className={`font-medium border-b-2 pb-2 transition-colors ${
-                activeTab === 'favorite' ? 'text-accent border-accent' : 'text-muted hover:text-foreground border-transparent'
+                activeTab === 'others' ? 'text-accent border-accent' : 'text-muted hover:text-foreground border-transparent'
               }`}
             >
-              Favorite
+              Others
             </button>
           </div>
         </div>
@@ -453,7 +477,7 @@ export default function HomePage() {
                   </div>
                 </th>
                 <th className="text-right py-4 px-6 text-muted text-sm font-medium">
-                  Trade
+                  Actions
                 </th>
               </tr>
             </thead>
@@ -528,13 +552,13 @@ export default function HomePage() {
                       <div className="text-muted text-sm">{token.ticker}</div>
                     </td>
                     <td className="py-4 px-6 text-right">
-                      {token.ticker === 'KTA' && ktaPriceData?.price ? (
+                      {token.ticker === 'KTA' && ktaPriceData?.usd ? (
                         <>
                           <div className="text-foreground font-medium">
-                            ${ktaPriceData.price.toFixed(4)}
+                            ${ktaPriceData.usd.toFixed(4)}
                           </div>
                           <div className="text-muted text-sm">
-                            ${(parseFloat(token.formattedAmount.replace(/,/g, '')) * ktaPriceData.price).toFixed(2)}
+                            ${(parseFloat(token.formattedAmount.replace(/,/g, '')) * ktaPriceData.usd).toFixed(2)}
                           </div>
                         </>
                       ) : isLoadingPrice && token.ticker === 'KTA' ? (
@@ -549,15 +573,17 @@ export default function HomePage() {
                       )}
                     </td>
                     <td className="py-4 px-6 text-right font-medium">
-                      {token.ticker === 'KTA' && ktaPriceData?.price ? (
-                        <span className="text-muted">N/A</span>
+                      {token.ticker === 'KTA' && ktaPriceData?.usd_24h_change ? (
+                        <span className={ktaPriceData.usd_24h_change >= 0 ? 'text-green-500' : 'text-red-500'}>
+                          {ktaPriceData.usd_24h_change >= 0 ? '+' : ''}{ktaPriceData.usd_24h_change.toFixed(2)}%
+                        </span>
                       ) : (
                         <span className="text-muted">—</span>
                       )}
                     </td>
                     <td className="py-4 px-6 text-right">
                       <button className="text-accent hover:text-foreground transition-colors">
-                        Send
+                        Trade
                       </button>
                     </td>
                   </tr>
@@ -567,6 +593,6 @@ export default function HomePage() {
           </table>
         </div>
       </div>
-    </>
+    </div>
   );
 }

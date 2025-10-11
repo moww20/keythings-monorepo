@@ -107,7 +107,7 @@ export default function AssetsPage() {
   }
 
   return (
-    <>
+    <div className="h-full flex flex-col">
       {/* Estimated Balance Component */}
             <EstimatedBalance
               balance={wallet.balance}
@@ -413,6 +413,6 @@ export default function AssetsPage() {
                 </table>
               </div>
             </div>
-    </>
+    </div>
   );
 }

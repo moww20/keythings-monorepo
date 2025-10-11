@@ -13,6 +13,7 @@ export default function ConditionalFooter(): React.JSX.Element | null {
     "/home",
     "/assets",
     "/settings",
+    "/trade",
     // Add other dashboard/admin pages here if needed
   ];
 
