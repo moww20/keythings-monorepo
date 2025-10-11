@@ -12,7 +12,7 @@ const compat = new FlatCompat({
 const eslintConfig = [
   ...compat.extends("next/core-web-vitals"),
   {
-    files: ["src/app/docs/**/*.js"],
+    files: ["src/app/docs/**/*.{ts,tsx}"],
     rules: {
       "react/no-unescaped-entities": "off"
     }

@@ -1,20 +1,26 @@
-"use client"
+"use client";
 
-import Link from "next/link"
-import { usePathname } from "next/navigation"
-import { docsItems, flatDocs } from "../toc/items"
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 
-function findCrumbs(pathname) {
-  for (const section of docsItems) {
-    const child = (section.children || []).find(c => pathname.startsWith(c.href))
-    if (child) return [ { href: "/docs", label: "Docs" }, { href: child.href, label: child.label } ]
-  }
-  return [ { href: "/docs", label: "Docs" } ]
+import { docsItems } from "../toc/items";
+
+interface BreadcrumbItem {
+  href: string;
+  label: string;
 }
 
-export default function Breadcrumbs() {
-  const pathname = usePathname()
-  const crumbs = findCrumbs(pathname)
+function findCrumbs(pathname: string): BreadcrumbItem[] {
+  for (const section of docsItems) {
+    const child = section.children.find((entry) => pathname.startsWith(entry.href));
+    if (child) return [{ href: "/docs", label: "Docs" }, { href: child.href, label: child.label }];
+  }
+  return [{ href: "/docs", label: "Docs" }];
+}
+
+export default function Breadcrumbs(): JSX.Element {
+  const pathname = usePathname();
+  const crumbs = findCrumbs(pathname);
   return (
     <nav aria-label="Breadcrumb" className="mb-4 text-sm">
       <ol className="flex items-center gap-2 text-[--color-muted]">

@@ -1,45 +1,47 @@
-"use client"
+"use client";
 
-import { useEffect, useState } from "react"
-import { Sun, Moon } from "lucide-react"
+import { useEffect, useState } from "react";
+import { Sun, Moon } from "lucide-react";
 
-function getSystemPrefersDark() {
-  if (typeof window === "undefined") return true
-  return window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches
+type ThemeMode = "light" | "dark";
+
+function getSystemPrefersDark(): boolean {
+  if (typeof window === "undefined") return true;
+  return Boolean(window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches);
 }
 
-function applyTheme(theme) {
-  if (typeof document === "undefined") return
-  const el = document.documentElement
+function applyTheme(theme: ThemeMode): void {
+  if (typeof document === "undefined") return;
+  const el = document.documentElement;
   if (theme === "light") {
-    el.setAttribute("data-theme", "light")
+    el.setAttribute("data-theme", "light");
   } else {
-    el.removeAttribute("data-theme")
+    el.removeAttribute("data-theme");
   }
 }
 
-export default function ThemeToggle() {
-  const [theme, setTheme] = useState("dark")
+export default function ThemeToggle(): JSX.Element {
+  const [theme, setTheme] = useState<ThemeMode>("dark");
 
   useEffect(() => {
-    const saved = typeof window !== "undefined" ? localStorage.getItem("theme") : null
-    const initial = saved || (getSystemPrefersDark() ? "dark" : "light")
-    setTheme(initial)
-    applyTheme(initial)
-  }, [])
+    const saved = typeof window !== "undefined" ? localStorage.getItem("theme") : null;
+    const initial = (saved === "light" || saved === "dark") ? saved : (getSystemPrefersDark() ? "dark" : "light");
+    setTheme(initial);
+    applyTheme(initial);
+  }, []);
 
   useEffect(() => {
-    applyTheme(theme)
+    applyTheme(theme);
     if (typeof window !== "undefined") {
-      localStorage.setItem("theme", theme)
+      localStorage.setItem("theme", theme);
     }
-  }, [theme])
+  }, [theme]);
 
-  const isDark = theme === "dark"
+  const isDark = theme === "dark";
 
   const trackClass = isDark
     ? "bg-white/5 hover:bg-white/10 border-white/10"
-    : "bg-[#e9edf5] hover:bg-[#dce2ee] border-black/5 [html[data-theme='light']_&]:border-[#c7cedd]"
+    : "bg-[#e9edf5] hover:bg-[#dce2ee] border-black/5 [html[data-theme='light']_&]:border-[#c7cedd]";
 
   return (
     <button
@@ -71,7 +73,7 @@ export default function ThemeToggle() {
         </span>
       </span>
     </button>
-  )
+  );
 }
 
 

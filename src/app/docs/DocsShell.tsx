@@ -1,24 +1,35 @@
-"use client"
+"use client";
 
-import { useEffect, useState } from "react"
-import { usePathname } from "next/navigation"
-import DocsSidebar from "./toc/DocsSidebar"
-import RightToc from "./toc/RightToc"
-import DocNav from "./components/DocNav"
-import Breadcrumbs from "./components/Breadcrumbs"
-import HeadingAnchors from "./components/HeadingAnchors"
-import ScrollRestorer from "./components/ScrollRestorer"
+import { useEffect, useState } from "react";
+import type { ReactNode } from "react";
+import { usePathname } from "next/navigation";
 
-export default function DocsShell({ children }) {
-  const [mobileOpen, setMobileOpen] = useState(false)
-  const pathname = usePathname()
+import DocsSidebar from "./toc/DocsSidebar";
+import RightToc from "./toc/RightToc";
+import DocNav from "./components/DocNav";
+import Breadcrumbs from "./components/Breadcrumbs";
+import HeadingAnchors from "./components/HeadingAnchors";
+import ScrollRestorer from "./components/ScrollRestorer";
 
-  useEffect(() => { setMobileOpen(false) }, [pathname])
+interface DocsShellProps {
+  children: ReactNode;
+}
+
+export default function DocsShell({ children }: DocsShellProps): JSX.Element {
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const pathname = usePathname();
+
   useEffect(() => {
-    const onKey = (e) => { if (e.key === 'Escape') setMobileOpen(false) }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [])
+    setMobileOpen(false);
+  }, [pathname]);
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setMobileOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   return (
     <div>
@@ -43,7 +54,7 @@ export default function DocsShell({ children }) {
 
       {mobileOpen && (
         <div className="fixed inset-0 z-[90] xl:hidden">
-          <button className="absolute inset-0 bg-black/50 backdrop-blur-sm" aria-label="Close" onClick={()=>setMobileOpen(false)} />
+          <button className="absolute inset-0 bg-black/50 backdrop-blur-sm" aria-label="Close" onClick={() => setMobileOpen(false)} />
           <div className="absolute left-0 top-0 bottom-0 w-48 max-w-[85vw] bg-[#0b0b0b] shadow-2xl hairline-r overflow-auto scroll-y-subtle p-2">
             <DocsSidebar />
           </div>

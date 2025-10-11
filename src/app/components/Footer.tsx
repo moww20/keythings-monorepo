@@ -1,12 +1,22 @@
-"use client"
+"use client";
 
-import Link from "next/link"
-import { siX, siDiscord, siGithub } from "simple-icons"
+import Link from "next/link";
+import { siX, siDiscord, siGithub } from "simple-icons";
 
-export default function Footer() {
-  const currentYear = new Date().getFullYear()
+interface FooterLink {
+  href: string;
+  label: string;
+}
 
-  const footerSections = [
+interface FooterSection {
+  title: string;
+  links: FooterLink[];
+}
+
+export default function Footer(): JSX.Element {
+  const currentYear = new Date().getFullYear();
+
+  const footerSections: FooterSection[] = [
     {
       title: "Product",
       links: [
@@ -14,7 +24,7 @@ export default function Footer() {
         { href: "/docs/developer/integration", label: "Integration Guide" },
         { href: "/docs/developer/api-reference", label: "API Reference" },
         { href: "/docs/security", label: "Security" },
-      ]
+      ],
     },
     {
       title: "Resources",
@@ -23,7 +33,7 @@ export default function Footer() {
         { href: "/docs/tutorials/setup", label: "Tutorials" },
         { href: "/docs/nostr-basics", label: "Keeta Network Basics" },
         { href: "https://github.com/moww20/keythings-extension-wallet", label: "GitHub Repository" },
-      ]
+      ],
     },
     {
       title: "Support",
@@ -32,7 +42,7 @@ export default function Footer() {
         { href: "/docs/licensing", label: "Licensing" },
         { href: "mailto:support@keythings.wallet", label: "Contact Support" },
         { href: "https://chromewebstore.google.com/", label: "Chrome Web Store" },
-      ]
+      ],
     },
     {
       title: "Community",
@@ -41,9 +51,9 @@ export default function Footer() {
         { href: "https://discord.gg/keythings", label: "Discord" },
         { href: "https://github.com/moww20/keythings-extension-wallet", label: "GitHub" },
         { href: "/docs/authentication", label: "Authentication" },
-      ]
-    }
-  ]
+      ],
+    },
+  ];
 
   return (
     <footer className="relative border-t border-white/10 bg-gradient-to-b from-white/[0.02] to-transparent">
@@ -146,5 +156,5 @@ export default function Footer() {
         </div>
       </div>
     </footer>
-  )
+  );
 }

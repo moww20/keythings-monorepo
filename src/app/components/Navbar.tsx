@@ -1,185 +1,190 @@
-"use client"
+"use client";
 
-import { useCallback, useEffect, useState } from "react"
-import { AnimatePresence, motion } from "framer-motion"
-import { createPortal } from "react-dom"
-import Link from "next/link"
-import { usePathname, useRouter } from "next/navigation"
-import { BookOpen, Wallet, LogOut } from "lucide-react"
-// Connect button removed from header per request
-import SearchBar from "./SearchBar"
-import ThemeToggle from "./ThemeToggle"
-import { siX, siDiscord } from "simple-icons"
+import { useCallback, useEffect, useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
+import { createPortal } from "react-dom";
+import Link from "next/link";
+import { usePathname, useRouter } from "next/navigation";
+import { BookOpen, Wallet, LogOut } from "lucide-react";
+import { siX, siDiscord } from "simple-icons";
 
-export default function Navbar() {
-  const pathname = usePathname()
-  const router = useRouter()
-  const [mobileOpen, setMobileOpen] = useState(false)
-  const [mounted, setMounted] = useState(false)
-  const [walletConnected, setWalletConnected] = useState(false)
-  const [walletAddress, setWalletAddress] = useState(null)
+import type { KeetaProvider } from "@/types/keeta";
+import SearchBar from "./SearchBar";
+import ThemeToggle from "./ThemeToggle";
+
+export default function Navbar(): JSX.Element {
+  const pathname = usePathname();
+  const router = useRouter();
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const [mounted, setMounted] = useState(false);
+  const [walletConnected, setWalletConnected] = useState(false);
+  const [walletAddress, setWalletAddress] = useState<string | null>(null);
 
   const redirectToHome = useCallback(() => {
-    if (typeof window === "undefined") return
+    if (typeof window === "undefined") return;
     if (window.location.pathname !== "/home") {
-      router.push("/home")
+      router.push("/home");
     }
-  }, [router])
+  }, [router]);
 
   const checkWalletConnection = useCallback(async () => {
-    if (typeof window === 'undefined') return
+    if (typeof window === "undefined") return;
 
     // Simple detection like test-api.html
-    if (typeof window.keeta !== 'undefined') {
-      const provider = window.keeta
+    if (typeof window.keeta !== "undefined") {
+      const provider = window.keeta;
+      if (!provider) {
+        return;
+      }
+
       try {
-        const accounts = await provider.getAccounts()
+        const accounts = await provider.getAccounts();
         if (accounts && accounts.length > 0) {
-          setWalletConnected(true)
-          setWalletAddress(accounts[0])
-          redirectToHome()
+          setWalletConnected(true);
+          setWalletAddress(accounts[0] ?? null);
+          redirectToHome();
         }
       } catch (error) {
-        console.log('No wallet connected')
+        console.log("No wallet connected", error);
       }
     }
-  }, [redirectToHome])
+  }, [redirectToHome]);
 
   useEffect(() => {
     // Close mobile menu on route change
-    setMobileOpen(false)
-  }, [pathname])
+    setMobileOpen(false);
+  }, [pathname]);
 
   useEffect(() => {
-    const onKey = (e) => {
-      if (e.key === "Escape") setMobileOpen(false)
-    }
-    window.addEventListener("keydown", onKey)
-    return () => window.removeEventListener("keydown", onKey)
-  }, [])
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setMobileOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   useEffect(() => {
-    setMounted(true)
+    setMounted(true);
 
     const timeoutId = setTimeout(() => {
-      void checkWalletConnection()
-    }, 1000)
+      void checkWalletConnection();
+    }, 1000);
 
-    let detachListeners = null
+    let detachListeners: (() => void) | null = null;
 
-    if (typeof window !== 'undefined' && window.keeta) {
-      const provider = window.keeta
+    if (typeof window !== "undefined" && window.keeta) {
+      const provider = window.keeta;
 
-      const handleAccountsChanged = (accounts) => {
+      const handleAccountsChanged = (accounts: string[]) => {
         if (accounts && accounts.length > 0) {
-          setWalletConnected(true)
-          setWalletAddress(accounts[0])
-          redirectToHome()
+          setWalletConnected(true);
+          setWalletAddress(accounts[0] ?? null);
+          redirectToHome();
         } else {
-          setWalletConnected(false)
-          setWalletAddress(null)
+          setWalletConnected(false);
+          setWalletAddress(null);
         }
-      }
+      };
 
       const handleChainChanged = () => {
-        void checkWalletConnection()
-      }
+        void checkWalletConnection();
+      };
 
       const handleDisconnect = () => {
-        setWalletConnected(false)
-        setWalletAddress(null)
-      }
+        setWalletConnected(false);
+        setWalletAddress(null);
+      };
 
-      provider.on?.('accountsChanged', handleAccountsChanged)
-      provider.on?.('chainChanged', handleChainChanged)
-      provider.on?.('disconnect', handleDisconnect)
+      provider.on?.("accountsChanged", handleAccountsChanged);
+      provider.on?.("chainChanged", handleChainChanged);
+      provider.on?.("disconnect", handleDisconnect);
 
       detachListeners = () => {
-        const remove = provider.removeListener?.bind(provider) || provider.off?.bind(provider)
+        const remove = provider.removeListener?.bind(provider) ?? provider.off?.bind(provider);
         if (remove) {
-          remove('accountsChanged', handleAccountsChanged)
-          remove('chainChanged', handleChainChanged)
-          remove('disconnect', handleDisconnect)
+          remove("accountsChanged", handleAccountsChanged);
+          remove("chainChanged", handleChainChanged);
+          remove("disconnect", handleDisconnect);
         }
-      }
+      };
     }
 
     return () => {
-      clearTimeout(timeoutId)
-      detachListeners?.()
-    }
-  }, [checkWalletConnection, redirectToHome])
+      clearTimeout(timeoutId);
+      detachListeners?.();
+    };
+  }, [checkWalletConnection, redirectToHome]);
 
-  const waitForWallet = async (maxAttempts = 20) => {
-    for (let i = 0; i < maxAttempts; i++) {
-      if (typeof window.keeta !== 'undefined') {
-        return window.keeta
+  const waitForWallet = async (maxAttempts = 20): Promise<KeetaProvider | null> => {
+    for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+      if (typeof window.keeta !== "undefined" && window.keeta) {
+        return window.keeta;
       }
-      await new Promise(resolve => setTimeout(resolve, 100))
+      await new Promise((resolve) => setTimeout(resolve, 100));
     }
-    return null
-  }
+    return null;
+  };
 
-  const connectWallet = async () => {
-    if (typeof window === 'undefined') return
-    
+  const connectWallet = async (): Promise<void> => {
+    if (typeof window === "undefined") return;
+
     // Wait for wallet to be available (give extension time to inject)
-    const provider = await waitForWallet()
-    
+    const provider = await waitForWallet();
+
     if (!provider) {
-      const retry = confirm(
-        'Keythings Wallet not detected.\n\n' +
-        'If you have the extension installed, please refresh the page.\n\n' +
-        'Otherwise, click OK to visit the installation page.'
-      )
+      const retry = window.confirm(
+        "Keythings Wallet not detected.\n\n"
+          + "If you have the extension installed, please refresh the page.\n\n"
+          + "Otherwise, click OK to visit the installation page.",
+      );
       if (retry) {
-        window.open('https://docs.keythings.xyz/docs/introduction', '_blank')
+        window.open("https://docs.keythings.xyz/docs/introduction", "_blank");
       }
-      return
+      return;
     }
 
     try {
       // Request connection
-      const accounts = await provider.requestAccounts()
+      const accounts = await provider.requestAccounts();
       if (accounts && accounts.length > 0) {
-        setWalletConnected(true)
-        setWalletAddress(accounts[0])
-        redirectToHome()
+        setWalletConnected(true);
+        setWalletAddress(accounts[0] ?? null);
+        redirectToHome();
       }
     } catch (error) {
-      console.error('Connection failed:', error)
-      if (error.message.includes('User rejected') || error.message.includes('rejected')) {
-        alert('Connection request rejected. Please approve the connection in your wallet.')
+      console.error("Connection failed:", error);
+      if (error instanceof Error && (error.message.includes("User rejected") || error.message.includes("rejected"))) {
+        window.alert("Connection request rejected. Please approve the connection in your wallet.");
       } else {
-        alert('Failed to connect wallet. Please try again.')
+        window.alert("Failed to connect wallet. Please try again.");
       }
     }
-  }
+  };
 
-  const disconnectWallet = async () => {
+  const disconnectWallet = async (): Promise<void> => {
     try {
       // Clear local state
-      setWalletConnected(false)
-      setWalletAddress(null)
-      
+      setWalletConnected(false);
+      setWalletAddress(null);
+
       // If the wallet provider has a disconnect method, call it
-      if (typeof window !== 'undefined' && window.keeta) {
+      if (typeof window !== "undefined" && window.keeta) {
         // Most wallets don't have a programmatic disconnect, but we can clear the state
         // The user would need to disconnect from the extension itself for full disconnect
-        console.log('Wallet disconnected from app')
+        console.log("Wallet disconnected from app");
       }
     } catch (error) {
-      console.error('Error disconnecting wallet:', error)
+      console.error("Error disconnecting wallet:", error);
     }
-  }
+  };
 
-  const formatAddress = (address) => {
-    if (!address) return ''
-    return `${address.slice(0, 6)}...${address.slice(-4)}`
-  }
+  const formatAddress = (address: string | null): string => {
+    if (!address) return "";
+    return `${address.slice(0, 6)}...${address.slice(-4)}`;
+  };
 
-  const linkClass = (href) =>
-    `px-3 py-1.5 rounded-full text-sm transition ${pathname.startsWith(href) ? "bg-white/10 text-foreground" : "text-foreground/90 hover:bg-white/5"}`
+  const linkClass = (href: string): string =>
+    `px-3 py-1.5 rounded-full text-sm transition ${pathname.startsWith(href) ? "bg-white/10 text-foreground" : "text-foreground/90 hover:bg-white/5"}`;
   return (
     <motion.nav
       className="fixed top-0 left-0 right-0 z-50 backdrop-blur-sm hairline-b"
