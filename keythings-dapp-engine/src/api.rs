@@ -175,7 +175,7 @@ async fn withdraw(
         .ledger
         .debit_total(&request.user_id, &request.token, amount);
 
-    let enqueued: WithdrawEnqueued = state.settlement.enqueue(request);
+    let enqueued: WithdrawEnqueued = state.settlement.enqueue(request, amount);
     HttpResponse::Accepted().json(enqueued)
 }
 

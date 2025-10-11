@@ -22,7 +22,7 @@ async fn main() -> std::io::Result<()> {
     if !keeta::healthcheck(&keeta_client).await {
         log::warn!("keeta rpc healthcheck failed");
     }
-    let settlement_queue = settlement::SettlementQueue::new(keeta_client.clone());
+    let settlement_queue = settlement::SettlementQueue::new(keeta_client.clone(), ledger.clone());
     let reconciler = reconcile::Reconciler::new(ledger.clone());
 
     let state = AppState::new(ledger, engine, settlement_queue, reconciler, keeta_client);
