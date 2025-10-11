@@ -189,13 +189,15 @@ export function useWebSocket(market: string | null | undefined) {
       wsRef.current = socket;
       setStatus('connecting');
     } catch (connectionError) {
-      console.error('Failed to establish WebSocket connection', connectionError);
+      // WebSocket server not available - using fallback data
+      console.warn('WebSocket connection unavailable, using fallback data:', connectionError);
       setStatus('error');
       return () => undefined;
     }
 
     socket.onopen = () => {
       if (!isMounted) return;
+      console.log('WebSocket connected to', DEFAULT_WS_URL);
       setStatus('open');
       const channels = [`orderbook:${market}`, `trades:${market}`];
       if (publicKey) {
@@ -252,14 +254,19 @@ export function useWebSocket(market: string | null | undefined) {
       }
     };
 
-    socket.onerror = (event) => {
+    socket.onerror = () => {
       if (!isMounted) return;
-      console.error('WebSocket error', event);
+      // Silently handle WebSocket errors - using fallback data
+      // This prevents console spam when WebSocket server is not available
       setStatus('error');
     };
 
-    socket.onclose = () => {
+    socket.onclose = (event) => {
       if (!isMounted) return;
+      // Only log close events if the connection was previously established
+      if (wsRef.current && event.code !== 1000) {
+        console.log('WebSocket connection closed unexpectedly:', event.code, event.reason);
+      }
       setStatus('closed');
     };
 

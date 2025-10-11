@@ -57,7 +57,7 @@ export default function DocsSidebar(): React.JSX.Element {
               <button
                 onClick={() => setOpen((current) => ({ ...current, [section.label]: !current[section.label] }))}
                 className="w-full text-left px-3 py-2.5 rounded-lg hover:bg-white/5 flex items-center justify-between group"
-                aria-expanded={open[section.label] ? "true" : "false"}
+                aria-expanded={open[section.label]}
               >
                 <span className="text-sm font-semibold text-foreground group-hover:text-foreground transition-colors">{section.label}</span>
                 <svg className={`w-3.5 h-3.5 transition-transform duration-200 text-foreground/60 group-hover:text-foreground/80 ${open[section.label] ? 'rotate-180' : ''}`} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M8 10l4 4 4-4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>

@@ -4,7 +4,7 @@ import { useMemo } from 'react';
 
 import type { TradeHistoryEntry } from '@/app/types/trading';
 
-interface TradeHistoryProps {
+interface VirtualizedTradeHistoryProps {
   trades?: TradeHistoryEntry[];
   limit?: number;
 }
@@ -35,7 +35,10 @@ function formatQuantity(quantity: number) {
   return quantity.toFixed(4);
 }
 
-export function TradeHistory({ trades = [], limit = 40 }: TradeHistoryProps): React.JSX.Element {
+export function VirtualizedTradeHistory({ 
+  trades = [], 
+  limit = 100
+}: VirtualizedTradeHistoryProps): React.JSX.Element {
   const items = useMemo(() => {
     return trades
       .slice(0, limit)
@@ -54,21 +57,25 @@ export function TradeHistory({ trades = [], limit = 40 }: TradeHistoryProps): Re
 
   return (
     <div className="flex h-full flex-col">
-      <div className="grid grid-cols-[1fr_1fr_1fr_1fr] gap-1 px-2 pb-2 text-xs font-medium text-muted">
+      {/* Header */}
+      <div className="grid grid-cols-[70px_1fr_1fr_1fr] gap-1 px-2 pb-2 text-xs font-medium text-muted">
         <span className="truncate">Time</span>
         <span className="text-right truncate">Price</span>
         <span className="text-right truncate">Amount</span>
         <span className="text-right truncate">Total</span>
       </div>
+
+      {/* Scrollable List */}
       <div className="flex-1 min-h-0 overflow-y-auto">
-        <div className="space-y-1">
+        <div className="space-y-0">
           {items.map((trade) => {
             const total = trade.price * trade.quantity;
             const color = trade.side === 'buy' ? 'text-green-400' : 'text-red-400';
+            
             return (
               <div
                 key={`${trade.id}-${trade.timestamp}`}
-                className="grid grid-cols-[1fr_1fr_1fr_1fr] gap-1 rounded px-2 py-1 text-xs font-mono transition-colors hover:bg-surface"
+                className="grid grid-cols-[70px_1fr_1fr_1fr] gap-1 px-2 py-1 text-xs font-mono transition-colors hover:bg-surface"
               >
                 <span className="truncate text-muted" title={formatTime(trade.timestamp)}>
                   {formatTime(trade.timestamp)}
@@ -91,4 +98,4 @@ export function TradeHistory({ trades = [], limit = 40 }: TradeHistoryProps): Re
   );
 }
 
-export default TradeHistory;
+export default VirtualizedTradeHistory;

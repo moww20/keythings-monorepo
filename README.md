@@ -56,6 +56,80 @@ Example:
 bun run dev
 ```
 
+## Keythings dApp Engine (Backend)
+
+The backend trading engine is built with Rust and Actix-web, providing high-performance order matching, settlement, and Keeta blockchain integration.
+
+### Running with Docker
+
+All backend services run in Docker containers. Navigate to the `docker/` directory to manage the engine:
+
+```bash
+cd docker
+```
+
+| Command | Description |
+| --- | --- |
+| `docker compose up --build -d` | Build and start the engine in detached mode |
+| `docker compose down` | Stop and remove the engine container |
+| `docker compose restart` | Restart the running engine |
+| `docker compose logs -f` | View live logs from the engine |
+| `docker compose logs --tail=50` | View last 50 log lines |
+| `docker ps` | Check running containers status |
+
+### Backend Configuration
+
+- **Container Name**: `keythings_dapp_engine`
+- **Port**: `8080` (exposed on `localhost:8080`)
+- **API Base URL**: `http://localhost:8080/api`
+- **WebSocket URL**: `ws://localhost:8080/ws/trade`
+- **Health Check**: `http://localhost:8080/api/health`
+
+### Available API Endpoints
+
+| Method | Endpoint | Description |
+| --- | --- | --- |
+| GET | `/api/health` | Health check endpoint |
+| GET | `/api/auth/challenge/{pubkey}` | Get authentication challenge |
+| POST | `/api/auth/session` | Create authentication session |
+| GET | `/api/balances/{user_id}` | List user balances |
+| POST | `/api/internal/credit` | Credit balance (internal) |
+| POST | `/api/orders` | Place a new order |
+| DELETE | `/api/orders/{order_id}` | Cancel an order |
+| POST | `/api/withdrawals` | Request withdrawal |
+| GET | `/api/deposit/{user_id}/{token}` | Get deposit address |
+
+### WebSocket Real-Time Data
+
+The backend exposes a WebSocket endpoint at `ws://localhost:8080/ws/trade` for real-time trading data.
+
+**Subscription Message:**
+```json
+{
+  "type": "subscribe",
+  "channels": [
+    "orderbook:KTA/USDT",
+    "trades:KTA/USDT",
+    "orders:USER_PUBLIC_KEY"
+  ]
+}
+```
+
+**Message Types:**
+- `orderbook` - Real-time order book updates with bids and asks
+- `trade` - New trade execution notifications
+- `order_update` - User order status changes
+
+### Backend Architecture
+
+The engine includes:
+- **Ledger System** - Account and balance management
+- **Trading Engine** - Order matching and execution (16 workers)
+- **Settlement Queue** - Transaction settlement processing
+- **Reconciler** - Account reconciliation
+- **Keeta Client** - Integration with Keeta blockchain RPC
+- **WebSocket Server** - Real-time data streaming for trading clients
+
 ## Project structure
 
 ```

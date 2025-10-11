@@ -5,6 +5,7 @@ mod ledger;
 mod models;
 mod reconcile;
 mod settlement;
+mod websocket;
 
 use crate::api::AppState;
 use crate::engine::start_engine;
@@ -30,6 +31,7 @@ async fn main() -> std::io::Result<()> {
         App::new()
             .wrap(Logger::default())
             .app_data(web::Data::new(state.clone()))
+            .route("/ws/trade", web::get().to(websocket::ws_trade))
             .configure(api::configure)
     })
     .bind(("0.0.0.0", 8080))?

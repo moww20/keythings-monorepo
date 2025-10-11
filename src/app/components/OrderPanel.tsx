@@ -2,13 +2,12 @@
 
 import { useMemo, useState } from 'react';
 import { z } from 'zod';
-import type { ZodType } from 'zod';
 
 import type { OrderRequestPayload, OrderSide, OrderType } from '@/app/types/trading';
 
 const decimalRegex = /^\d+(\.\d+)?$/;
 
-const OrderSchema: ZodType<OrderRequestPayload> = z.object({
+const OrderSchema = z.object({
   market: z.string().min(1),
   side: z.enum(['buy', 'sell']),
   price: z.string().regex(decimalRegex, 'Invalid price'),
@@ -58,7 +57,7 @@ export function OrderPanel({ pair, onPlaceOrder, disabled = false }: OrderPanelP
 
     setIsSubmitting(true);
     try {
-      await onPlaceOrder(result.data);
+      await onPlaceOrder(result.data as OrderRequestPayload);
       setPrice('');
       setQuantity('');
     } catch (submissionError) {

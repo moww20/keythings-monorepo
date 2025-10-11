@@ -1,11 +1,13 @@
 [package]
-name = "keeta-backend"
+name = "keythings-dapp-engine"
 version = "0.1.0"
 edition = "2021"
 
 [dependencies]
 actix-web = "4"
 actix-rt = "2"
+actix-web-actors = "4"
+actix = "0.13"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 uuid = { version = "1", features = ["v4"] }
@@ -15,3 +17,4 @@ thiserror = "1"
 env_logger = "0.11"
 log = "0.4"
 futures = "0.3"
+chrono = "0.4"

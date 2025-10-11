@@ -47,7 +47,7 @@ export default function ThemeToggle(): React.JSX.Element {
     <button
       type="button"
       aria-label="Toggle color mode"
-      aria-pressed={isDark}
+      aria-pressed={isDark ? "true" : "false"}
       className={`relative inline-flex h-9 w-16 shrink-0 items-center rounded-full border border-transparent px-1.5 transition-colors duration-200 ${trackClass}`}
       onClick={() => setTheme(isDark ? "light" : "dark")}
     >

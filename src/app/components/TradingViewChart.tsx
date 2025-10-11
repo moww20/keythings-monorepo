@@ -109,12 +109,21 @@ export function TradingViewChart({
       }
 
       const container = containerRef.current;
-      if (!container || !container.parentNode) {
+      if (!container) {
+        console.warn('TradingView container not found, retrying...');
+        setTimeout(initializeWidget, 100);
+        return;
+      }
+
+      if (!container.parentNode) {
+        console.warn('TradingView container not mounted, retrying...');
+        setTimeout(initializeWidget, 100);
         return;
       }
 
       const rect = container.getBoundingClientRect();
       if (rect.width === 0 || rect.height === 0) {
+        console.warn('TradingView container has no dimensions, retrying...');
         setTimeout(initializeWidget, 200);
         return;
       }
@@ -269,7 +278,10 @@ export function TradingViewChart({
       }
     };
 
-    initializeWidget();
+    // Add a small delay to ensure the DOM is fully ready
+    const timeoutId = setTimeout(() => {
+      initializeWidget();
+    }, 100);
 
     const resizeObserver = new ResizeObserver(() => {
       if (!isLoading && !error) {
@@ -282,6 +294,7 @@ export function TradingViewChart({
     }
 
     return () => {
+      clearTimeout(timeoutId);
       resizeObserver.disconnect();
       if (widgetRef.current) {
         widgetRef.current.remove();
@@ -307,7 +320,7 @@ export function TradingViewChart({
   }
 
   return (
-    <div className={className} style={{ minHeight: height }}>
+    <div className={`${className} min-h-[400px]`}>
       <div ref={containerRef} className="h-full w-full" />
     </div>
   );

@@ -6,7 +6,7 @@ import { TradingPairSelector, DEFAULT_TRADING_PAIRS } from '@/app/components/Tra
 import { TradingViewChart, type TradingViewTimeframe } from '@/app/components/TradingViewChart';
 import { OrderBook } from '@/app/components/OrderBook';
 import { OrderPanel, type OrderParams } from '@/app/components/OrderPanel';
-import { TradeHistory } from '@/app/components/TradeHistory';
+import { VirtualizedTradeHistory } from '@/app/components/VirtualizedTradeHistory';
 import { UserOrders } from '@/app/components/UserOrders';
 import { useWallet } from '@/app/contexts/WalletContext';
 import { useDexApi } from '@/app/hooks/useDexApi';
@@ -63,42 +63,41 @@ export default function TradePage(): React.JSX.Element {
   return (
     <div className="min-h-screen bg-[color:var(--background)] px-6 py-8">
       <div className="mx-auto flex w-full max-w-[1440px] flex-col gap-6">
-        <header className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <h1 className="text-4xl font-bold text-foreground">Trade</h1>
-            <p className="text-sm text-muted">
-              Execute limit and market orders with real-time order book visibility.
-            </p>
-          </div>
-          <TradingPairSelector selected={selectedPair} onChange={handlePairChange} />
-        </header>
 
         {marketDetails && (
-          <section className="grid grid-cols-2 gap-4 rounded-lg border border-hairline bg-surface p-4 text-sm text-muted md:grid-cols-4">
-            <div>
-              <p className="text-xs uppercase tracking-wide">Last Price</p>
-              <p className="text-lg font-semibold text-foreground">
-                ${marketDetails.price.toLocaleString('en-US', { minimumFractionDigits: 4, maximumFractionDigits: 4 })}
-              </p>
-            </div>
-            <div>
-              <p className="text-xs uppercase tracking-wide">24h Change</p>
-              <p className={`text-lg font-semibold ${marketDetails.changePercent24h >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                {marketDetails.changePercent24h >= 0 ? '+' : ''}
-                {marketDetails.changePercent24h.toFixed(2)}%
-              </p>
-            </div>
-            <div>
-              <p className="text-xs uppercase tracking-wide">24h High</p>
-              <p className="text-lg font-semibold text-foreground">
-                ${marketDetails.high24h.toLocaleString('en-US', { minimumFractionDigits: 4, maximumFractionDigits: 4 })}
-              </p>
-            </div>
-            <div>
-              <p className="text-xs uppercase tracking-wide">24h Volume</p>
-              <p className="text-lg font-semibold text-foreground">
-                {marketDetails.volume24h.toLocaleString('en-US', { maximumFractionDigits: 0 })}
-              </p>
+          <section className="glass rounded-lg border border-hairline p-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-6">
+                <h2 className="text-lg font-semibold text-foreground">Markets</h2>
+                <TradingPairSelector selected={selectedPair} onChange={handlePairChange} />
+              </div>
+              <div className="grid grid-cols-2 gap-4 text-sm text-muted sm:grid-cols-4">
+                <div>
+                  <p className="text-xs uppercase tracking-wide">Last Price</p>
+                  <p className="text-sm font-semibold text-foreground">
+                    ${marketDetails.price.toLocaleString('en-US', { minimumFractionDigits: 4, maximumFractionDigits: 4 })}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs uppercase tracking-wide">24h Change</p>
+                  <p className={`text-sm font-semibold ${marketDetails.changePercent24h >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                    {marketDetails.changePercent24h >= 0 ? '+' : ''}
+                    {marketDetails.changePercent24h.toFixed(2)}%
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs uppercase tracking-wide">24h High</p>
+                  <p className="text-sm font-semibold text-foreground">
+                    ${marketDetails.high24h.toLocaleString('en-US', { minimumFractionDigits: 4, maximumFractionDigits: 4 })}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs uppercase tracking-wide">24h Volume</p>
+                  <p className="text-sm font-semibold text-foreground">
+                    {marketDetails.volume24h.toLocaleString('en-US', { maximumFractionDigits: 0 })}
+                  </p>
+                </div>
+              </div>
             </div>
           </section>
         )}
@@ -148,23 +147,29 @@ export default function TradePage(): React.JSX.Element {
           </aside>
 
           <section className="col-span-12 lg:col-span-4">
-            <div className="glass rounded-lg border border-hairline p-4">
+            <div className="glass flex h-96 flex-col rounded-lg border border-hairline p-4">
               <h2 className="mb-4 text-lg font-semibold text-foreground">Place Order</h2>
-              <OrderPanel pair={selectedPair} onPlaceOrder={handlePlaceOrder} disabled={!isConnected} />
+              <div className="flex-1">
+                <OrderPanel pair={selectedPair} onPlaceOrder={handlePlaceOrder} disabled={!isConnected} />
+              </div>
             </div>
           </section>
 
           <section className="col-span-12 lg:col-span-4">
-            <div className="glass rounded-lg border border-hairline p-4">
+            <div className="glass flex h-96 flex-col rounded-lg border border-hairline p-4">
               <h2 className="mb-4 text-lg font-semibold text-foreground">Recent Trades</h2>
-              <TradeHistory trades={trades} />
+              <div className="flex-1">
+                <VirtualizedTradeHistory trades={trades} />
+              </div>
             </div>
           </section>
 
           <section className="col-span-12 lg:col-span-4">
-            <div className="glass rounded-lg border border-hairline p-4">
+            <div className="glass flex h-96 flex-col rounded-lg border border-hairline p-4">
               <h2 className="mb-4 text-lg font-semibold text-foreground">Your Orders</h2>
-              <UserOrders orders={userOrders} onCancelOrder={handleCancelOrder} />
+              <div className="flex-1">
+                <UserOrders orders={userOrders} onCancelOrder={handleCancelOrder} />
+              </div>
             </div>
           </section>
         </div>

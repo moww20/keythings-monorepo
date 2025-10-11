@@ -5,6 +5,15 @@ import { Wallet } from 'lucide-react';
 import EstimatedBalance from '../../components/EstimatedBalance';
 import { useWallet } from '../../contexts/WalletContext';
 
+function getTokenIconStyle(bgColor: string, textColor: string): React.CSSProperties {
+  return {
+    '--bg-color': bgColor,
+    '--text-color': textColor,
+    backgroundColor: 'var(--bg-color)',
+    color: 'var(--text-color)'
+  } as React.CSSProperties;
+}
+
 export default function HomePage() {
   const {
     wallet,
@@ -62,14 +71,14 @@ export default function HomePage() {
     try {
       const priceData = await window.keeta?.getKtaPrice?.();
       console.log('Price data received:', priceData);
-      if (priceData) {
+      if (priceData && priceData.price) {
         // Transform the API response to match our expected structure
-        // The API returns { price: number } but we need the full structure
+        // The API returns { price: number } so we map it to our structure
         const transformedData = {
-          usd: priceData.usd || 0,
-          usd_24h_change: priceData.usd_24h_change || 0,
-          usd_market_cap: priceData.usd_market_cap,
-          usd_24h_vol: priceData.usd_24h_vol,
+          usd: priceData.price,
+          usd_24h_change: 0, // Not available in current API
+          usd_market_cap: undefined,
+          usd_24h_vol: undefined,
         };
         console.log('Setting KTA price data:', transformedData);
         setKtaPriceData(transformedData);
@@ -532,10 +541,7 @@ export default function HomePage() {
                           <>
                             <div
                               className="w-8 h-8 rounded-full flex items-center justify-center"
-                              style={{ 
-                                backgroundColor: token.fallbackIcon.bgColor,
-                                color: token.fallbackIcon.textColor
-                              } as React.CSSProperties}
+                              style={getTokenIconStyle(token.fallbackIcon.bgColor || '#6aa8ff', token.fallbackIcon.textColor || '#ffffff')}
                             >
                               <span className="text-xs font-bold">{token.fallbackIcon.letter}</span>
                             </div>
