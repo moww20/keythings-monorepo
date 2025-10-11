@@ -15,6 +15,21 @@ This repository contains the marketing and product documentation site for **Keyt
 - [Bun](https://bun.sh) 1.1+ (recommended for faster installs and script execution)
 - Node.js 20 or later (18+ should work, but 20 LTS is recommended for Next.js 15)
 
+## Development Workflow
+
+This project uses **RAG (Retrieval-Augmented Generation)** with the **Keeta SDK documentation** to ensure correct implementation patterns:
+
+- 📚 **[RAG Development Guide](./RAG_DEVELOPMENT_GUIDE.md)** - Complete guide to RAG-powered development
+- 🔍 **[RAG Quick Reference](./RAG_QUICK_REFERENCE.md)** - Quick reference for common queries
+- 📊 **[RAG Example](./RAG_EXAMPLE_BALANCE_TRACKING.md)** - Real-world implementation example
+- ⚙️ **[AGENTS.md](./AGENTS.md)** - Complete agent rules and workflow
+
+**Quick Start:**
+1. Think about the problem
+2. Search Keeta docs via MCP (Model Context Protocol)
+3. Implement using official SDK patterns
+4. Verify Keeta alignment
+
 ## Installation
 
 Install dependencies with Bun:

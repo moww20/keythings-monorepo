@@ -575,6 +575,8 @@ Run the following before committing changes:
 ## 1. MANDATORY: Think First, Then Scan Knowledge Base
 **BEFORE starting any task, follow this process:**
 
+> 📚 **See [RAG_DEVELOPMENT_GUIDE.md](./RAG_DEVELOPMENT_GUIDE.md) for comprehensive RAG usage guide**
+
 ### Step 1: Think About the Problem
 - **Analyze the requirement** and understand what needs to be built
 - **Consider the context** and how it fits into the wallet ecosystem
@@ -606,6 +608,12 @@ Use MCP tools to search for:
 - Cross-chain interoperability features
 - Token standards and native tokenization
 - Performance requirements (400ms settlement, 10M TPS)
+
+**Quick RAG Query Examples:**
+- "Keeta SDK [feature name] implementation best practices"
+- "Keeta SDK [operation] security guidelines"
+- "Keeta SDK error handling for [feature]"
+- "Keeta SDK performance optimization for [use case]"
 
 **This two-step process is MANDATORY and must be completed before any code changes.**
 

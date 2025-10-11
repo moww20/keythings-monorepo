@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { processTokenForDisplay } from '../lib/token-utils';
 import { isRateLimitedError } from '../lib/wallet-throttle';
@@ -326,6 +326,15 @@ export function useWalletData() {
     queryClient.invalidateQueries({ queryKey: WALLET_QUERY_KEY });
     queryClient.invalidateQueries({ queryKey: ['wallet', 'tokens'] });
   }, [queryClient]);
+
+  // Reset session expired flag when wallet is successfully unlocked
+  useEffect(() => {
+    const baseWallet = walletQuery.data ?? DEFAULT_WALLET_STATE;
+    if (baseWallet.connected && !baseWallet.isLocked && baseWallet.accounts?.length > 0 && sessionExpired) {
+      console.debug('Wallet successfully unlocked, resetting session expired flag');
+      setSessionExpired(false);
+    }
+  }, [walletQuery.data, sessionExpired]);
 
   const wallet = useMemo(() => {
     const baseWallet = walletQuery.data ?? DEFAULT_WALLET_STATE;
