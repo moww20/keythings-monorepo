@@ -10,63 +10,70 @@ export const KETA_ERROR_CODES = {
   DISCONNECTED: 4900,
   CHAIN_DISCONNECTED: 4901,
   UNKNOWN_ERROR: 5000,
-};
+} as const;
 
 let lastBalanceCheck = 0;
 const BALANCE_CHECK_THROTTLE = 2000; // 2 seconds to be safe
 let pendingBalanceCheck = false; // Track if a balance check is in progress
 
-export const throttleBalanceCheck = (forceCheck = false, source = 'unknown') => {
+export const throttleBalanceCheck = (forceCheck = false, _source = "unknown"): boolean => {
   const now = Date.now();
   const timeSinceLastCheck = now - lastBalanceCheck;
-  
+
   // If there's already a balance check in progress, wait
   if (pendingBalanceCheck && !forceCheck) {
     return false;
   }
-  
+
   if (!forceCheck && timeSinceLastCheck < BALANCE_CHECK_THROTTLE) {
     return false; // Throttled
   }
-  
+
   lastBalanceCheck = now;
   pendingBalanceCheck = true;
-  
+
   // Reset pending flag after a delay to prevent it from getting stuck
   setTimeout(() => {
     pendingBalanceCheck = false;
   }, 1000);
-  
+
   return true; // Can proceed
 };
 
-export const resetThrottle = () => {
+export const resetThrottle = (): void => {
   lastBalanceCheck = 0;
   pendingBalanceCheck = false;
 };
 
-export const markBalanceCheckComplete = () => {
+export const markBalanceCheckComplete = (): void => {
   pendingBalanceCheck = false;
+};
+
+type ErrorWithOptionalCode = {
+  code?: number;
+  message?: string;
 };
 
 /**
  * Check if an error is a rate-limited error from the wallet
- * @param {Error} error - The error to check
- * @returns {boolean} True if the error is a rate-limited error
  */
-export const isRateLimitedError = (error) => {
-  if (!error) return false;
-  
+export const isRateLimitedError = (error: unknown): boolean => {
+  if (!error || typeof error !== "object") {
+    return false;
+  }
+
+  const candidate = error as ErrorWithOptionalCode;
+
   // Check by error code (most reliable)
-  if (error.code === KETA_ERROR_CODES.RATE_LIMITED) {
+  if (candidate.code === KETA_ERROR_CODES.RATE_LIMITED) {
     return true;
   }
-  
+
   // Fallback: check by message content
-  if (error.message) {
-    const message = error.message.toLowerCase();
-    return message.includes('throttled') || message.includes('rate limit');
+  if (typeof candidate.message === "string") {
+    const message = candidate.message.toLowerCase();
+    return message.includes("throttled") || message.includes("rate limit");
   }
-  
+
   return false;
 };

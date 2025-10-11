@@ -1,56 +1,65 @@
-'use client';
+"use client";
 
-import { ArrowDownLeft, ArrowUpRight, ArrowRightLeft } from 'lucide-react';
+import { ArrowDownLeft, ArrowUpRight, ArrowRightLeft } from "lucide-react";
 
-export default function EstimatedBalance({ 
-  balance, 
-  isConnecting, 
-  onConnect, 
-  onReceive, 
-  onSend, 
+import type { ProcessedToken } from "../lib/token-utils";
+
+interface KtaPriceData {
+  usd: number;
+}
+
+interface EstimatedBalanceProps {
+  balance: string | number | bigint | null;
+  isConnecting?: boolean;
+  onConnect?: () => void;
+  onReceive?: () => void;
+  onSend?: () => void;
+  onTransfer?: () => void;
+  tokens?: ProcessedToken[];
+  ktaPriceData?: KtaPriceData | null;
+}
+
+export default function EstimatedBalance({
+  balance,
+  onReceive,
+  onSend,
   onTransfer,
   tokens = [],
-  ktaPriceData = null
-}) {
-  const formatBalance = (balance) => {
-    if (balance === null) return '0.00';
-    return (Number(balance) / 10 ** 18).toFixed(2);
-  };
-
-  // Calculate total USD value across all tokens
-  const calculateTotalUsdValue = () => {
+  ktaPriceData = null,
+}: EstimatedBalanceProps): JSX.Element {
+  const calculateTotalUsdValue = (): number => {
     if (!tokens || tokens.length === 0) return 0;
-    
+
     let total = 0;
-    
-    tokens.forEach(token => {
+
+    tokens.forEach((token) => {
       // Only calculate for KTA tokens if we have price data
-      if (token.ticker === 'KTA' && ktaPriceData) {
-        const amount = parseFloat(token.formattedAmount.replace(/,/g, ''));
+      if (token.ticker === "KTA" && ktaPriceData) {
+        const amount = parseFloat(token.formattedAmount.replace(/,/g, ""));
         const tokenValue = amount * ktaPriceData.usd;
         total += tokenValue;
       }
       // Add logic for other tokens here when price data becomes available
     });
-    
+
     return total;
   };
 
   // Calculate KTA equivalent of total portfolio value
-  const calculateKtaEquivalent = () => {
+  const calculateKtaEquivalent = (): string => {
     const totalUsd = calculateTotalUsdValue();
-    
+
     if (!ktaPriceData || ktaPriceData.usd === 0) {
-      return '0.00';
+      return "0.00";
     }
-    
+
     const ktaEquivalent = totalUsd / ktaPriceData.usd;
-    
+
     // Format with commas
     const formatted = ktaEquivalent.toFixed(2);
-    const [integerPart, decimalPart] = formatted.split('.');
-    const formattedInteger = integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-    
+    const [integerPart, decimalPart] = formatted.split(".");
+    const formattedInteger = integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+
     return decimalPart ? `${formattedInteger}.${decimalPart}` : formattedInteger;
   };
 

@@ -1,11 +1,12 @@
-import Link from "next/link"
-import Image from "next/image"
+import Link from "next/link";
+import type { Metadata } from "next";
+import Image from "next/image";
 
-export const metadata = {
+export const metadata: Metadata = {
   title: "Keythings Wallet — Chrome Extension Splash",
   description:
     "Keythings Wallet delivers Keeta Network security and performance with private control, clear workflows, and confident approvals.",
-}
+};
 
 const featureHighlights = [
   {

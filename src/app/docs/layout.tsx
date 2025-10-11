@@ -1,6 +1,9 @@
-import DocsShell from "./DocsShell"
+import type { Metadata } from "next";
+import type { ReactNode } from "react";
 
-export const metadata = {
+import DocsShell from "./DocsShell";
+
+export const metadata: Metadata = {
   title: "Keythings Website Docs",
   description: "Documentation for Keythings - The world's most advanced cryptocurrency wallet.",
   openGraph: {
@@ -20,14 +23,18 @@ export const metadata = {
     description: "Documentation for Keythings - The world's most advanced cryptocurrency wallet.",
     images: ["/icons/kethingslogopng.png"],
   },
+};
+
+interface DocsLayoutProps {
+  children: ReactNode;
 }
 
-export default function DocsLayout({ children }) {
+export default function DocsLayout({ children }: DocsLayoutProps): JSX.Element {
   return (
     <main className="min-h-[80vh] max-w-7xl mx-auto px-6 py-10" role="main">
       <DocsShell>{children}</DocsShell>
     </main>
-  )
+  );
 }
 
 

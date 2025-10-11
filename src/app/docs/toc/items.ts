@@ -1,5 +1,16 @@
+export interface DocsNavItem {
+  href: string;
+  label: string;
+  description?: string;
+}
+
+export interface DocsSection {
+  label: string;
+  children: DocsNavItem[];
+}
+
 // Hierarchical structure used for sidebar, breadcrumbs, and next/prev
-export const docsItems = [
+export const docsItems: DocsSection[] = [
   {
     label: "User Guide",
     children: [
@@ -23,9 +34,9 @@ export const docsItems = [
       { href: "/docs/licensing", label: "Licensing", description: "Open source licenses and code usage." },
     ],
   },
-]
+];
 
 // Flattened list for next/prev ordering
-export const flatDocs = docsItems.flatMap(section => section.children)
+export const flatDocs: DocsNavItem[] = docsItems.flatMap((section) => section.children);
 
 

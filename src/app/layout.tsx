@@ -1,11 +1,13 @@
+import type { Metadata } from "next";
+import type { ReactNode } from "react";
+
 import "./globals.css";
 import Navbar from "./components/Navbar";
-import Footer from "./components/Footer";
-import WalletRedirector from "./components/WalletRedirector";
 import ConditionalFooter from "./components/ConditionalFooter";
 import AppProviders from "./components/AppProviders";
+import WalletRedirector from "./components/WalletRedirector";
 
-export const metadata = {
+export const metadata: Metadata = {
   title: "Keythings Wallet",
   description: "Secure non-custodial browser extension for the Keeta Network. Complete documentation and developer guides.",
   metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || "https://keythings.vercel.app"),
@@ -17,14 +19,18 @@ export const metadata = {
   openGraph: {
     title: "Keythings Wallet",
     description: "Secure non-custodial browser extension for the Keeta Network. Complete documentation and developer guides.",
-    images: [{ url: "/icons/keythings-logo.PNG" }]
-  }
+    images: [{ url: "/icons/keythings-logo.PNG" }],
+  },
 };
 
-export default function RootLayout({ children }) {
+interface RootLayoutProps {
+  children: ReactNode;
+}
+
+export default function RootLayout({ children }: RootLayoutProps) {
   return (
     <html lang="en">
-      <body className={`antialiased font-sans`}>
+      <body className="antialiased font-sans">
         <AppProviders>
           <WalletRedirector />
           <Navbar />
