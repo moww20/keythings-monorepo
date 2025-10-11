@@ -1,6 +1,6 @@
 # Keythings Wallet Documentation Site
 
-This repository contains the marketing and product documentation site for **Keythings Wallet**, a secure non-custodial browser extension for the Keeta Network. The site is built with Next.js 15 and Tailwind CSS 4, and it delivers an interactive reading experience with a persistent sidebar, contextual table of contents, breadcrumbs, search entry point, and light/dark theming.
+This repository contains the marketing and product documentation site for **Keythings Wallet**, a secure non-custodial browser extension for the Keeta Network. The site is built with Next.js 15, TypeScript, and Tailwind CSS 4, and it delivers an interactive reading experience with a persistent sidebar, contextual table of contents, breadcrumbs, search entry point, and light/dark theming.
 
 ## Features
 
@@ -8,6 +8,7 @@ This repository contains the marketing and product documentation site for **Keyt
 - **Responsive docs shell** featuring breadcrumbs, previous/next navigation, and a sticky table of contents.
 - **Animated global navigation bar** with theme toggle, external community links, and a global search trigger.
 - **Tailwind CSS 4 design system** enhanced by custom CSS tokens defined in `src/app/globals.css`.
+- **Full TypeScript typings** for components, hooks, and context, including shared Keeta SDK types in `src/types`.
 - **React component–driven documentation pages** that allow rich JSX layouts instead of static Markdown.
 
 ## Prerequisites
@@ -17,7 +18,7 @@ This repository contains the marketing and product documentation site for **Keyt
 
 ## Development Workflow
 
-This project uses **RAG (Retrieval-Augmented Generation)** with the **Keeta SDK documentation** to ensure correct implementation patterns:
+This project uses **RAG (Retrieval-Augmented Generation)** with the **Keeta SDK documentation** to ensure correct implementation patterns, and all source files are authored in TypeScript for improved safety and IDE support:
 
 - 📚 **[RAG Development Guide](./RAG_DEVELOPMENT_GUIDE.md)** - Complete guide to RAG-powered development
 - 🔍 **[RAG Quick Reference](./RAG_QUICK_REFERENCE.md)** - Quick reference for common queries
@@ -45,7 +46,7 @@ All scripts are defined in `package.json` and can be executed with `bun run <scr
 | Script | Description |
 | --- | --- |
 | `dev` | Starts the local development server at `http://localhost:3000` with hot reloading. |
-| `build` | Creates an optimized production build of the site. |
+| `build` | Creates an optimized production build of the site and runs TypeScript checks. |
 | `start` | Serves the previously built production assets. |
 | `lint` | Runs ESLint using the Next.js configuration. |
 
@@ -60,23 +61,23 @@ bun run dev
 ```
 src/
   app/
-    layout.js           # Global layout, metadata, and navbar
-    page.js             # Redirects `/` to `/docs`
+    layout.tsx          # Global layout, metadata, and navbar
+    page.tsx            # Redirects `/` to `/docs`
     globals.css         # Tailwind layer imports and custom design tokens
     components/         # Shared UI (Navbar, SearchBar, ThemeToggle, etc.)
     docs/               # All documentation routes, shell, and supporting components
-      DocsShell.js      # Wraps doc pages with sidebar, breadcrumbs, and right-hand TOC
+      DocsShell.tsx     # Wraps doc pages with sidebar, breadcrumbs, and right-hand TOC
       components/       # Breadcrumbs, doc navigation, heading anchors, scroll handling
-      toc/              # Sidebar hierarchy (`items.js`) and rendered TOC components
-      [slug]/page.js    # Individual documentation sections authored as React components
+      toc/              # Sidebar hierarchy (`items.ts`) and rendered TOC components
+      [slug]/page.tsx   # Individual documentation sections authored as React components
 public/                 # Static assets such as icons and images
 ```
 
 ## Editing documentation content
 
-1. **Create or update a page** by editing the appropriate `page.js` file under `src/app/docs/**`. Each page exports optional `metadata` for SEO/canonical URLs and returns JSX for the body content.
-2. **Update the sidebar and navigation order** in `src/app/docs/toc/items.js`. The structure defined there powers the left sidebar, breadcrumbs, and previous/next controls.
-3. **Use shared components** from `src/app/docs/components` (e.g., `DocNav`, `Breadcrumbs`, `HeadingAnchors`) to keep the reading experience consistent.
+1. **Create or update a page** by editing the appropriate `page.tsx` file under `src/app/docs/**`. Each page exports optional `metadata` for SEO/canonical URLs and returns JSX (TSX) for the body content.
+2. **Update the sidebar and navigation order** in `src/app/docs/toc/items.ts`. The structure defined there powers the left sidebar, breadcrumbs, and previous/next controls.
+3. **Use shared components** from `src/app/docs/components` (e.g., `DocNav`, `Breadcrumbs`, `HeadingAnchors`) to keep the reading experience consistent. Type definitions are colocated with each component for better editor hints.
 4. **Style rich content** with the `docs-prose` utility class, which provides typography defaults tuned for long-form documentation.
 
 ## Theming and styling
