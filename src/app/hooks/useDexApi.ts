@@ -3,9 +3,23 @@
 import { useCallback, useState } from 'react';
 
 import { useWallet } from '@/app/contexts/WalletContext';
-import type { OrderRequestPayload } from '@/app/types/trading';
+import type {
+  ApiBalanceEntry,
+  ApiDepositAddressResponse,
+  ApiLimitOrderPayload,
+  ApiWithdrawRequest,
+  OrderRequestPayload,
+} from '@/app/types/trading';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_DEX_API_URL ?? 'http://localhost:8080';
+const API_ORIGIN = (process.env.NEXT_PUBLIC_DEX_API_URL ?? 'http://localhost:8080').replace(/\/$/, '');
+const API_BASE_URL = `${API_ORIGIN}/api`;
+
+function joinApiEndpoint(endpoint: string): string {
+  if (endpoint.startsWith('http://') || endpoint.startsWith('https://')) {
+    return endpoint;
+  }
+  return `${API_BASE_URL}${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`;
+}
 
 async function parseJson<T>(response: Response): Promise<T> {
   const text = await response.text();
@@ -25,8 +39,16 @@ export function useDexApi() {
   const [token, setToken] = useState<string | null>(null);
   const [isAuthenticating, setIsAuthenticating] = useState(false);
 
+  const ensureUserId = useCallback(() => {
+    if (!publicKey) {
+      throw new Error('Connect your wallet to continue.');
+    }
+    return publicKey;
+  }, [publicKey]);
+
   const login = useCallback(async () => {
-    if (!publicKey || !signMessage) {
+    const userId = ensureUserId();
+    if (!signMessage) {
       throw new Error('Connect and unlock your wallet to continue.');
     }
 
@@ -36,10 +58,13 @@ export function useDexApi() {
 
     setIsAuthenticating(true);
     try {
-      const challengeResponse = await fetch(`${API_BASE_URL}/auth/challenge`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-      });
+      const challengeResponse = await fetch(
+        joinApiEndpoint(`/auth/challenge/${encodeURIComponent(userId)}`),
+        {
+          method: 'GET',
+          headers: { 'Content-Type': 'application/json' },
+        },
+      );
 
       if (!challengeResponse.ok) {
         throw new Error('Failed to request authentication challenge');
@@ -53,11 +78,11 @@ export function useDexApi() {
       const message = `keeta-login:${nonce}`;
       const signature = await signMessage(message);
 
-      const verifyResponse = await fetch(`${API_BASE_URL}/auth/verify`, {
+      const verifyResponse = await fetch(joinApiEndpoint('/auth/session'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          pubkey: publicKey,
+          user_id: userId,
           signature,
         }),
       });
@@ -76,7 +101,7 @@ export function useDexApi() {
     } finally {
       setIsAuthenticating(false);
     }
-  }, [isAuthenticating, publicKey, signMessage, token]);
+  }, [ensureUserId, isAuthenticating, signMessage, token]);
 
   const apiRequest = useCallback(
     async <T>(endpoint: string, options: RequestInit = {}): Promise<T> => {
@@ -86,7 +111,7 @@ export function useDexApi() {
         authToken = await login();
       }
 
-      const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+      const response = await fetch(joinApiEndpoint(endpoint), {
         ...options,
         headers: {
           'Content-Type': 'application/json',
@@ -110,34 +135,66 @@ export function useDexApi() {
   );
 
   const placeOrder = useCallback(
-    (order: OrderRequestPayload) =>
-      apiRequest('/orders/place', {
+    (order: OrderRequestPayload) => {
+      const userId = ensureUserId();
+      const payload: ApiLimitOrderPayload = {
+        user_id: userId,
+        market: order.market,
+        side: order.side,
+        price: order.type === 'market' ? '0' : order.price,
+        quantity: order.quantity,
+        tif: order.type === 'limit' ? order.timeInForce ?? 'gtc' : undefined,
+      };
+      return apiRequest('/orders', {
         method: 'POST',
-        body: JSON.stringify(order),
-      }),
-    [apiRequest],
+        body: JSON.stringify(payload),
+      });
+    },
+    [apiRequest, ensureUserId],
   );
 
   const cancelOrder = useCallback(
-    (orderId: string) =>
-      apiRequest('/orders/cancel', {
-        method: 'POST',
+    (orderId: string) => {
+      const userId = ensureUserId();
+      const query = new URLSearchParams({ user_id: userId }).toString();
+      return apiRequest(`/orders/${encodeURIComponent(orderId)}?${query}`, {
+        method: 'DELETE',
         body: JSON.stringify({ id: orderId }),
-      }),
-    [apiRequest],
+      });
+    },
+    [apiRequest, ensureUserId],
   );
 
-  const getBalances = useCallback(() => apiRequest('/balances'), [apiRequest]);
+  const getBalances = useCallback(() => {
+    const userId = ensureUserId();
+    return apiRequest<ApiBalanceEntry[]>(`/balances/${encodeURIComponent(userId)}`);
+  }, [apiRequest, ensureUserId]);
 
-  const getDepositAddress = useCallback(() => apiRequest('/deposits/address'), [apiRequest]);
+  const getDepositAddress = useCallback(
+    (tokenMint: string) => {
+      const userId = ensureUserId();
+      return apiRequest<ApiDepositAddressResponse>(
+        `/deposit/${encodeURIComponent(userId)}/${encodeURIComponent(tokenMint)}`,
+      );
+    },
+    [apiRequest, ensureUserId],
+  );
 
   const requestWithdrawal = useCallback(
-    (payload: { asset: string; amount: string; destination: string }) =>
-      apiRequest('/withdrawals/request', {
+    (payload: { token: string; amount: string; to: string }) => {
+      const userId = ensureUserId();
+      const request: ApiWithdrawRequest = {
+        user_id: userId,
+        token: payload.token,
+        amount: payload.amount,
+        to: payload.to,
+      };
+      return apiRequest('/withdrawals', {
         method: 'POST',
-        body: JSON.stringify(payload),
-      }),
-    [apiRequest],
+        body: JSON.stringify(request),
+      });
+    },
+    [apiRequest, ensureUserId],
   );
 
   return {
