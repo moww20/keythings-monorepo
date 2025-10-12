@@ -30,6 +30,11 @@ export const docsItems: DocsSection[] = [
         label: "Smart Account Architecture",
         description: "Phase 3 storage accounts and delegated permission workflows.",
       },
+      {
+        href: "/docs/developer/integration/implementation-roadmap",
+        label: "Implementation Roadmap",
+        description: "Phase 6 16-week delivery schedule for the hybrid DEX rollout.",
+      },
       { href: "/docs/developer/security", label: "Security for Developers", description: "Security considerations for dApp development." },
     ],
   },
