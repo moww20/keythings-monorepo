@@ -29,6 +29,10 @@ export default function HomePage() {
     isDisconnected,
     isLocked,
     isUnlocked,
+    isTradingEnabled,
+    isTradingEnabling,
+    tradingError,
+    enableTrading,
   } = useWallet();
 
   const [isConnecting, setIsConnecting] = useState(false);
@@ -446,6 +450,10 @@ export default function HomePage() {
             usd_market_cap: ktaPriceData.usd_market_cap,
             usd_24h_vol: ktaPriceData.usd_24h_vol
           } : null}
+          isTradingEnabled={isTradingEnabled}
+          isTradingEnabling={isTradingEnabling}
+          onEnableTrading={enableTrading}
+          tradingError={tradingError}
         />
       </div>
 

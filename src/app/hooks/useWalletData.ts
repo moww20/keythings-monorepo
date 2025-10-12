@@ -229,8 +229,16 @@ export function useWalletData() {
       console.debug('Requesting wallet accounts...');
       const accounts = await provider.requestAccounts();
 
+      console.debug('Received accounts from wallet:', accounts);
+
       if (!Array.isArray(accounts) || accounts.length === 0) {
-        throw new Error('No accounts returned from wallet');
+        throw new Error(
+          'No accounts found in wallet. Please:\n' +
+          '1. Open the Keeta Wallet extension\n' +
+          '2. Create or import a wallet if you haven\'t already\n' +
+          '3. Unlock the wallet\n' +
+          '4. Try connecting again'
+        );
       }
 
       console.debug('Wallet connected with accounts:', accounts);

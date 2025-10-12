@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { ArrowDownLeft, ArrowUpRight, ArrowRightLeft } from "lucide-react";
+import { ArrowDownLeft, ArrowUpRight, ArrowRightLeft, TrendingUp, AlertCircle } from "lucide-react";
 
 import type { ProcessedToken } from "../lib/token-utils";
 
@@ -20,6 +20,11 @@ interface EstimatedBalanceProps {
   onTransfer?: () => void;
   tokens?: ProcessedToken[];
   ktaPriceData?: KtaPriceData | null;
+  // Trading enablement props
+  isTradingEnabled?: boolean;
+  isTradingEnabling?: boolean;
+  onEnableTrading?: () => void;
+  tradingError?: string | null;
 }
 
 export default function EstimatedBalance({
@@ -29,6 +34,10 @@ export default function EstimatedBalance({
   onTransfer,
   tokens = [],
   ktaPriceData = null,
+  isTradingEnabled = false,
+  isTradingEnabling = false,
+  onEnableTrading,
+  tradingError = null,
 }: EstimatedBalanceProps): React.JSX.Element {
   const calculateTotalUsdValue = (): number => {
     if (!tokens || tokens.length === 0) return 0;
@@ -139,28 +148,70 @@ export default function EstimatedBalance({
           </div>
         </div>
 
-        <div className="flex flex-col sm:flex-row gap-3">
-          <button 
-            onClick={onReceive}
-            className="inline-flex items-center justify-center gap-2 bg-black text-white border border-gray-700 px-6 py-2.5 rounded-md font-medium hover:bg-gray-900 hover:border-gray-600 transition-colors duration-200 min-w-[120px]"
-          >
-            <ArrowDownLeft className="h-4 w-4" />
-            Receive
-          </button>
-          <button 
-            onClick={onSend}
-            className="inline-flex items-center justify-center gap-2 bg-black text-white border border-gray-700 px-6 py-2.5 rounded-md font-medium hover:bg-gray-900 hover:border-gray-600 transition-colors duration-200 min-w-[120px]"
-          >
-            <ArrowUpRight className="h-4 w-4" />
-            Send
-          </button>
-          <button 
-            onClick={onTransfer}
-            className="inline-flex items-center justify-center gap-2 bg-black text-white border border-gray-700 px-6 py-2.5 rounded-md font-medium hover:bg-gray-900 hover:border-gray-600 transition-colors duration-200 min-w-[120px]"
-          >
-            <ArrowRightLeft className="h-4 w-4" />
-            Transfer
-          </button>
+        <div className="flex flex-col gap-3">
+          {/* Trading Error Message */}
+          {tradingError && (
+            <div className="flex items-center gap-2 p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
+              <AlertCircle className="h-4 w-4 text-red-500 flex-shrink-0" />
+              <p className="text-sm text-red-500">{tradingError}</p>
+            </div>
+          )}
+          
+          {/* Trading Status Banner */}
+          {isTradingEnabled && (
+            <div className="flex items-center gap-2 p-3 bg-green-500/10 border border-green-500/20 rounded-lg">
+              <TrendingUp className="h-4 w-4 text-green-500 flex-shrink-0" />
+              <p className="text-sm text-green-500 font-medium">Trading Enabled</p>
+            </div>
+          )}
+          
+          <div className="flex flex-col sm:flex-row gap-3">
+            {/* Enable Trading Button - shown when not enabled */}
+            {!isTradingEnabled && onEnableTrading && (
+              <button 
+                onClick={onEnableTrading}
+                disabled={isTradingEnabling}
+                className="inline-flex items-center justify-center gap-2 bg-accent text-white px-6 py-2.5 rounded-md font-medium hover:bg-accent/90 transition-colors duration-200 min-w-[150px] disabled:opacity-70 disabled:cursor-not-allowed"
+              >
+                {isTradingEnabling ? (
+                  <>
+                    <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    <span>Enabling...</span>
+                  </>
+                ) : (
+                  <>
+                    <TrendingUp className="h-4 w-4" />
+                    <span>Enable Trading</span>
+                  </>
+                )}
+              </button>
+            )}
+            
+            <button 
+              onClick={onReceive}
+              className="inline-flex items-center justify-center gap-2 bg-black text-white border border-gray-700 px-6 py-2.5 rounded-md font-medium hover:bg-gray-900 hover:border-gray-600 transition-colors duration-200 min-w-[120px]"
+            >
+              <ArrowDownLeft className="h-4 w-4" />
+              Receive
+            </button>
+            <button 
+              onClick={onSend}
+              className="inline-flex items-center justify-center gap-2 bg-black text-white border border-gray-700 px-6 py-2.5 rounded-md font-medium hover:bg-gray-900 hover:border-gray-600 transition-colors duration-200 min-w-[120px]"
+            >
+              <ArrowUpRight className="h-4 w-4" />
+              Send
+            </button>
+            <button 
+              onClick={onTransfer}
+              className="inline-flex items-center justify-center gap-2 bg-black text-white border border-gray-700 px-6 py-2.5 rounded-md font-medium hover:bg-gray-900 hover:border-gray-600 transition-colors duration-200 min-w-[120px]"
+            >
+              <ArrowRightLeft className="h-4 w-4" />
+              Transfer
+            </button>
+          </div>
         </div>
       </div>
     </div>

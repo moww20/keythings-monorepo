@@ -9,6 +9,7 @@ use crate::models::{
     AuthChallenge, AuthSession, Balance, CancelOrderRequest, DepositAddress, LimitOrder,
     PlaceOrderResponse, PlacedOrder, WithdrawEnqueued, WithdrawRequest,
 };
+use serde::Serialize;
 use crate::reconcile::Reconciler;
 use crate::settlement::SettlementQueue;
 
@@ -64,12 +65,27 @@ struct CancelOrderQuery {
     user_id: String,
 }
 
+#[derive(Deserialize)]
+struct RegisterUserPayload {
+    user_id: String,
+    storage_account: String,
+}
+
+#[derive(Serialize)]
+struct UserStatusResponse {
+    user_id: String,
+    trading_enabled: bool,
+    storage_account: Option<String>,
+}
+
 pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg.service(
         web::scope("/api")
             .route("/health", web::get().to(health))
             .route("/auth/challenge/{pubkey}", web::get().to(auth_challenge))
             .route("/auth/session", web::post().to(create_session))
+            .route("/users/register", web::post().to(register_user))
+            .route("/users/{user_id}/status", web::get().to(user_status))
             .route("/balances/{user_id}", web::get().to(list_balances))
             .route("/internal/credit", web::post().to(credit_balance))
             .route("/orders", web::post().to(place_order))
@@ -101,6 +117,50 @@ async fn create_session(payload: web::Json<AuthSessionRequest>) -> impl Responde
         jwt: format!("demo-token-for-{}", payload.user_id),
     };
     HttpResponse::Ok().json(session)
+}
+
+async fn register_user(
+    state: web::Data<AppState>,
+    payload: web::Json<RegisterUserPayload>,
+) -> impl Responder {
+    // Register user with their storage account
+    // In a real implementation, this would store in a database
+    info!(
+        "Registering user {} with storage account {}",
+        payload.user_id, payload.storage_account
+    );
+    
+    // TODO: Store in database
+    // For now, we'll just log and return success
+    
+    HttpResponse::Ok().json(serde_json::json!({
+        "success": true,
+        "message": "User registered successfully",
+        "user_id": payload.user_id,
+        "storage_account": payload.storage_account
+    }))
+}
+
+async fn user_status(
+    state: web::Data<AppState>,
+    path: web::Path<String>,
+) -> impl Responder {
+    let user_id = path.into_inner();
+    
+    // TODO: Query database for user status
+    // For now, return a mock response
+    // In production, this would check if user has a registered storage account
+    
+    info!("Checking status for user {}", user_id);
+    
+    // For development: return false so users see the "Enable Trading" button
+    let status = UserStatusResponse {
+        user_id: user_id.clone(),
+        trading_enabled: false,
+        storage_account: None,
+    };
+    
+    HttpResponse::Ok().json(status)
 }
 
 async fn list_balances(state: web::Data<AppState>, path: web::Path<String>) -> impl Responder {
