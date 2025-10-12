@@ -20,6 +20,55 @@ Welcome to the bigCat repository. Follow these rules whenever you modify code.
 
 ---
 
+## 🚨 CRITICAL: Dev Server Management - MANDATORY WORKFLOW
+
+**🚨 MANDATORY RULE**: The Keeta Wallet extension **ONLY works with `localhost:3000`** for development. You MUST follow this exact workflow after every code change.
+
+### ✅ REQUIRED Workflow After Every Code Change:
+
+1. **After making code changes and running build:**
+   ```bash
+   bun run build  # Run ONCE to verify compilation
+   ```
+
+2. **Terminate ALL previous terminals/dev servers:**
+   - Stop any running `bun run dev` processes
+   - Kill all Node.js/Bun background processes if necessary
+   - Ensure port 3000 is completely free
+
+3. **Start fresh dev server on localhost:3000:**
+   ```bash
+   bun run dev -- -p 3000
+   ```
+   OR
+   ```bash
+   bun run dev  # If package.json already configured for port 3000
+   ```
+
+### 🔒 Why This is Critical:
+
+- The Keeta Wallet extension has a **hardcoded whitelist** for `http://localhost:3000`
+- The extension will **reject all requests** from other ports (3001, 3002, 5173, etc.)
+- You will get "Origin is not authorized" or "read capability token is required" errors on other ports
+- **Every code change** requires a fresh server restart on port 3000 to ensure proper wallet connection
+
+### ❌ NEVER Do This:
+- Running dev server on any port other than 3000
+- Keeping old dev servers running after code changes
+- Assuming the wallet will work on other localhost ports
+- Forgetting to restart the dev server after build
+
+### 📝 Dev Server Checklist:
+- [ ] Stop all previous dev servers
+- [ ] Verify port 3000 is free
+- [ ] Start `bun run dev -- -p 3000`
+- [ ] Verify server is running on `http://localhost:3000`
+- [ ] Test wallet connection before proceeding
+
+**This workflow is MANDATORY for all wallet-related development.**
+
+---
+
 ## 🎨 DESIGN SYSTEM STANDARDIZATION
 
 **MANDATORY**: When creating UI elements, buttons, cards, or any visual components, follow these standardized design patterns from the home page.

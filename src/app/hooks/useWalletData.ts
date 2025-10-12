@@ -1,59 +1,26 @@
-"use client";
+import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { useCallback, useMemo, useState, useEffect } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import type { QueryFunctionContext, QueryObserverResult } from "@tanstack/react-query";
+// Import the existing KeetaProvider type to avoid conflicts
+import type { KeetaProvider, KeetaNetworkInfo, KeetaBalanceEntry, KeetaBaseTokenInfo } from '../../types/keeta';
 
-import type { KeetaBalanceEntry, KeetaNetworkInfo, KeetaProvider, KeetaUserClient } from "@/types/keeta";
-import { processTokenForDisplay, type ProcessedToken } from "../lib/token-utils";
-import { isRateLimitedError } from "../lib/wallet-throttle";
-
-interface WalletState {
+interface WalletData {
   connected: boolean;
   accounts: string[];
-  balance: string | number | bigint | null;
-  network: KeetaNetworkInfo | null | undefined;
+  balance: string;
+  network: unknown;
   isLocked: boolean;
   isInitializing: boolean;
 }
 
-interface TokenQueryParams {
-  account: string | null;
-  networkId: string | number | null;
-}
-
-type TokenQueryKey = ['wallet', 'tokens', TokenQueryParams];
-
-export interface WalletData {
-  wallet: WalletState;
-  tokens: ProcessedToken[];
-  formattedBalance: string;
-  isWalletLoading: boolean;
-  isWalletFetching: boolean;
-  walletError: unknown;
-  isTokensLoading: boolean;
-  isTokensFetching: boolean;
-  tokensError: unknown;
-  refetchWallet: () => Promise<QueryObserverResult<WalletState, unknown>>;
-  refetchTokens: () => Promise<QueryObserverResult<ProcessedToken[], unknown>>;
-  connectWallet: () => Promise<string[]>;
-  refreshWallet: () => void;
-  userClient: KeetaUserClient | null;
-}
-
-const DEFAULT_WALLET_STATE: WalletState = {
-  connected: false,
-  accounts: [],
-  balance: null,
-  network: null,
-  isLocked: false,
-  isInitializing: true, // Track if we're still checking connection
-};
-
-const WALLET_QUERY_KEY = ['wallet', 'state'] as const;
-
-function isPromiseLike<T>(value: unknown): value is PromiseLike<T> {
-  return Boolean(value) && typeof (value as PromiseLike<T>).then === 'function';
+// Simple error message checker
+function errorMessageIncludes(error: unknown, searchText: string): boolean {
+  if (error instanceof Error) {
+    return error.message.toLowerCase().includes(searchText.toLowerCase());
+  }
+  if (typeof error === 'string') {
+    return error.toLowerCase().includes(searchText.toLowerCase());
+  }
+  return false;
 }
 
 function getWalletProvider(): KeetaProvider | null {
@@ -64,415 +31,482 @@ function getWalletProvider(): KeetaProvider | null {
   return window.keeta ?? null;
 }
 
-const errorMessageIncludes = (error: unknown, text: string): boolean => {
-  if (!error || typeof error !== 'object') {
-    return false;
-  }
+export function useWalletData() {
+  const [walletData, setWalletData] = useState<WalletData>({
+    connected: false,
+    accounts: [],
+    balance: '0',
+    network: null,
+    isLocked: true,
+    isInitializing: true,
+  });
 
-  const message = (error as { message?: unknown }).message;
-  if (typeof message !== 'string') {
-    return false;
-  }
+  const [error, setError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const isMountedRef = useRef(true);
 
-  return message.includes(text);
-};
-
-const hasErrorCode = (error: unknown, code: number): boolean => {
-  if (!error || typeof error !== 'object') {
-    return false;
-  }
-
-  const candidate = (error as { code?: unknown }).code;
-  return typeof candidate === 'number' && candidate === code;
-};
-
-async function fetchWalletState(): Promise<WalletState> {
-  const provider = getWalletProvider();
-
-  if (!provider) {
-    return {
-      ...DEFAULT_WALLET_STATE,
-      isInitializing: false,
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
     };
-  }
+  }, []);
 
-  let isLocked = false;
-  try {
-    if (typeof provider.isLocked === 'function') {
-      isLocked = await provider.isLocked();
-    } else {
-      console.debug('Wallet provider does not have isLocked() method');
-    }
-  } catch (error) {
-    console.debug('Failed to read wallet lock status:', error);
-    // If we can't check lock status and get session expired, assume locked
-    if (errorMessageIncludes(error, 'Session expired') || errorMessageIncludes(error, 're-login')) {
-      console.debug('Cannot check lock status due to session expired, assuming wallet is locked');
-      isLocked = true;
-    }
-  }
+  const updateWalletData = useCallback((updates: Partial<WalletData>) => {
+    if (!isMountedRef.current) return;
+    setWalletData(prev => ({ ...prev, ...updates }));
+  }, []);
 
-  let accounts: string[] = [];
-  try {
-    accounts = (await provider.getAccounts()) ?? [];
-  } catch (error) {
-    // Handle session expiration - treat as locked wallet
-    if (errorMessageIncludes(error, 'Session expired') || errorMessageIncludes(error, 're-login')) {
-      console.debug('Account query failed due to session expired, treating as locked wallet');
-      console.debug('Note: isLocked() API returned:', isLocked, 'but session is expired - wallet is in inconsistent state');
-      return {
-        connected: true, // Connected but locked
-        accounts: [],
-        balance: null,
-        network: null,
-        isLocked: true, // Force locked state despite API saying false
-        isInitializing: false,
-      };
-    }
+  const setErrorState = useCallback((errorMessage: string | null) => {
+    if (!isMountedRef.current) return;
+    setError(errorMessage);
+  }, []);
 
-    // Silently handle rate-limiting errors - wallet is throttled but functional
-    if (isRateLimitedError(error)) {
-      console.debug('Account query throttled, will retry automatically');
-      return {
+  const setLoadingState = useCallback((loading: boolean) => {
+    if (!isMountedRef.current) return;
+    setIsLoading(loading);
+  }, []);
+
+  // Based on Keeta wallet extension source code analysis:
+  // Read operations (getBalance, getNetwork, getAllBalances) do NOT require capability tokens
+  // Only sign and transact operations require capability tokens
+  // The wallet extension handles capability token management internally
+
+  const fetchWalletState = useCallback(async () => {
+    const provider = getWalletProvider();
+    if (!provider) {
+      updateWalletData({
         connected: false,
         accounts: [],
-        balance: null,
+        balance: '0',
         network: null,
-        isLocked,
+        isLocked: true,
         isInitializing: false,
-      };
+      });
+      return;
     }
-    console.debug('Failed to fetch accounts:', error);
-    return {
-      connected: false,
-      accounts: [],
-      balance: null,
-      network: null,
-      isLocked,
-      isInitializing: false,
-    };
-  }
 
-  // If no accounts, try checking if we should auto-connect
-  // This happens when the user has previously granted permission
-  if (!accounts.length) {
     try {
-      // Check if the provider has a method to check previous permissions
-      if (typeof provider.isConnected === 'function') {
-        const wasConnected = await provider.isConnected();
-        if (wasConnected) {
-          console.log('Wallet was previously connected, attempting to reconnect...');
-          // Try to reconnect silently
-          accounts = (await provider.getAccounts()) ?? [];
-        }
-      } else if (typeof provider.isConnected === 'boolean' && provider.isConnected) {
-        console.log('Wallet shows connected state, attempting to fetch accounts...');
-        accounts = (await provider.getAccounts()) ?? [];
-      }
-    } catch (error) {
-      console.debug('Auto-connect check failed:', error);
-    }
-  }
+      setErrorState(null);
+      setLoadingState(true);
 
-  if (!accounts.length) {
-    // If no accounts but wallet provider exists, treat as connected but potentially locked
-    // This handles cases where wallet is installed but not authorized or locked
-    return {
-      connected: true, // Always connected if wallet provider exists
-      accounts: [],
-      balance: null,
-      network: null,
-      isLocked: true, // Assume locked if we can't determine status
-      isInitializing: false,
-    };
-  }
+      console.debug('Fetching wallet state...');
 
-  let balance: string | number | bigint | null = null;
-  let network: KeetaNetworkInfo | null | undefined = null;
-
-  if (!isLocked) {
-    try {
-      [balance, network] = await Promise.all([
-        provider.getBalance(accounts[0]),
-        provider.getNetwork(),
+      // Get basic wallet info - these operations work without capability tokens
+      const [accounts, isLockedResult] = await Promise.all([
+        provider.getAccounts(),
+        provider.isLocked?.() ?? Promise.resolve(true),
       ]);
-    } catch (error) {
-      // Handle session expiration - treat as locked wallet
-      if (errorMessageIncludes(error, 'Session expired') || errorMessageIncludes(error, 're-login')) {
-        console.debug('useWalletData: Balance/network fetch failed due to session expired, treating as locked wallet');
-        console.debug('Note: isLocked() API returned:', isLocked, 'but session is expired - wallet is in inconsistent state');
-        // Force locked state when session is expired, regardless of isLocked() API result
-        return {
-          connected: true, // Connected but locked
+
+      console.debug('Wallet state:', { accounts, isLocked: isLockedResult });
+
+      if (!Array.isArray(accounts) || accounts.length === 0) {
+        updateWalletData({
+          connected: false,
           accounts: [],
-          balance: null,
+          balance: '0',
           network: null,
-          isLocked: true, // Force locked state
+          isLocked: true,
           isInitializing: false,
-        };
+        });
+        return;
       }
 
-      // Silently handle rate-limiting errors - wallet is throttled but functional
-      if (isRateLimitedError(error)) {
-        console.debug('useWalletData: Balance query throttled, will retry automatically');
-      } else {
-        console.error('useWalletData: Failed to resolve balance/network', error);
-      }
-    }
-  }
-
-  return {
+      // If wallet is locked, don't try to fetch balance/network
+      if (isLockedResult) {
+        updateWalletData({
     connected: true,
     accounts,
-    balance,
-    network,
-    isLocked,
+          balance: '0',
+          network: null,
+          isLocked: true,
     isInitializing: false,
-  };
-}
+        });
+        return;
+      }
 
-async function fetchTokenBalances({ queryKey }: QueryFunctionContext<TokenQueryKey>): Promise<ProcessedToken[]> {
-  const [, , params] = queryKey;
-  const provider = getWalletProvider();
-
-  if (!provider || !params?.account) {
-    return [];
-  }
-
-  let balances: KeetaBalanceEntry[];
-  try {
-    balances = await provider.getAllBalances();
-  } catch (error) {
-    // Handle session expiration - throw so retry logic can catch it
-    if (errorMessageIncludes(error, 'Session expired') || errorMessageIncludes(error, 're-login')) {
-      throw error; // Let the retry logic handle this
-    }
-
-    // Handle rate-limiting errors - throw so React Query can retry
-    if (isRateLimitedError(error)) {
-      console.debug('Token balance query throttled, retrying...');
-      throw error; // Let React Query handle the retry
-    }
-    console.error('Failed to fetch token balances:', error);
-    throw error; // Let React Query handle other errors too
-  }
-
-  if (!Array.isArray(balances)) {
-    console.warn('getAllBalances() returned non-array:', typeof balances);
-    return [];
-  }
-
-  if (balances.length === 0) {
-    return [];
-  }
-
-  let baseTokenAddress: string | null = null;
-  try {
-    const baseTokenInfo = await provider.getBaseToken();
-    baseTokenAddress = typeof baseTokenInfo?.address === 'string' ? baseTokenInfo.address : null;
-  } catch (error) {
-    console.warn('useWalletData: Failed to fetch base token info', error);
-  }
-
-  const nonZeroBalances = balances.filter((entry) => {
-    try {
-      return Boolean(entry.balance) && BigInt(entry.balance) > BigInt(0);
-    } catch (error) {
-      console.warn('Unable to parse balance for token', entry?.token, error);
-      return false;
-    }
-  });
-
-  if (nonZeroBalances.length === 0) {
-    return [];
-  }
-
-  const processedTokens = await Promise.all(
-    nonZeroBalances.map(async (entry) => {
+      // Wallet is unlocked, request read capabilities first
+      console.debug('Wallet unlocked, requesting read capabilities...');
+      let capabilityTokens: any = null;
       try {
-        return await processTokenForDisplay(
-          entry.token,
-          entry.balance,
-          entry.metadata ?? null,
-          baseTokenAddress,
-        );
-      } catch (error) {
-        console.error('Failed to process token:', entry?.token, error);
-        return null;
-      }
-    }),
-  );
-
-  const validTokens = processedTokens.filter((token): token is ProcessedToken => Boolean(token));
-
-  validTokens.sort((a, b) => {
-    if (a.isBaseToken) return -1;
-    if (b.isBaseToken) return 1;
-    return a.name.localeCompare(b.name);
-  });
-
-  return validTokens;
-}
-
-export function useWalletData(): WalletData {
-  const queryClient = useQueryClient();
-
-  // Track session expiration to force locked state
-  const [sessionExpired, setSessionExpired] = useState(false);
-  const [userClient, setUserClient] = useState<KeetaUserClient | null>(null);
-
-  const walletQuery = useQuery<WalletState>({
-    queryKey: WALLET_QUERY_KEY,
-    queryFn: fetchWalletState,
-    placeholderData: DEFAULT_WALLET_STATE,
-    staleTime: 0, // Always check for fresh data
-    refetchOnMount: true, // Refetch when component mounts
-  });
-
-  const primaryAccount = walletQuery.data?.accounts?.[0] ?? null;
-  const networkId = walletQuery.data?.network?.chainId ?? null;
-
-  const isQueryEnabled = Boolean(walletQuery.data?.connected && !walletQuery.data?.isLocked && primaryAccount);
-
-  const tokensQuery = useQuery<ProcessedToken[], Error, ProcessedToken[], TokenQueryKey>({
-    queryKey: ['wallet', 'tokens', { account: primaryAccount, networkId }],
-    queryFn: fetchTokenBalances,
-    enabled: isQueryEnabled,
-    placeholderData: () => [],
-    retry: (failureCount, error) => {
-      // Don't retry on user rejection
-      if (hasErrorCode(error, 4001)) return false;
-
-      // Don't retry on session expiration - this indicates wallet is locked
-      if (errorMessageIncludes(error, 'Session expired') || errorMessageIncludes(error, 're-login')) {
-        setSessionExpired(true);
-        return false;
+        if (typeof provider.requestCapabilities === 'function') {
+          capabilityTokens = await provider.requestCapabilities(['read']);
+          console.debug('Read capability tokens obtained:', capabilityTokens);
+        }
+      } catch (capError) {
+        console.debug('Failed to request capabilities (will retry on individual calls):', capError);
       }
 
-      // Retry throttled requests up to 3 times
-      if (isRateLimitedError(error)) {
-        return failureCount < 3;
+      // Extract the read token if available
+      const readToken = Array.isArray(capabilityTokens) && capabilityTokens.length > 0 
+        ? capabilityTokens[0]?.token 
+        : null;
+
+      // Fetch balance and network using RPC with capability token
+      // The wallet extension expects capability tokens wrapped in an object: { capabilityToken: token }
+      let balance = '0';
+      let network = null;
+
+      try {
+        if (typeof provider.request === 'function') {
+          // Use RPC method with capability token wrapped in object
+          const balanceResult = await provider.request({
+            method: 'keeta_getBalance',
+            params: readToken ? [accounts[0], { capabilityToken: readToken }] : [accounts[0]]
+          });
+          balance = typeof balanceResult === 'string' ? balanceResult : String(balanceResult ?? '0');
+          console.debug('Balance fetched:', balance);
+        }
+      } catch (balanceError) {
+        console.debug('Failed to fetch balance:', balanceError);
       }
 
-      // Retry other errors once
-      return failureCount < 1;
-    },
-    retryDelay: (attemptIndex) => {
-      // Use exponential backoff: 2s, 4s, 8s
-      return Math.min(1000 * 2 ** attemptIndex, 8000);
-    },
-  });
+      try {
+        if (typeof provider.request === 'function') {
+          // Use RPC method with capability token wrapped in object
+          const networkResult = await provider.request({
+            method: 'keeta_getNetwork',
+            params: readToken ? [{ capabilityToken: readToken }] : []
+          });
+          network = networkResult;
+          console.debug('Network fetched:', network);
+        }
+      } catch (networkError) {
+        console.debug('Failed to fetch network:', networkError);
+      }
+
+      updateWalletData({
+        connected: true,
+        accounts,
+        balance,
+        network,
+        isLocked: false,
+        isInitializing: false,
+      });
+
+    } catch (error) {
+      console.error('Failed to resolve balance/network', error);
+      setErrorState(`Failed to fetch wallet data: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      
+      // Still update with basic info even if balance/network failed
+      try {
+        const accounts = await provider.getAccounts();
+        const isLocked = await provider.isLocked?.() ?? true;
+        
+        updateWalletData({
+          connected: Array.isArray(accounts) && accounts.length > 0,
+          accounts: Array.isArray(accounts) ? accounts : [],
+          balance: '0',
+          network: null,
+          isLocked: isLocked,
+          isInitializing: false,
+        });
+      } catch (fallbackError) {
+        console.error('Fallback wallet state fetch failed:', fallbackError);
+        updateWalletData({
+          connected: false,
+          accounts: [],
+          balance: '0',
+          network: null,
+          isLocked: true,
+          isInitializing: false,
+        });
+      }
+    } finally {
+      setLoadingState(false);
+    }
+  }, [updateWalletData, setErrorState, setLoadingState]);
 
   const connectWallet = useCallback(async () => {
     const provider = getWalletProvider();
     if (!provider) {
-      throw new Error('Keeta wallet provider not found.');
+      throw new Error('Keeta wallet not found');
     }
 
     try {
+      setErrorState(null);
+      setLoadingState(true);
+
+      console.debug('Requesting wallet accounts...');
       const accounts = await provider.requestAccounts();
 
-      // Reset session expired flag on successful connection
-      setSessionExpired(false);
+      if (!Array.isArray(accounts) || accounts.length === 0) {
+        throw new Error('No accounts returned from wallet');
+      }
 
-      await queryClient.invalidateQueries({ queryKey: WALLET_QUERY_KEY });
-      await queryClient.invalidateQueries({ queryKey: ['wallet', 'tokens'] });
+      console.debug('Wallet connected with accounts:', accounts);
 
-      return accounts;
+      // Fetch full wallet state after connection
+      await fetchWalletState();
+
     } catch (error) {
-      console.error('Failed to connect wallet:', error);
+      console.error('Wallet connection failed:', error);
+      setErrorState(`Connection failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
       throw error;
+    } finally {
+      setLoadingState(false);
     }
-  }, [queryClient]);
+  }, [fetchWalletState, setErrorState, setLoadingState]);
 
-  const refreshWallet = useCallback(() => {
-    void queryClient.invalidateQueries({ queryKey: WALLET_QUERY_KEY });
-    void queryClient.invalidateQueries({ queryKey: ['wallet', 'tokens'] });
-  }, [queryClient]);
+  const refreshWallet = useCallback(async () => {
+    await fetchWalletState();
+  }, [fetchWalletState]);
+
+  // Set up wallet event listeners
+  useEffect(() => {
+    const provider = getWalletProvider();
+    if (!provider) return;
+
+    const handleAccountsChanged = (accounts: unknown) => {
+      console.debug('Accounts changed:', accounts);
+      fetchWalletState();
+    };
+
+    const handleLockChanged = (isLocked: unknown) => {
+      console.debug('Lock status changed:', isLocked);
+      updateWalletData({ isLocked: Boolean(isLocked) });
+      if (!isLocked) {
+        // If wallet was unlocked, refresh the full state
+        fetchWalletState();
+      }
+    };
+
+    const handleDisconnect = () => {
+      console.debug('Wallet disconnected');
+      updateWalletData({
+        connected: false,
+        accounts: [],
+        balance: '0',
+        network: null,
+        isLocked: true,
+        isInitializing: false,
+      });
+    };
+
+    // Add event listeners
+    provider.on?.('accountsChanged', handleAccountsChanged);
+    provider.on?.('lockChanged', handleLockChanged);
+    provider.on?.('disconnect', handleDisconnect);
+
+    // Initial fetch
+    fetchWalletState();
+
+    // Cleanup
+    return () => {
+      provider.removeListener?.('accountsChanged', handleAccountsChanged);
+      provider.removeListener?.('lockChanged', handleLockChanged);
+      provider.removeListener?.('disconnect', handleDisconnect);
+    };
+  }, [fetchWalletState, updateWalletData]);
+
+  // Rate limiting for refresh operations
+  const lastRefreshRef = useRef(0);
+  const REFRESH_THROTTLE_MS = 1000; // 1 second
+
+  const throttledRefresh = useCallback(async () => {
+    const now = Date.now();
+    if (now - lastRefreshRef.current > REFRESH_THROTTLE_MS) {
+      lastRefreshRef.current = now;
+      await refreshWallet();
+    }
+  }, [refreshWallet]);
+
+  return {
+    wallet: walletData,
+    error,
+    isLoading,
+    connectWallet,
+    refreshWallet: throttledRefresh,
+    fetchWalletState,
+  };
+}
+
+// Hook for fetching token balances - with capability token support
+export function useTokenBalances(shouldFetch: boolean = false) {
+  const [balances, setBalances] = useState<unknown[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const isMountedRef = useRef(true);
 
   useEffect(() => {
-    let cancelled = false;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
-    const resolveUserClient = async () => {
+  const fetchTokenBalances = useCallback(async () => {
       const provider = getWalletProvider();
-      const factory = provider?.createUserClient ?? provider?.getUserClient;
-
-      if (!factory) {
-        if (!cancelled) {
-          setUserClient(null);
+    if (!provider) {
+      if (isMountedRef.current) {
+        setBalances([]);
         }
         return;
       }
 
       try {
-        const maybeClient = factory();
-        const resolved = isPromiseLike<KeetaUserClient>(maybeClient) ? await maybeClient : maybeClient;
-        if (!cancelled) {
-          setUserClient(resolved ?? null);
-        }
-      } catch (error) {
-        console.debug('useWalletData: Failed to initialize user client', error);
-        if (!cancelled) {
-          setUserClient(null);
-        }
+      if (isMountedRef.current) {
+        setIsLoading(true);
+        setError(null);
       }
-    };
+      
+      console.debug('Fetching token balances...');
+      
+      // Request read capability first
+      let readToken: string | null = null;
+      try {
+        if (typeof provider.requestCapabilities === 'function') {
+          const tokens = await provider.requestCapabilities(['read']);
+          if (Array.isArray(tokens) && tokens.length > 0 && tokens[0] && typeof tokens[0] === 'object' && 'token' in tokens[0]) {
+            readToken = tokens[0].token as string;
+            console.debug('Got read capability token for getAllBalances');
+          }
+        }
+      } catch (capError) {
+        console.debug('Failed to get capability token for getAllBalances:', capError);
+      }
 
-    void resolveUserClient();
+      // Use RPC method with capability token
+      // The wallet extension expects capability tokens wrapped in an object: { capabilityToken: token }
+      let result;
+      if (typeof provider.request === 'function' && readToken) {
+        console.debug('Fetching balances via RPC with capability token...');
+        result = await provider.request({
+          method: 'keeta_getAllBalances',
+          params: [{ capabilityToken: readToken }]
+        });
+      } else {
+        console.debug('Fetching balances via direct method...');
+        // Fallback to direct method call (may fail without token)
+        result = await provider.getAllBalances();
+      }
+      
+      if (!isMountedRef.current) return;
+      
+      if (Array.isArray(result)) {
+        console.debug('Token balances received:', result);
+        setBalances(result);
+      } else {
+        console.debug('No balances received or invalid format');
+        setBalances([]);
+      }
+    } catch (error) {
+      if (!isMountedRef.current) return;
+      console.error('Failed to fetch token balances:', error);
+      setError(`Failed to fetch balances: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      setBalances([]);
+    } finally {
+      if (isMountedRef.current) {
+        setIsLoading(false);
+      }
+    }
+  }, []);
 
-    return () => {
-      cancelled = true;
-    };
-  }, [walletQuery.data?.connected, walletQuery.data?.accounts, sessionExpired]);
-
-  // Reset session expired flag when wallet is successfully unlocked
+  // Automatically fetch when shouldFetch changes to true
   useEffect(() => {
-    const baseWallet = walletQuery.data ?? DEFAULT_WALLET_STATE;
-    if (baseWallet.connected && !baseWallet.isLocked && baseWallet.accounts?.length > 0 && sessionExpired) {
-      console.debug('Wallet successfully unlocked, resetting session expired flag');
-      setSessionExpired(false);
+    if (shouldFetch) {
+      fetchTokenBalances();
     }
-  }, [walletQuery.data, sessionExpired]);
-
-  const wallet = useMemo<WalletState>(() => {
-    const baseWallet = walletQuery.data ?? DEFAULT_WALLET_STATE;
-
-    // If session is expired, force locked state regardless of API response
-    if (sessionExpired) {
-      return {
-        ...baseWallet,
-        isLocked: true,
-        connected: true, // Still connected but locked
-      };
-    }
-
-    return baseWallet;
-  }, [walletQuery.data, sessionExpired]);
-
-  const tokens = tokensQuery.data ?? [];
-
-  const formattedBalance = useMemo(() => {
-    const balance = wallet.balance;
-    if (balance === null || typeof balance === 'undefined') {
-      return '0.00';
-    }
-    return (Number(balance) / 10 ** 18).toFixed(2);
-  }, [wallet.balance]);
+  }, [shouldFetch, fetchTokenBalances]);
 
   return {
-    wallet,
-    tokens,
-    formattedBalance,
-    isWalletLoading: walletQuery.isLoading,
-    isWalletFetching: walletQuery.isFetching,
-    walletError: walletQuery.error,
-    isTokensLoading: tokensQuery.isLoading,
-    isTokensFetching: tokensQuery.isFetching,
-    tokensError: tokensQuery.error,
-    refetchWallet: walletQuery.refetch,
-    refetchTokens: tokensQuery.refetch,
-    connectWallet,
-    refreshWallet,
-    userClient,
+    balances,
+    isLoading,
+    error,
+    fetchTokenBalances,
   };
+}
+
+// Hook for fetching token metadata - simplified without capability tokens
+export function useTokenMetadata(tokenAddress: string) {
+  const [metadata, setMetadata] = useState<unknown>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchTokenMetadata = useCallback(async () => {
+    if (!tokenAddress) {
+      setMetadata(null);
+      return;
+    }
+
+    const provider = getWalletProvider();
+    if (!provider) {
+      setMetadata(null);
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      setError(null);
+      
+      console.debug('Fetching token metadata for:', tokenAddress);
+      // Note: getTokenMetadata is not available in the current KeetaProvider interface
+      // This would need to be implemented via the request method or added to the interface
+      setMetadata(null);
+    } catch (error) {
+      console.error('Failed to fetch token metadata:', error);
+      setError(`Failed to fetch metadata: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      setMetadata(null);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [tokenAddress]);
+
+  useEffect(() => {
+    fetchTokenMetadata();
+  }, [fetchTokenMetadata]);
+
+      return {
+    metadata,
+    isLoading,
+    error,
+    refetch: fetchTokenMetadata,
+  };
+}
+
+// Hook for fetching KTA price - simplified without capability tokens
+export function useKtaPrice() {
+  const [priceData, setPriceData] = useState<{ price: number } | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchKtaPrice = useCallback(async () => {
+    const provider = getWalletProvider();
+    if (!provider) {
+      setPriceData(null);
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      setError(null);
+      
+      console.debug('Fetching KTA price...');
+      const result = await provider.getKtaPrice?.();
+      
+      if (result && typeof result === 'object' && 'price' in result) {
+        setPriceData(result as { price: number });
+      } else {
+        setPriceData(null);
+      }
+    } catch (error) {
+      console.error('Failed to fetch KTA price:', error);
+      setError(`Failed to fetch price: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      setPriceData(null);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  return {
+    priceData,
+    isLoading,
+    error,
+    fetchKtaPrice,
+  };
+}
+
+// Global window type declaration
+declare global {
+  interface Window {
+    keeta?: KeetaProvider;
+  }
 }

@@ -71,17 +71,21 @@ export default function HomePage() {
     try {
       const priceData = await window.keeta?.getKtaPrice?.();
       console.log('Price data received:', priceData);
-      if (priceData && priceData.price) {
-        // Transform the API response to match our expected structure
-        // The API returns { price: number } so we map it to our structure
-        const transformedData = {
-          usd: priceData.price,
-          usd_24h_change: 0, // Not available in current API
-          usd_market_cap: undefined,
-          usd_24h_vol: undefined,
-        };
-        console.log('Setting KTA price data:', transformedData);
-        setKtaPriceData(transformedData);
+      if (priceData && typeof priceData === 'object' && priceData !== null) {
+        // The API returns the full price object with usd, usd_24h_change, etc.
+        const data = priceData as any;
+        if ('usd' in data) {
+          const transformedData = {
+            usd: data.usd,
+            usd_24h_change: data.usd_24h_change || 0,
+            usd_market_cap: data.usd_market_cap,
+            usd_24h_vol: data.usd_24h_vol,
+          };
+          console.log('Setting KTA price data:', transformedData);
+          setKtaPriceData(transformedData);
+        } else {
+          console.log('No usd price in wallet API response');
+        }
       } else {
         console.log('No price data received from wallet API');
       }
@@ -328,6 +332,26 @@ export default function HomePage() {
     );
   }
 
+  // Show loading state during wallet initialization to prevent premature "locked" state
+  if (wallet.isInitializing) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <div className="glass rounded-lg border border-hairline shadow-[0_20px_60px_rgba(6,7,10,0.45)] p-8 max-w-md text-center">
+          <div className="mx-auto h-16 w-16 text-accent mb-4 flex items-center justify-center">
+            <svg className="animate-spin h-16 w-16 text-accent" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+          </div>
+          <h1 className="text-2xl font-bold text-foreground mb-4">Checking Wallet Status</h1>
+          <p className="text-base text-muted mb-6">
+            Verifying your Keeta Wallet connection and status...
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   if (isLocked) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
@@ -356,6 +380,22 @@ export default function HomePage() {
               ) : (
                 'Unlock Wallet'
               )}
+            </button>
+            <button
+              onClick={() => {
+                console.log('🔍 Wallet Debug Info:');
+                console.log('Wallet object:', wallet);
+                console.log('isDisconnected:', isDisconnected);
+                console.log('isLocked:', isLocked);
+                console.log('isUnlocked:', isUnlocked);
+                console.log('isConnected:', wallet.connected);
+                console.log('accounts:', wallet.accounts);
+                console.log('Provider:', window.keeta);
+                refreshWallet();
+              }}
+              className="mt-3 text-xs text-muted hover:text-foreground transition-colors"
+            >
+              🔍 Debug Wallet State
             </button>
           </div>
         </div>

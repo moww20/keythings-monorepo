@@ -133,7 +133,7 @@ export default function Navbar(): React.JSX.Element {
       provider.on?.("disconnect", handleDisconnect);
 
       detachListeners = () => {
-        const remove = provider.removeListener?.bind(provider) ?? provider.off?.bind(provider);
+        const remove = provider.removeListener?.bind(provider);
         if (remove) {
           remove("accountsChanged", handleAccountsChanged);
           remove("chainChanged", handleChainChanged);
