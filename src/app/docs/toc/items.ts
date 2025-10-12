@@ -35,6 +35,11 @@ export const docsItems: DocsSection[] = [
         label: "Implementation Roadmap",
         description: "Phase 6 16-week delivery schedule for the hybrid DEX rollout.",
       },
+      {
+        href: "/docs/developer/integration/database-schema",
+        label: "Database Schema",
+        description: "Phase 7 relational model for balances, orders, and reconciliations.",
+      },
       { href: "/docs/developer/security", label: "Security for Developers", description: "Security considerations for dApp development." },
     ],
   },
