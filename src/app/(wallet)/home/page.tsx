@@ -5,13 +5,8 @@ import { Wallet } from 'lucide-react';
 import EstimatedBalance from '../../components/EstimatedBalance';
 import { useWallet } from '../../contexts/WalletContext';
 
-function getTokenIconStyle(bgColor: string, textColor: string): React.CSSProperties {
-  return {
-    '--bg-color': bgColor,
-    '--text-color': textColor,
-    backgroundColor: 'var(--bg-color)',
-    color: 'var(--text-color)'
-  } as React.CSSProperties;
+function getTokenIconColors(bgColor: string, textColor: string) {
+  return { backgroundColor: bgColor, color: textColor };
 }
 
 export default function HomePage() {
@@ -36,7 +31,7 @@ export default function HomePage() {
   } = useWallet();
 
   const [isConnecting, setIsConnecting] = useState(false);
-  const [activeTab, setActiveTab] = useState('holding');
+  const [activeTab, setActiveTab] = useState('tokens');
   const [showLockedNotification, setShowLockedNotification] = useState(false);
   const [showNullState, setShowNullState] = useState(false);
   const [ktaPriceData, setKtaPriceData] = useState<{ 
@@ -47,6 +42,21 @@ export default function HomePage() {
   } | null>(null);
   const [isLoadingPrice, setIsLoadingPrice] = useState(false);
   const isFetchingPrice = useRef(false);
+  
+  // Storage accounts state with enriched metadata
+  const [storageAccounts, setStorageAccounts] = useState<Array<{
+    entity: string;
+    principal: string;
+    target: string | null;
+    permissions: string[];
+    // Enriched metadata
+    name?: string;
+    description?: string;
+    metadata?: string;
+    balance?: string;
+    created?: number;
+  }>>([]);
+  const [isLoadingStorage, setIsLoadingStorage] = useState(false);
 
   const isWalletBusy = isWalletLoading || isWalletFetching;
   const tokensLoading = isTokensLoading || isTokensFetching;
@@ -63,6 +73,94 @@ export default function HomePage() {
   const handleTransfer = useCallback(() => {
     console.log('Transfer clicked');
   }, []);
+  
+  // Fetch storage accounts when Storage tab is active
+  useEffect(() => {
+    async function fetchStorageAccounts() {
+      if (activeTab !== 'storage' || !isUnlocked) {
+        return;
+      }
+      
+      try {
+        setIsLoadingStorage(true);
+        const provider = typeof window !== 'undefined' ? window.keeta : null;
+        
+        if (!provider) {
+          console.warn('Keeta provider not available');
+          setStorageAccounts([]);
+          return;
+        }
+
+        // Try to get user client to access storage accounts
+        let userClient = null;
+        if (typeof provider.getUserClient === 'function') {
+          userClient = await provider.getUserClient();
+        } else if (typeof provider.createUserClient === 'function') {
+          userClient = await provider.createUserClient();
+        }
+
+        if (!userClient) {
+          console.warn('User client not available');
+          setStorageAccounts([]);
+          return;
+        }
+
+        // List ACLs by principal to get storage accounts
+        if (typeof userClient.listACLsByPrincipal !== 'function') {
+          console.warn('listACLsByPrincipal not available');
+          setStorageAccounts([]);
+          return;
+        }
+
+        const acls = await userClient.listACLsByPrincipal();
+        console.log('Storage ACLs fetched:', acls);
+        
+        // Filter for storage accounts and transform to display format
+        const storageAcls = (Array.isArray(acls) ? acls : [])
+          .filter((acl: any) => {
+            // Filter for storage-related ACLs
+            const entityStr = typeof acl.entity === 'string' 
+              ? acl.entity 
+              : acl.entity?.publicKeyString || '';
+            return entityStr.toLowerCase().includes('storage') || 
+                   acl.permissions?.base?.flags?.includes('STORAGE_DEPOSIT') ||
+                   acl.permissions?.base?.flags?.includes('SEND_ON_BEHALF');
+          });
+
+        const enrichedAccounts = storageAcls.map((acl: any) => {
+          const entityStr = typeof acl.entity === 'string' 
+            ? acl.entity 
+            : acl.entity?.publicKeyString || 'unknown';
+          
+          const targetStr = acl.target 
+            ? (typeof acl.target === 'string' ? acl.target : acl.target?.publicKeyString || null)
+            : null;
+          
+          return {
+            entity: entityStr,
+            principal: typeof acl.principal === 'string'
+              ? acl.principal
+              : acl.principal?.publicKeyString || '',
+            target: targetStr,
+            permissions: acl.permissions?.base?.flags || [],
+            name: 'DEX Storage Account',
+            description: 'Storage account for trading operations',
+            balance: '0', // Balance requires separate API call with capabilities
+            created: Date.now(),
+          };
+        });
+        
+        setStorageAccounts(enrichedAccounts);
+      } catch (error) {
+        console.error('Failed to fetch storage accounts:', error);
+        setStorageAccounts([]);
+      } finally {
+        setIsLoadingStorage(false);
+      }
+    }
+    
+    fetchStorageAccounts();
+  }, [activeTab, isUnlocked, isTradingEnabled]);
 
   const fetchKtaPrice = useCallback(async () => {
     if (!window.keeta || isFetchingPrice.current) {
@@ -465,12 +563,12 @@ export default function HomePage() {
         <div className="px-6 py-4 border-b border-hairline flex-shrink-0">
           <div className="flex flex-wrap gap-4 lg:gap-8">
             <button 
-              onClick={() => setActiveTab('holding')}
+              onClick={() => setActiveTab('tokens')}
               className={`font-medium border-b-2 pb-2 transition-colors ${
-                activeTab === 'holding' ? 'text-accent border-accent' : 'text-muted hover:text-foreground border-transparent'
+                activeTab === 'tokens' ? 'text-accent border-accent' : 'text-muted hover:text-foreground border-transparent'
               }`}
             >
-              Holding
+              Tokens
             </button>
             <button 
               onClick={() => setActiveTab('storage')}
@@ -500,47 +598,49 @@ export default function HomePage() {
         </div>
 
         <div className="overflow-auto flex-1">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-hairline">
-                <th className="text-left py-4 px-6 text-muted text-sm font-medium">
-                  <div className="flex items-center gap-1">
-                    Coin
-                    <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
-                      <path d="M7 14l5-5 5 5z" />
-                    </svg>
-                  </div>
-                </th>
-                <th className="text-right py-4 px-6 text-muted text-sm font-medium">
-                  <div className="flex items-center justify-end gap-1">
-                    Amount
-                    <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
-                      <path d="M7 14l5-5 5 5z" />
-                    </svg>
-                  </div>
-                </th>
-                <th className="text-right py-4 px-6 text-muted text-sm font-medium">
-                  <div className="flex items-center justify-end gap-1">
-                    Coin Price / Total Value
-                    <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
-                      <path d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                  </div>
-                </th>
-                <th className="text-right py-4 px-6 text-muted text-sm font-medium">
-                  <div className="flex items-center justify-end gap-1">
-                    24H Change
-                    <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
-                      <path d="M7 14l5-5 5 5z" />
-                    </svg>
-                  </div>
-                </th>
-                <th className="text-right py-4 px-6 text-muted text-sm font-medium">
-                  Actions
-                </th>
-              </tr>
-            </thead>
-            <tbody>
+          {/* Tokens Tab - Table View */}
+          {activeTab === 'tokens' && (
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-hairline">
+                  <th className="text-left py-4 px-6 text-muted text-sm font-medium">
+                    <div className="flex items-center gap-1">
+                      Coin
+                      <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M7 14l5-5 5 5z" />
+                      </svg>
+                    </div>
+                  </th>
+                  <th className="text-right py-4 px-6 text-muted text-sm font-medium">
+                    <div className="flex items-center justify-end gap-1">
+                      Amount
+                      <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M7 14l5-5 5 5z" />
+                      </svg>
+                    </div>
+                  </th>
+                  <th className="text-right py-4 px-6 text-muted text-sm font-medium">
+                    <div className="flex items-center justify-end gap-1">
+                      Coin Price / Total Value
+                      <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                    </div>
+                  </th>
+                  <th className="text-right py-4 px-6 text-muted text-sm font-medium">
+                    <div className="flex items-center justify-end gap-1">
+                      24H Change
+                      <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M7 14l5-5 5 5z" />
+                      </svg>
+                    </div>
+                  </th>
+                  <th className="text-right py-4 px-6 text-muted text-sm font-medium">
+                    Actions
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
               {tokensLoading ? (
                 <tr>
                   <td colSpan={5} className="py-12 text-center">
@@ -574,7 +674,7 @@ export default function HomePage() {
                     </div>
                   </td>
                 </tr>
-              ) : (
+              ) : activeTab === 'tokens' ? (
                 tokens.map((token, index) => (
                   <tr 
                     key={token.address} 
@@ -586,14 +686,12 @@ export default function HomePage() {
                           // eslint-disable-next-line @next/next/no-img-element
                           <img src={token.icon} alt={token.ticker} className="w-8 h-8 rounded-full object-cover" />
                         ) : token.fallbackIcon ? (
-                          <>
-                            <div
-                              className="w-8 h-8 rounded-full flex items-center justify-center"
-                              style={getTokenIconStyle(token.fallbackIcon.bgColor || '#6aa8ff', token.fallbackIcon.textColor || '#ffffff')}
-                            >
-                              <span className="text-xs font-bold">{token.fallbackIcon.letter}</span>
-                            </div>
-                          </>
+                          <div
+                            className="w-8 h-8 rounded-full flex items-center justify-center"
+                            style={getTokenIconColors(token.fallbackIcon.bgColor || '#6aa8ff', token.fallbackIcon.textColor || '#ffffff')}
+                          >
+                            <span className="text-xs font-bold">{token.fallbackIcon.letter}</span>
+                          </div>
                         ) : (
                           <div className="w-8 h-8 rounded-full bg-gray-500 flex items-center justify-center">
                             <span className="text-white text-xs font-bold">?</span>
@@ -646,9 +744,134 @@ export default function HomePage() {
                     </td>
                   </tr>
                 ))
+              ) : (
+                <tr>
+                  <td colSpan={5} className="py-12 text-center">
+                    <div className="flex flex-col items-center gap-3">
+                      <Wallet className="h-12 w-12 text-muted opacity-50" />
+                      <span className="text-muted">Select a tab to view your assets</span>
+                    </div>
+                  </td>
+                </tr>
               )}
             </tbody>
           </table>
+          )}
+
+          {/* Storage Tab - Virtualized Card List */}
+          {activeTab === 'storage' && isLoadingStorage ? (
+            <div className="virtualized-card-list">
+              <div className="token-card-list">
+                <div className="virtual-table-empty">
+                  <div className="flex flex-col items-center gap-3">
+                    <svg className="animate-spin h-8 w-8 text-accent" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    <span className="text-muted">Loading storage accounts...</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : activeTab === 'storage' && storageAccounts.length === 0 ? (
+            <div className="virtualized-card-list">
+              <div className="token-card-list">
+                <div className="virtual-table-empty">
+                  <div className="flex flex-col items-center gap-3">
+                    <Wallet className="h-12 w-12 text-muted opacity-50" />
+                    <div className="text-center">
+                      <p className="text-muted mb-2">No storage accounts found</p>
+                      <p className="text-sm text-faint">
+                        {isTradingEnabled 
+                          ? 'Your storage accounts will appear here' 
+                          : 'Enable trading to create a storage account'}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : activeTab === 'storage' ? (
+            <div className="virtualized-card-list">
+              <div className="token-card-list" role="list" aria-busy={isLoadingStorage} aria-live="polite">
+                {storageAccounts.map((account) => (
+                  <div key={account.entity} className="token-card" role="listitem">
+                    <div className="token-card-header">
+                      <div className="token-card-icon">
+                        <div className="w-10 h-10 rounded-full bg-accent/20 flex items-center justify-center flex-shrink-0">
+                          <Wallet className="h-5 w-5 text-accent" />
+                        </div>
+                      </div>
+                      <div className="token-card-info">
+                        <div className="token-card-name">{account.name || 'Storage Account'}</div>
+                        <div className="token-card-meta">
+                          {account.entity.slice(0, 10)}...{account.entity.slice(-6)}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="token-card-amounts">
+                      <div className="token-card-amount">
+                        {account.description && (
+                          <div className="text-sm text-muted mb-2">{account.description}</div>
+                        )}
+                        <div className="flex items-center gap-2 mb-2">
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-500/10 text-green-500 border border-green-500/20">
+                            Active
+                          </span>
+                          {account.balance && (
+                            <span className="text-sm text-foreground font-medium">
+                              {parseFloat(account.balance).toFixed(2)} KTA
+                            </span>
+                          )}
+                        </div>
+                        {account.permissions.length > 0 && (
+                          <div className="flex flex-wrap gap-1">
+                            {account.permissions.slice(0, 2).map((perm, idx) => (
+                              <span 
+                                key={idx}
+                                className="inline-flex items-center px-2 py-1 rounded text-xs bg-surface text-muted border border-hairline"
+                              >
+                                {perm}
+                              </span>
+                            ))}
+                            {account.permissions.length > 2 && (
+                              <span className="inline-flex items-center px-2 py-1 rounded text-xs text-faint">
+                                +{account.permissions.length - 2}
+                              </span>
+                            )}
+                          </div>
+                        )}
+                        {account.principal && (
+                          <div className="mt-2 text-xs text-faint">
+                            Owner: {account.principal.slice(0, 8)}...{account.principal.slice(-4)}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
+          {/* Other Tabs */}
+          {activeTab === 'nfts' && (
+            <div className="flex items-center justify-center py-12">
+              <div className="text-center">
+                <Wallet className="h-12 w-12 text-muted opacity-50 mx-auto mb-4" />
+                <p className="text-muted">NFT support coming soon</p>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'others' && (
+            <div className="flex items-center justify-center py-12">
+              <div className="text-center">
+                <Wallet className="h-12 w-12 text-muted opacity-50 mx-auto mb-4" />
+                <p className="text-muted">Other assets coming soon</p>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

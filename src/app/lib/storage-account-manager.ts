@@ -25,12 +25,40 @@ function normalizePublicKeyString(value: unknown): string | null {
     return candidate;
   }
 
-  if (candidate && isPublicKeyLike(candidate)) {
-    return candidate.toString();
+  // Handle SDK objects with .get() or .toString() methods
+  if (candidate && typeof candidate === "object") {
+    // Try .get() method (for Keeta SDK PublicKey objects)
+    if ("get" in candidate) {
+      try {
+        const getFn = (candidate as { get?: unknown }).get;
+        if (typeof getFn === "function") {
+          const result = getFn.call(candidate);
+          if (typeof result === "string") {
+            return result;
+          }
+        }
+      } catch {
+        // Continue to next method
+      }
+    }
+    
+    // Try .toString() method
+    if (isPublicKeyLike(candidate)) {
+      try {
+        return candidate.toString();
+      } catch {
+        // Continue
+      }
+    }
   }
 
+  // Try toString on the value itself
   if (isPublicKeyLike(value)) {
-    return value.toString();
+    try {
+      return value.toString();
+    } catch {
+      // Continue
+    }
   }
 
   return null;
@@ -132,6 +160,8 @@ export class StorageAccountManager {
   }
 
   async createStorageAccount(exchangeOperatorPubkey: string, allowedTokens: string[]): Promise<string> {
+    console.log('Creating storage account...');
+    
     if (!exchangeOperatorPubkey || typeof exchangeOperatorPubkey !== "string") {
       throw new Error("exchangeOperatorPubkey must be a non-empty string");
     }
@@ -145,14 +175,29 @@ export class StorageAccountManager {
     await this.invokeIfAvailable(builder, ["computeBlocks"]);
     await this.setStorageAccountDefaults(builder, storageAccount);
 
-    const operatorAccount = normalizeAccountRef(exchangeOperatorPubkey);
-    for (const token of allowedTokens) {
-      try {
-        const tokenAccount = normalizeAccountRef(token);
-        await this.grantSendOnBehalf(builder, operatorAccount, tokenAccount, storageAccount);
-      } catch (error) {
-        console.warn("StorageAccountManager: skipping token permission due to invalid token reference", token, error);
+    // Filter out placeholder values before processing
+    const isValidAddress = (addr: string) => 
+      addr && !addr.startsWith('PLACEHOLDER_') && addr.length > 10;
+
+    // Only grant permissions if we have valid (non-placeholder) addresses
+    if (isValidAddress(exchangeOperatorPubkey)) {
+      const operatorAccount = normalizeAccountRef(exchangeOperatorPubkey);
+      
+      for (const token of allowedTokens) {
+        if (!isValidAddress(token)) {
+          console.log('Skipping placeholder token:', token);
+          continue;
+        }
+        
+        try {
+          const tokenAccount = normalizeAccountRef(token);
+          await this.grantSendOnBehalf(builder, operatorAccount, tokenAccount, storageAccount);
+        } catch (error) {
+          console.warn("Skipping token permission due to error:", token, error);
+        }
       }
+    } else {
+      console.log('Skipping permission grants - operator address is placeholder');
     }
 
     const receipt = await this.userClient.publishBuilder(builder);
@@ -164,6 +209,7 @@ export class StorageAccountManager {
       throw new Error("Failed to resolve storage account public key after publishing");
     }
 
+    console.log('Storage account created:', publicKey);
     return publicKey;
   }
 
@@ -262,10 +308,16 @@ export class StorageAccountManager {
       return;
     }
 
+    // Encode metadata as base64 (Keeta SDK requires base64 format)
+    const metadataJson = JSON.stringify({ created: Date.now(), type: "dex" });
+    const metadataBase64 = typeof btoa !== 'undefined' 
+      ? btoa(metadataJson)
+      : Buffer.from(metadataJson).toString('base64');
+    
     const metadata = {
-      name: "DEX Storage Account",
+      name: "DEX_STORAGE_ACCOUNT",
       description: "Storage account for hybrid DEX operations",
-      metadata: JSON.stringify({ created: Date.now(), type: "dex" }),
+      metadata: metadataBase64,
       defaultPermission: createPermissionPayload(["STORAGE_DEPOSIT", "STORAGE_CAN_HOLD"]),
     } satisfies Record<string, unknown>;
 
