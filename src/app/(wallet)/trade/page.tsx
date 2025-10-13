@@ -65,7 +65,7 @@ export default function TradePage(): React.JSX.Element {
       <div className="mx-auto flex w-full max-w-[1440px] flex-col gap-6">
 
         {marketDetails && (
-          <section className="glass rounded-lg border border-hairline p-4">
+          <section className="glass rounded-lg border border-hairline p-4 relative z-30">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-6">
                 <TradingPairSelector selected={selectedPair} onChange={handlePairChange} />
@@ -102,7 +102,7 @@ export default function TradePage(): React.JSX.Element {
         )}
 
         <div className="grid grid-cols-12 gap-6">
-          <section className="col-span-12 lg:col-span-8">
+          <section className="col-span-12 lg:col-span-8 relative z-10">
             <div className="glass flex h-full flex-col gap-4 rounded-lg border border-hairline p-4">
               <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                 <div>
