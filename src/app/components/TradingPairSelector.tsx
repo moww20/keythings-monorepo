@@ -181,7 +181,7 @@ export function TradingPairSelector({
                       onChange(pair.symbol);
                       setIsOpen(false);
                     }}
-                    className={`w-full rounded-md px-3 py-2 text-left transition-all duration-200 ${
+                    className={`w-full rounded-md px-3 py-2 text-left transition-colors duration-200 focus-visible:outline-none focus-visible:bg-surface-strong/80 ${
                       isActive
                         ? 'bg-surface-strong text-foreground'
                         : 'text-foreground hover:bg-surface-strong/80'
