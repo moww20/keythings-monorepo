@@ -184,7 +184,7 @@ export function TradingPairSelector({
                     className={`w-full rounded-md px-3 py-2 text-left transition-all duration-200 ${
                       isActive
                         ? 'bg-surface-strong text-foreground'
-                        : 'hover:bg-surface hover:text-foreground'
+                        : 'text-foreground hover:bg-surface-strong/80'
                     }`}
                     role="option"
                     aria-selected={isActive}
