@@ -157,6 +157,18 @@ body {
 
 .bg-surface { background: var(--surface-soft); }
 .bg-surface-strong { background: var(--surface-tint); }
+.bg-surface-strong\/80 {
+  background: var(--surface-tint);
+  background: color-mix(in oklab, var(--surface-tint) 80%, transparent);
+}
+.hover\:bg-surface-strong\/80:hover {
+  background: var(--surface-tint);
+  background: color-mix(in oklab, var(--surface-tint) 80%, transparent);
+}
+.focus-visible\:bg-surface-strong\/80:focus-visible {
+  background: var(--surface-tint);
+  background: color-mix(in oklab, var(--surface-tint) 80%, transparent);
+}
 
 .border-hairline { border-color: var(--hairline); }
 .border-soft { border-color: var(--hairline-strong); }
