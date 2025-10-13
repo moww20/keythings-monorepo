@@ -181,10 +181,10 @@ export function TradingPairSelector({
                       onChange(pair.symbol);
                       setIsOpen(false);
                     }}
-                    className={`w-full rounded-md px-3 py-2 text-left transition-colors ${
+                    className={`w-full rounded-md px-3 py-2 text-left transition-all duration-200 ${
                       isActive
                         ? 'bg-surface-strong text-foreground'
-                        : 'text-muted hover:bg-surface hover:text-foreground'
+                        : 'hover:bg-surface hover:text-foreground'
                     }`}
                     role="option"
                     aria-selected={isActive}
