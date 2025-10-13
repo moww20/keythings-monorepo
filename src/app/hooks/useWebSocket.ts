@@ -39,14 +39,23 @@ const FALLBACK_ORDER_BOOK: OrderBookSnapshot = {
   ],
 };
 
-const FALLBACK_TRADES: TradeHistoryEntry[] = Array.from({ length: 20 }).map((_, index) => ({
-  id: `trade-${index}`,
-  market: 'KTA/USDT',
-  price: 0.089 + (Math.random() - 0.5) * 0.002,
-  quantity: 200 + Math.random() * 800,
-  side: index % 2 === 0 ? 'buy' : 'sell',
-  timestamp: Date.now() - index * 60_000,
-}));
+const FALLBACK_TRADE_BASE_TIMESTAMP = Date.UTC(2024, 0, 1, 12, 0, 0);
+
+const FALLBACK_TRADES: TradeHistoryEntry[] = Array.from({ length: 20 }, (_, index) => {
+  const priceVariation = ((index % 6) - 3) * 0.00005;
+  const quantityBase = 240 + index * 18;
+
+  return {
+    id: `trade-${index}`,
+    market: 'KTA/USDT',
+    price: Number((0.089 + priceVariation).toFixed(6)),
+    quantity: Number(quantityBase.toFixed(4)),
+    side: index % 2 === 0 ? 'buy' : 'sell',
+    timestamp: FALLBACK_TRADE_BASE_TIMESTAMP - index * 60_000,
+  };
+});
+
+const FALLBACK_ORDER_BASE_TIMESTAMP = FALLBACK_TRADE_BASE_TIMESTAMP - 60_000 * 5;
 
 const FALLBACK_ORDERS: UserOrderEntry[] = [
   {
@@ -57,7 +66,7 @@ const FALLBACK_ORDERS: UserOrderEntry[] = [
     quantity: 1500,
     filledQuantity: 500,
     status: 'partially_filled',
-    createdAt: Date.now() - 60_000 * 15,
+    createdAt: FALLBACK_ORDER_BASE_TIMESTAMP - 60_000 * 15,
   },
   {
     id: 'order-2',
@@ -67,7 +76,7 @@ const FALLBACK_ORDERS: UserOrderEntry[] = [
     quantity: 900,
     filledQuantity: 900,
     status: 'filled',
-    createdAt: Date.now() - 60_000 * 45,
+    createdAt: FALLBACK_ORDER_BASE_TIMESTAMP - 60_000 * 45,
   },
 ];
 
