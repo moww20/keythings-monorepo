@@ -153,8 +153,8 @@ export function TradingPairSelector({
 
       {isOpen && (
         <>
-          <div className="fixed inset-0 z-10" onClick={() => setIsOpen(false)} aria-hidden="true" />
-          <div className="absolute top-full left-0 z-20 mt-2 w-80 rounded-lg border border-hairline bg-background shadow-xl">
+          <div className="fixed inset-0 z-40" onClick={() => setIsOpen(false)} aria-hidden="true" />
+          <div className="absolute top-full left-0 z-50 mt-2 w-80 rounded-lg border border-hairline bg-background shadow-xl">
             <div className="p-4">
               <label className="mb-2 block text-xs font-medium uppercase tracking-wide text-muted">
                 Search Markets

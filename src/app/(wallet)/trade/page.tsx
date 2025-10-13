@@ -68,7 +68,6 @@ export default function TradePage(): React.JSX.Element {
           <section className="glass rounded-lg border border-hairline p-4">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-6">
-                <h2 className="text-lg font-semibold text-foreground">Markets</h2>
                 <TradingPairSelector selected={selectedPair} onChange={handlePairChange} />
               </div>
               <div className="grid grid-cols-2 gap-4 text-sm text-muted sm:grid-cols-4">
