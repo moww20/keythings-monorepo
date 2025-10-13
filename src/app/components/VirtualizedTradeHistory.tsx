@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useEffect, useState } from 'react';
 
 import type { TradeHistoryEntry } from '@/app/types/trading';
 
@@ -15,6 +15,7 @@ function formatTime(timestamp: number) {
     hour: '2-digit',
     minute: '2-digit',
     second: '2-digit',
+    hour12: true,
   });
 }
 
@@ -39,6 +40,12 @@ export function VirtualizedTradeHistory({
   trades = [], 
   limit = 100
 }: VirtualizedTradeHistoryProps): React.JSX.Element {
+  const [isClient, setIsClient] = useState(false);
+
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
+
   const items = useMemo(() => {
     return trades
       .slice(0, limit)
@@ -77,8 +84,8 @@ export function VirtualizedTradeHistory({
                 key={`${trade.id}-${trade.timestamp}`}
                 className="grid grid-cols-[70px_1fr_1fr_1fr] gap-1 px-2 py-1 text-xs font-mono transition-colors hover:bg-surface"
               >
-                <span className="truncate text-muted" title={formatTime(trade.timestamp)}>
-                  {formatTime(trade.timestamp)}
+                <span className="truncate text-muted" title={isClient ? formatTime(trade.timestamp) : ''}>
+                  {isClient ? formatTime(trade.timestamp) : '--:--:--'}
                 </span>
                 <span className={`text-right truncate ${color}`} title={formatPrice(trade.price)}>
                   {formatPrice(trade.price)}

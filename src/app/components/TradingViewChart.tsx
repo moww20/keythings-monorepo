@@ -48,9 +48,15 @@ export function TradingViewChart({
 }: TradingViewChartProps): React.JSX.Element {
   const containerRef = useRef<HTMLDivElement>(null);
   const widgetRef = useRef<TradingViewWidget | null>(null);
+  const retryCountRef = useRef(0);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isMounted, setIsMounted] = useState(false);
   const symbol = useMemo(() => pair.replace('/', ''), [pair]);
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -94,11 +100,19 @@ export function TradingViewChart({
   }, []);
 
   useEffect(() => {
-    if (isLoading || error || typeof window === 'undefined' || !window.TradingView) {
+    if (!isMounted || isLoading || error || typeof window === 'undefined' || !window.TradingView) {
       return;
     }
 
     const initializeWidget = () => {
+      // Limit retries to prevent infinite loop
+      if (retryCountRef.current > 10) {
+        console.error('TradingView: Max retries reached, giving up');
+        setError('Failed to initialize chart after multiple attempts');
+        setIsLoading(false);
+        return;
+      }
+
       if (widgetRef.current) {
         try {
           widgetRef.current.remove();
@@ -110,23 +124,26 @@ export function TradingViewChart({
 
       const container = containerRef.current;
       if (!container) {
-        console.warn('TradingView container not found, retrying...');
+        retryCountRef.current++;
         setTimeout(initializeWidget, 100);
         return;
       }
 
       if (!container.parentNode) {
-        console.warn('TradingView container not mounted, retrying...');
+        retryCountRef.current++;
         setTimeout(initializeWidget, 100);
         return;
       }
 
       const rect = container.getBoundingClientRect();
       if (rect.width === 0 || rect.height === 0) {
-        console.warn('TradingView container has no dimensions, retrying...');
+        retryCountRef.current++;
         setTimeout(initializeWidget, 200);
         return;
       }
+
+      // Reset retry count on successful initialization
+      retryCountRef.current = 0;
 
       try {
         const widget = new window.TradingView.widget({
@@ -301,7 +318,7 @@ export function TradingViewChart({
         widgetRef.current = null;
       }
     };
-  }, [error, isLoading, symbol, timeframe]);
+  }, [error, isLoading, symbol, timeframe, isMounted]);
 
   if (isLoading) {
     return (
