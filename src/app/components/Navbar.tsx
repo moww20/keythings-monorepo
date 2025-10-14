@@ -33,11 +33,11 @@ export default function Navbar(): React.JSX.Element {
   const menuItems: MenuItem[] = [
     { path: '/home', label: 'Dashboard', icon: LayoutDashboard, enabled: true },
     { path: '/trade', label: 'Trade', icon: TrendingUp, enabled: true },
+    { path: '/pools', label: 'Liquidity Pools (Beta)', icon: Droplets, enabled: true },
     { path: null, label: 'Open Orders', icon: ShoppingCart, enabled: false },
     { path: null, label: 'OTC Swap', icon: ArrowLeftRight, enabled: false },
     { path: null, label: 'Launchpad', icon: Rocket, enabled: false },
     { path: null, label: 'NFT Marketplace', icon: Image, enabled: false },
-    { path: null, label: 'Liquidity Pools (Beta)', icon: Droplets, enabled: false },
     { path: null, label: 'Account', icon: UserCircle, enabled: false },
     { path: null, label: 'Settings', icon: Settings, enabled: false },
   ];

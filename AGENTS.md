@@ -69,6 +69,160 @@ Welcome to the bigCat repository. Follow these rules whenever you modify code.
 
 ---
 
+## 🔒 CRITICAL: NON-CUSTODIAL ARCHITECTURE - SECURITY FIRST
+
+**🚨 MANDATORY SECURITY PRINCIPLE**: This application follows a **ZERO-CUSTODY** design. The backend NEVER holds user funds or private keys.
+
+### Core Architecture Principle
+
+```
+USER SIGNS EVERYTHING. BACKEND HAS ZERO CUSTODY.
+```
+
+**What This Means:**
+
+✅ **Frontend builds transactions** - Uses Keeta SDK to construct operations  
+✅ **User signs via wallet** - Every operation requires explicit wallet approval  
+✅ **Backend tracks state only** - Stateless coordinator with NO custody  
+✅ **No operator key stored** - Backend cannot move funds  
+✅ **User maintains OWNER** - Full control over storage accounts  
+
+### Implementation Rules
+
+#### ❌ NEVER Do This:
+```typescript
+// BAD: Backend creates storage account and holds key
+POST /api/pools/create
+Backend: Creates storage account, stores operator key, moves funds
+```
+
+#### ✅ ALWAYS Do This:
+```typescript
+// GOOD: User creates storage account via wallet
+Frontend: Builds transaction with Keeta SDK
+User: Signs transaction in wallet extension
+Keeta Network: Settles transaction (400ms)
+Backend: Notified of pool creation (tracking only)
+```
+
+### Pool Operations Flow
+
+**Pool Creation (User-Controlled):**
+1. User enters pool parameters in UI
+2. Frontend builds unsigned transaction using Keeta SDK
+3. Wallet extension prompts user to sign
+4. User approves → Transaction submitted to Keeta
+5. Keeta settles transaction (400ms)
+6. Frontend notifies backend for UI tracking
+7. Backend updates internal state (NO custody involved)
+
+**Add/Remove Liquidity (User-Controlled):**
+1. User requests liquidity operation
+2. Frontend builds transaction (transfers to/from user's pool storage account)
+3. User signs in wallet (user is OWNER of storage account)
+4. Transaction settles on Keeta
+5. Backend updates UI state only
+
+**Security Benefits:**
+- ✅ **Zero custody risk** - Backend breach ≠ stolen funds
+- ✅ **User control** - User can withdraw anytime
+- ✅ **Transparent** - All operations visible on Keeta explorer
+- ✅ **Revocable** - User can close pool without backend permission
+- ✅ **No single point of failure** - Must compromise individual wallets
+
+### Code Guidelines
+
+**Frontend Transaction Builder Pattern:**
+```typescript
+import { useWallet } from '../contexts/WalletContext';
+
+async function createPoolOnChain(params) {
+  const { client, publicKey } = useWallet();
+  
+  // Build transaction
+  const builder = client.initBuilder();
+  const poolStorage = builder.generateIdentifier(STORAGE);
+  
+  // User is OWNER
+  builder.setInfo({
+    defaultPermission: new Permissions(['STORAGE_DEPOSIT', 'STORAGE_CAN_HOLD'])
+  }, { account: poolStorage.account });
+  
+  // Transfer funds
+  builder.send(poolStorage.account, amountA, tokenA);
+  builder.send(poolStorage.account, amountB, tokenB);
+  
+  // User signs and publishes
+  const result = await client.publishBuilder(builder);
+  
+  // Notify backend (tracking only - NO custody)
+  await fetch('/api/pools/created', {
+    method: 'POST',
+    body: JSON.stringify({
+      pool_id, storage_account, tx_hash,
+      // Backend just tracks for UI
+    })
+  });
+}
+```
+
+**Backend Notification-Only Pattern:**
+```rust
+// Backend endpoint (NO custody, just tracking)
+pub async fn notify_pool_created(
+    state: web::Data<PoolState>,
+    body: web::Json<PoolCreatedNotification>,
+) -> HttpResponse {
+    // User already created pool on-chain
+    // Backend just updates tracking for UI
+    
+    let pool = LiquidityPool {
+        id: body.pool_id,
+        storage_account: body.storage_account, // User-owned
+        creator: body.creator, // User's wallet address
+        // NO operator key, NO custody
+    };
+    
+    state.pool_manager.register_pool(pool);
+    
+    HttpResponse::Ok().json(json!({ "status": "tracked" }))
+}
+```
+
+### Prohibited Patterns
+
+❌ **NEVER store operator private keys in backend:**
+```rust
+// WRONG - DO NOT DO THIS
+let operator_seed = env::var("OPERATOR_SEED")?; // ❌ Custody risk!
+```
+
+❌ **NEVER have backend sign transactions:**
+```rust
+// WRONG - DO NOT DO THIS
+let signed_tx = operator.sign(transaction)?; // ❌ Backend custody!
+```
+
+❌ **NEVER create storage accounts from backend:**
+```rust
+// WRONG - DO NOT DO THIS
+let storage = keeta_client.create_storage_account()?; // ❌ Backend control!
+```
+
+### Verification Checklist
+
+Before deploying any pool/liquidity feature:
+- [ ] User signs ALL operations via wallet
+- [ ] Backend has NO operator private key
+- [ ] Backend endpoints are notification-only
+- [ ] Storage accounts owned by users (not operator)
+- [ ] All funds movements visible on Keeta explorer
+- [ ] Backend CANNOT move funds (only track state)
+
+**See `keeta-pool-integration.plan.md` for complete architecture documentation.**
+
+---
+
 ## 🎨 DESIGN SYSTEM STANDARDIZATION
 
 **MANDATORY**: When creating UI elements, buttons, cards, or any visual components, follow these standardized design patterns from the home page.
@@ -385,6 +539,43 @@ disabled:transform-none
 
 ---
 
+## 🚫 NO MOCK DATA / FALLBACK DATA
+
+**MANDATORY**: Never use mock data or fallback data in the application code.
+
+**Why:**
+- ❌ Mixes with real data (hard to detect)
+- ❌ Can leak to production
+- ❌ Hides backend connection issues
+- ❌ Creates false sense of functionality
+
+**What to do instead:**
+- ✅ Show clear error states when backend is unavailable
+- ✅ Display helpful error messages with instructions
+- ✅ Make it obvious the backend needs to be running
+- ✅ Use proper loading/error/empty state handling
+
+**Example - WRONG:**
+```typescript
+// ❌ BAD: Fallback to mock data
+catch (error) {
+  if (process.env.NODE_ENV === 'development') {
+    setData(MOCK_DATA); // NO! Don't do this
+  }
+}
+```
+
+**Example - CORRECT:**
+```typescript
+// ✅ GOOD: Show clear error
+catch (error) {
+  setError('Backend not running. Start with: cd keythings-dapp-engine && cargo run');
+  setData([]);
+}
+```
+
+---
+
 ## 🔍 INPUT VALIDATION & ERROR HANDLING
 
 **MANDATORY**: All input validation and data parsing must use Zod schemas. Try/catch blocks should be minimized and used only for truly exceptional cases.
@@ -636,17 +827,7 @@ Run the following before committing changes:
 **After thinking through the problem, scan the knowledge base for relevant information using MCP tools:**
 
 **MCP Configuration:**
-Your MCP-capable tools should connect to the Keeta knowledge base using the configuration in `agents.config.json`:
-
-```json
-{
-  "mcpServers": {
-    "keeta-dev-mcp-server": {
-      "url": "https://keeta-dev-mcp.com/mcp"
-    }
-  }
-}
-```
+Your MCP-capable tools should connect to the Keeta knowledge base using the global Cursor MCP settings.
 
 **Required Knowledge Base Queries:**
 Use MCP tools to search for:
@@ -665,6 +846,232 @@ Use MCP tools to search for:
 - "Keeta SDK performance optimization for [use case]"
 
 **This two-step process is MANDATORY and must be completed before any code changes.**
+
+---
+
+## 1.1. MANDATORY: MCP Tool Selection & Usage Strategy
+
+**🚨 CRITICAL RULE**: Always use the RIGHT MCP tool for the RIGHT problem. Choose based on problem type, not convenience.
+
+### Available MCP Tools
+
+#### 1. **Keeta MCP** (`mcp_keeta-dev-mcp-server_search_keeta_docs`)
+**Use for:** Keeta-specific technical questions and implementation guidance
+
+**When to use:**
+- ✅ Understanding Keeta SDK features and APIs
+- ✅ Keeta architecture, design patterns, and best practices
+- ✅ Keeta security guidelines and compliance requirements
+- ✅ Keeta performance standards (400ms settlement, 10M TPS)
+- ✅ Keeta cross-chain interoperability and token standards
+- ✅ Keeta transaction lifecycle and settlement mechanics
+- ✅ Official Keeta documentation and whitepaper content
+- ✅ Keeta RPC methods and provider integration
+- ✅ Keeta network configuration and chain details
+
+**Example queries:**
+```
+"How does Keeta handle transaction settlement?"
+"What are Keeta's security best practices for wallet integration?"
+"How to implement read capability tokens in Keeta SDK?"
+"What is Keeta's approach to cross-chain asset transfers?"
+```
+
+**When NOT to use:**
+- ❌ UI/UX issues (use Browser MCP instead)
+- ❌ General web development questions (use your knowledge)
+- ❌ Non-Keeta blockchain questions
+- ❌ Browser console errors (use Browser MCP)
+
+---
+
+#### 2. **Browser MCP** (`mcp_browsermcp_*`)
+**Use for:** Real-time browser debugging, UI testing, and user experience validation
+
+**When to use:**
+- ✅ Debugging wallet connection issues in real browser
+- ✅ Testing UI interactions with actual wallet extension
+- ✅ Monitoring console logs for runtime errors
+- ✅ Validating responsive design and layout
+- ✅ Testing form submissions and user flows
+- ✅ Verifying visual appearance and styling
+- ✅ Checking accessibility and user experience
+- ✅ Monitoring network requests and API calls
+- ✅ Testing transaction flows with real wallet
+- ✅ Debugging state management in browser
+
+**Available Browser MCP Tools:**
+- `browser_navigate` - Navigate to URL
+- `browser_snapshot` - Get page structure (accessibility tree)
+- `browser_screenshot` - Visual inspection
+- `browser_get_console_logs` - Monitor console output
+- `browser_click` - Interact with elements
+- `browser_type` - Fill forms and inputs
+- `browser_hover` - Test hover states
+- `browser_select_option` - Test dropdowns
+- `browser_wait_for` - Wait for elements/text
+
+**Example usage:**
+```
+1. Navigate to http://localhost:3000
+2. Snapshot page to see elements
+3. Get console logs to check for errors
+4. Click "Connect Wallet" button
+5. Screenshot to verify UI state
+6. Monitor console for wallet connection flow
+```
+
+**When NOT to use:**
+- ❌ Keeta SDK technical questions (use Keeta MCP)
+- ❌ Code architecture decisions
+- ❌ Security best practices research
+- ❌ Performance optimization strategies
+
+---
+
+### MCP Tool Selection Decision Tree
+
+```
+Is this a Keeta SDK/network/protocol question?
+├─ YES → Use Keeta MCP
+│   └─ Query documentation for implementation guidance
+│
+└─ NO → Is this a UI/browser/runtime issue?
+    ├─ YES → Use Browser MCP
+    │   ├─ Navigate to the page
+    │   ├─ Take snapshot/screenshot
+    │   ├─ Monitor console logs
+    │   └─ Test interactions
+    │
+    └─ NO → Use standard codebase tools
+        ├─ codebase_search for semantic search
+        ├─ grep for exact matches
+        └─ read_file for reading code
+```
+
+---
+
+### MCP Usage Best Practices
+
+#### **1. Keeta MCP Best Practices:**
+- **Be specific** in queries - mention exact SDK methods, features, or concepts
+- **Include context** - specify what you're trying to accomplish
+- **Query sequentially** - ask one focused question at a time
+- **Cross-reference** - validate findings with actual code implementation
+- **Document learnings** - add important findings to self-learning section
+
+**Good Keeta MCP Query:**
+```
+"How does Keeta implement read capability tokens for wallet provider integration?"
+```
+
+**Bad Keeta MCP Query:**
+```
+"wallet stuff"
+```
+
+---
+
+#### **2. Browser MCP Best Practices:**
+- **Always connect first** - User must connect browser tab via extension
+- **Snapshot before interact** - Get page structure before clicking
+- **Monitor console** - Check logs after each interaction
+- **Screenshot for visual** - Use screenshots to verify UI state
+- **Test user flows** - Simulate real user interactions
+- **Document issues** - Log browser errors to self-learning section
+
+**Good Browser MCP Workflow:**
+```
+1. browser_navigate(http://localhost:3000)
+2. browser_snapshot() - see page structure
+3. browser_get_console_logs() - check for errors
+4. browser_click("Connect Wallet") - test interaction
+5. browser_get_console_logs() - monitor connection flow
+6. browser_screenshot() - verify success state
+```
+
+**Bad Browser MCP Workflow:**
+```
+1. browser_navigate(url)
+2. Assume everything works without checking
+```
+
+---
+
+### When to Use BOTH MCPs Together
+
+**Combined Strategy for Wallet Integration Issues:**
+
+1. **Discover the problem** (Browser MCP):
+   - Navigate to page with issue
+   - Check console logs for errors
+   - Screenshot to see visual problem
+
+2. **Research the solution** (Keeta MCP):
+   - Query Keeta docs for proper implementation
+   - Check security guidelines
+   - Find best practices
+
+3. **Implement the fix** (Code tools):
+   - Make code changes based on findings
+   - Follow Keeta standards from MCP
+
+4. **Validate the fix** (Browser MCP):
+   - Test in real browser
+   - Monitor console logs
+   - Verify wallet connection works
+
+**Example Combined Workflow:**
+```
+Problem: Wallet connection failing
+
+Step 1 (Browser MCP):
+  - Navigate to localhost:3000
+  - Get console logs → "Origin is not authorized"
+  - Screenshot showing error state
+
+Step 2 (Keeta MCP):
+  - Query: "How does Keeta validate origins for wallet connections?"
+  - Find: Need to set APP_ORIGIN_ALLOWLIST
+
+Step 3 (Code):
+  - Update origin configuration
+  - Rebuild and restart dev server
+
+Step 4 (Browser MCP):
+  - Refresh page
+  - Click "Connect Wallet"
+  - Check console → Connection successful
+  - Screenshot showing connected state
+```
+
+---
+
+### MCP Tool Performance Tips
+
+- **Keeta MCP**: Cache responses mentally - if you already queried about a topic, reference that knowledge
+- **Browser MCP**: Take snapshots before screenshots - snapshots are faster and show structure
+- **Parallel queries**: When researching multiple unrelated topics, query Keeta MCP for each in separate calls
+- **Progressive debugging**: Start with broad snapshots, then drill into specific elements
+
+---
+
+### Prohibited MCP Usage Patterns
+
+❌ **NEVER do this:**
+- Query Keeta MCP for generic web dev questions
+- Use Browser MCP without user connecting a tab first
+- Skip MCP tools when they would provide critical information
+- Use Browser MCP for Keeta protocol questions
+- Use Keeta MCP for UI debugging
+- Make assumptions without verifying via MCP when applicable
+
+✅ **ALWAYS do this:**
+- Choose the right MCP for the problem type
+- Query Keeta MCP before implementing Keeta features
+- Use Browser MCP to verify fixes work in real browser
+- Document MCP findings in self-learning section
+- Cross-validate MCP results with actual implementation
 
 ---
 
@@ -1104,4 +1511,319 @@ I've updated the AGENTS.md file to implement a test-first approach and clarify c
 7. **Maintained security standards**: Kept all the security checklist and review processes intact
 
 The updated instructions now clearly specify that agents should run `npm run build` only once after implementation, and only rerun if there were actual errors that needed fixing.
+
+---
+
+## 🧠 SELF-LEARNING & CONTINUOUS IMPROVEMENT
+
+**Purpose:** This section serves as a living knowledge base where the AI agent documents discovered patterns, recurring issues, solutions, and improvements. Each entry represents a learning that makes the agent smarter and more effective over time.
+
+**When to update this section:**
+- ✅ When discovering a recurring pattern or anti-pattern
+- ✅ When finding a better way to solve a common problem
+- ✅ When identifying gaps in the current workflow
+- ✅ When learning new Keeta features or capabilities via MCP
+- ✅ When debugging reveals a systemic issue
+- ✅ When user feedback highlights a missing guideline
+- ✅ After successfully resolving a complex issue
+
+**How to update:**
+1. Add entry with date and category
+2. Describe the discovery/improvement clearly
+3. Include code examples if applicable
+4. Note the impact on workflow
+
+---
+
+### 📚 Knowledge Base Entries
+
+#### Entry #1: Browser MCP Setup & Capabilities (2025-10-13)
+**Category:** Tool Discovery  
+**Discovery:** Browser MCP requires user to manually connect browser tab via extension, then provides real-time access to:
+- Connected user's actual Chrome browser (with extensions!)
+- Real wallet interactions and state
+- Console logs from running application
+- Visual snapshots and screenshots
+- Element interaction (click, type, hover, etc.)
+
+**Key Learning:** Browser MCP is NOT automated Playwright - it's a bridge to the user's actual browser environment, which means:
+- Can test with real wallet extensions (Keeta Wallet)
+- Can see real console errors in user's context
+- Requires user to connect tab first before any commands
+- More powerful for debugging real integration issues
+
+**Impact:** Use Browser MCP for all wallet integration testing instead of automated browser tools
+
+**Code Pattern:**
+```javascript
+// Always start Browser MCP workflow with:
+1. Ask user to connect tab via Browser MCP extension
+2. browser_navigate(url) - may fail if not connected
+3. browser_snapshot() - get page structure
+4. browser_get_console_logs() - check for errors
+5. Interact and monitor
+```
+
+---
+
+#### Entry #2: MCP Tool Selection Decision Framework (2025-10-13)
+**Category:** Workflow Optimization  
+**Discovery:** Need clear decision tree for choosing between Keeta MCP and Browser MCP
+
+**Decision Framework:**
+```
+Problem Type Decision Tree:
+├─ Keeta SDK/Protocol Question? → Keeta MCP
+│   ├─ Implementation patterns
+│   ├─ Security guidelines
+│   ├─ Performance standards
+│   └─ Architecture decisions
+│
+├─ UI/UX/Runtime Issue? → Browser MCP
+│   ├─ Visual bugs
+│   ├─ Console errors
+│   ├─ User interaction testing
+│   └─ Wallet integration debugging
+│
+└─ Code Architecture Question? → Standard tools
+    ├─ codebase_search
+    ├─ grep
+    └─ read_file
+```
+
+**Impact:** Faster problem resolution by using the right tool immediately
+
+---
+
+#### Entry #3: Console Log Monitoring Pattern (2025-10-13)
+**Category:** Debugging Pattern  
+**Discovery:** Browser MCP's `browser_get_console_logs()` provides real-time insight into:
+- Wallet connection flow (debug messages)
+- API responses (price data, token balances)
+- Error states (network failures, validation errors)
+- State changes (wallet locked/unlocked)
+
+**Best Practice Pattern:**
+```javascript
+// After any interaction, ALWAYS check console logs
+1. Perform action (click, type, etc.)
+2. browser_get_console_logs() - see what happened
+3. Analyze logs for errors or unexpected behavior
+4. Document patterns discovered
+```
+
+**Real Example from Keythings Wallet:**
+```
+[DEBUG] Fetching wallet state...
+[DEBUG] Wallet state: { accounts: Array(1), isLocked: false }
+[DEBUG] Wallet unlocked, requesting read capabilities...
+[DEBUG] Read capability tokens obtained: Array(1)
+[LOG] Price data received: { usd: 0.409674, ... }
+```
+
+**Impact:** Enables real-time debugging of wallet integration flow
+
+---
+
+### 🔍 Common Problem → Solution Patterns
+
+#### Pattern #1: Wallet Connection Failures
+**Problem Indicators:**
+- Console error: "Origin is not authorized"
+- Console error: "read capability token is required"
+- Wallet doesn't connect despite clicking button
+
+**Root Cause:** Dev server running on wrong port (not 3000)
+
+**Solution Pattern:**
+1. Check current server port via `browser_get_console_logs()`
+2. Stop all dev servers
+3. Restart on port 3000: `bun run dev -- -p 3000`
+4. Verify via Browser MCP that wallet connects
+
+**Prevention:** Always start dev server on port 3000 (per AGENTS.md rule)
+
+---
+
+#### Pattern #2: Missing Keeta Implementation Details
+**Problem Indicators:**
+- Unsure how to implement Keeta feature
+- Need to understand Keeta architecture
+- Security concerns about implementation
+
+**Solution Pattern:**
+1. Query Keeta MCP with specific question
+2. Example: "How does Keeta implement [feature]?"
+3. Get official documentation and best practices
+4. Implement following Keeta standards
+5. Validate via Browser MCP testing
+
+**Example:**
+```
+Query: "How does Keeta handle read capability tokens?"
+Response: [Keeta-specific implementation details]
+Action: Implement using Keeta standards
+Verify: Test in browser with real wallet
+```
+
+---
+
+#### Pattern #3: UI Issues vs Code Issues
+**Problem:** Confusion about whether issue is UI or logic
+
+**Decision Pattern:**
+1. Visual problem (layout, styling, appearance)? → Browser MCP screenshot
+2. Functional problem (data, logic, state)? → Browser MCP console logs
+3. Keeta integration problem? → Both Browser MCP + Keeta MCP
+4. Code structure problem? → Standard codebase tools
+
+**Example Workflow:**
+```
+Issue: "Send button not working"
+
+Step 1 (Browser): Screenshot - button looks correct visually
+Step 2 (Browser): Console logs - "Transaction validation failed"
+Step 3 (Keeta MCP): Query validation requirements
+Step 4 (Code): Fix validation logic
+Step 5 (Browser): Test again, verify console shows success
+```
+
+---
+
+### 📈 Workflow Improvements Discovered
+
+#### Improvement #1: Parallel MCP Research
+**Discovery:** When debugging complex issues, query Keeta MCP for multiple related topics in parallel
+
+**Before (Sequential):**
+```
+1. Query: "Keeta transaction signing"
+2. Wait for response
+3. Query: "Keeta error handling"
+4. Wait for response
+5. Query: "Keeta security best practices"
+```
+
+**After (Parallel):**
+```
+// Make parallel queries for independent topics
+query1: "Keeta transaction signing"
+query2: "Keeta error handling"  
+query3: "Keeta security best practices"
+// Get all responses faster
+```
+
+**Impact:** 3x faster research phase
+
+---
+
+#### Improvement #2: Browser MCP Verification Checklist
+**Discovery:** After implementing any wallet feature, run this Browser MCP checklist:
+
+**Post-Implementation Verification:**
+```
+✅ browser_navigate(http://localhost:3000)
+✅ browser_snapshot() - verify UI structure
+✅ browser_get_console_logs() - check for errors
+✅ browser_click("Connect Wallet") - test connection
+✅ browser_get_console_logs() - monitor wallet flow
+✅ browser_screenshot() - verify visual success state
+✅ Test feature interaction (send, trade, etc.)
+✅ browser_get_console_logs() - confirm success
+```
+
+**Impact:** Catches issues before user reports them
+
+---
+
+### 🐛 Recurring Issues & Solutions
+
+#### Issue #1: Port Configuration
+**Recurring Problem:** Wallet extension only works on localhost:3000  
+**Why it happens:** Extension has hardcoded origin whitelist  
+**Solution:** Always use port 3000, documented in section 2 of AGENTS.md  
+**Prevention:** Added to dev server checklist
+
+---
+
+#### Issue #2: Missing Keeta Documentation
+**Recurring Problem:** Implementing Keeta features without checking docs  
+**Why it happens:** Skipping MCP query step  
+**Solution:** MANDATORY Step 2 - Query Keeta MCP before implementation  
+**Prevention:** Added to workflow in section 1
+
+---
+
+### 💡 Future Improvements to Consider
+
+#### Potential Enhancement #1: Automated Browser Testing
+**Idea:** Create automated test suite using Browser MCP  
+**Benefit:** Regression testing after each change  
+**Consideration:** Would need persistent browser connection
+
+#### Potential Enhancement #2: Keeta MCP Response Caching
+**Idea:** Cache frequently asked Keeta MCP queries  
+**Benefit:** Faster lookups for common patterns  
+**Consideration:** Need to invalidate when Keeta updates docs
+
+---
+
+### 📊 Metrics & Observations
+
+**Tool Usage Stats (To track mentally):**
+- Keeta MCP: Best for architecture & security questions
+- Browser MCP: Best for debugging & validation
+- Combined approach: Best for complex wallet integration issues
+
+**Time Savings Observed:**
+- Using right MCP first try: ~5-10min saved per issue
+- Browser MCP for debugging: ~15min saved vs blind code changes
+- Parallel MCP queries: ~3x faster research phase
+
+---
+
+### 🔄 Self-Update Protocol
+
+**When to add new entries:**
+1. **Immediately** after discovering a better approach
+2. **After** successfully resolving a complex issue
+3. **When** user corrects an assumption or approach
+4. **Whenever** a pattern becomes clear (3+ occurrences)
+
+**Entry Format:**
+```markdown
+#### Entry #N: [Title] (YYYY-MM-DD)
+**Category:** [Tool Discovery / Workflow / Pattern / Issue / Improvement]
+**Discovery:** [What was learned]
+**Impact:** [How this improves the workflow]
+**Code/Example:** [If applicable]
+```
+
+**Categories:**
+- 🔧 Tool Discovery - New tool capabilities or features
+- 🔄 Workflow Optimization - Better process or procedure
+- 🎯 Pattern Recognition - Recurring problem/solution patterns
+- 🐛 Issue Resolution - Bug fixes and root causes
+- 💡 Improvement Ideas - Future enhancements
+- 📊 Metrics - Performance and effectiveness data
+
+---
+
+### ✨ Agent Evolution Notes
+
+**Version History:**
+- v1.0 (Initial) - Basic workflow and commands
+- v1.1 (2025-10-13) - Added MCP tool selection framework
+- v1.2 (2025-10-13) - Added Browser MCP debugging patterns
+- v1.3 (2025-10-13) - Added self-learning infrastructure
+
+**Next Evolution Goals:**
+- [ ] Document all Keeta-specific patterns discovered
+- [ ] Build comprehensive browser debugging playbook
+- [ ] Create error → solution quick reference
+- [ ] Establish performance benchmarks for common tasks
+
+---
+
+**🎯 Remember: This section exists to make you smarter with every task. Update it diligently!**
 

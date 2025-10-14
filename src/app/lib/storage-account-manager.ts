@@ -201,12 +201,34 @@ export class StorageAccountManager {
     }
 
     const receipt = await this.userClient.publishBuilder(builder);
-    const publishedAccount =
-      extractAccount(receipt?.account) ?? (receipt?.accounts ? extractAccount(receipt.accounts[0]) : null) ?? storageAccount;
+    console.log('[StorageAccountManager] Receipt from publishBuilder:', JSON.stringify(receipt, null, 2));
+    console.log('[StorageAccountManager] storageAccount (fallback):', JSON.stringify(storageAccount, null, 2));
+    
+    // Handle case where receipt is a string (the account address directly)
+    let publishedAccount;
+    if (typeof receipt === 'string') {
+      console.log('[StorageAccountManager] Receipt is a string, using it directly as the account');
+      publishedAccount = { publicKeyString: receipt };
+    } else {
+      publishedAccount =
+        extractAccount(receipt?.account) ?? (receipt?.accounts ? extractAccount(receipt.accounts[0]) : null) ?? storageAccount;
+    }
+    
+    console.log('[StorageAccountManager] publishedAccount after extraction:', JSON.stringify(publishedAccount, null, 2));
 
     const publicKey = normalizePublicKeyString(publishedAccount);
+    console.log('[StorageAccountManager] Final public key:', publicKey);
+    
     if (!publicKey) {
       throw new Error("Failed to resolve storage account public key after publishing");
+    }
+    
+    // Check if we got a placeholder
+    if (publicKey === '_PLACEHOLDER_' || publicKey.startsWith('PLACEHOLDER_')) {
+      console.error('[StorageAccountManager] ❌ Got placeholder instead of real public key!');
+      console.error('[StorageAccountManager] Receipt:', receipt);
+      console.error('[StorageAccountManager] This means the wallet extension did not return the created account properly');
+      throw new Error("Wallet extension returned placeholder instead of real storage account address");
     }
 
     console.log('Storage account created:', publicKey);

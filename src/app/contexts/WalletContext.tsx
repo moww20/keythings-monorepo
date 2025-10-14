@@ -105,6 +105,83 @@ export function WalletProvider({ children }: WalletProviderProps) {
   const [tradingError, setTradingError] = useState<string | null>(null);
   const [storageAccountAddress, setStorageAccountAddress] = useState<string | null>(null);
   
+  // Keeta SDK user client state
+  const [userClient, setUserClient] = useState<KeetaUserClient | null>(null);
+  
+  // Debug: Log whenever userClient changes
+  useEffect(() => {
+    console.log('[WalletContext] userClient state changed:', {
+      hasClient: !!userClient,
+      type: typeof userClient,
+      methods: userClient ? Object.keys(userClient).filter(k => typeof userClient[k as keyof KeetaUserClient] === 'function').slice(0, 10) : []
+    });
+  }, [userClient]);
+  
+  // Initialize userClient when wallet unlocks
+  useEffect(() => {
+    const initUserClient = async () => {
+      // Clear client if wallet disconnected or locked
+      if (!walletData.wallet.connected || walletData.wallet.isLocked) {
+        console.log('[WalletContext] Clearing userClient (wallet locked/disconnected)');
+        setUserClient(null);
+        return;
+      }
+      
+      if (typeof window === 'undefined' || !window.keeta) {
+        return;
+      }
+      
+      const provider = window.keeta;
+      console.log('[WalletContext] Initializing Keeta SDK user client...');
+      
+      try {
+        // Method 1: Try getUserClient() (async)
+        if (typeof provider.getUserClient === 'function') {
+          const client = await provider.getUserClient();
+          console.log('[WalletContext] getUserClient() returned:', {
+            hasClient: !!client,
+            type: typeof client,
+            hasInitBuilder: client ? typeof client.initBuilder : 'n/a',
+            methods: client ? Object.keys(client).slice(0, 10) : []
+          });
+          if (client && typeof client.initBuilder === 'function') {
+            console.log('[WalletContext] ✅ Got userClient via getUserClient() - SETTING STATE NOW');
+            setUserClient(client as KeetaUserClient);
+            console.log('[WalletContext] State updated, userClient should be available');
+            return;
+          }
+        }
+        
+        // Method 2: Try createUserClient() (async)
+        if (typeof provider.createUserClient === 'function') {
+          const client = await provider.createUserClient();
+          if (client && typeof client.initBuilder === 'function') {
+            console.log('[WalletContext] ✅ Got userClient via createUserClient()');
+            setUserClient(client as KeetaUserClient);
+            return;
+          }
+        }
+        
+        // Method 3: Use provider directly if it has methods
+        const providerAny = provider as any;
+        if (typeof providerAny.initBuilder === 'function' && 
+            typeof providerAny.publishBuilder === 'function') {
+          console.log('[WalletContext] ✅ Using provider directly as userClient');
+          setUserClient(providerAny as KeetaUserClient);
+          return;
+        }
+        
+        console.warn('[WalletContext] Could not initialize userClient - no suitable method found');
+        setUserClient(null);
+      } catch (error) {
+        console.error('[WalletContext] Error initializing userClient:', error);
+        setUserClient(null);
+      }
+    };
+    
+    initUserClient();
+  }, [walletData.wallet.connected, walletData.wallet.isLocked]);
+  
   useEffect(() => {
     async function processBalances() {
       if (!tokenBalances.balances || tokenBalances.balances.length === 0) {
@@ -384,7 +461,7 @@ export function WalletProvider({ children }: WalletProviderProps) {
       isConnected,
       publicKey: primaryAccount,
       signMessage: !primaryAccount ? null : signMessage,
-      userClient: null, // Simplified implementation - userClient not available
+      userClient, // Keeta SDK client for building and signing transactions
 
       // Legacy properties for backward compatibility
       isWalletLoading: walletData.isLoading,
@@ -404,7 +481,7 @@ export function WalletProvider({ children }: WalletProviderProps) {
       storageAccountAddress,
       enableTrading,
     };
-  }, [signMessage, walletData, tokenBalances, processedTokens, isTradingEnabled, isTradingEnabling, tradingError, storageAccountAddress, enableTrading]);
+  }, [signMessage, walletData, tokenBalances, processedTokens, isTradingEnabled, isTradingEnabling, tradingError, storageAccountAddress, enableTrading, userClient]);
 
   return <WalletContext.Provider value={contextValue}>{children}</WalletContext.Provider>;
 }

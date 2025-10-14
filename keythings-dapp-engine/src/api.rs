@@ -91,7 +91,17 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
             .route("/orders", web::post().to(place_order))
             .route("/orders/{order_id}", web::delete().to(cancel_order))
             .route("/withdrawals", web::post().to(withdraw))
-            .route("/deposit/{user_id}/{token}", web::get().to(deposit_address)),
+            .route("/deposit/{user_id}/{token}", web::get().to(deposit_address))
+            // Pool routes
+            .route("/pools/list", web::get().to(crate::pool_api::list_pools))
+            .route("/pools/{pool_id}", web::get().to(crate::pool_api::get_pool))
+            .route("/pools/create", web::post().to(crate::pool_api::create_pool))
+            .route("/pools/created", web::post().to(crate::pool_api::notify_pool_created))
+            .route("/pools/add-liquidity", web::post().to(crate::pool_api::add_liquidity))
+            .route("/pools/remove-liquidity", web::post().to(crate::pool_api::remove_liquidity))
+            .route("/pools/swap", web::post().to(crate::pool_api::swap))
+            .route("/pools/quote", web::post().to(crate::pool_api::quote))
+            .route("/pools/{pool_id}/unpause", web::post().to(crate::pool_api::unpause_pool)),
     );
 }
 
@@ -120,7 +130,7 @@ async fn create_session(payload: web::Json<AuthSessionRequest>) -> impl Responde
 }
 
 async fn register_user(
-    state: web::Data<AppState>,
+    _state: web::Data<AppState>,
     payload: web::Json<RegisterUserPayload>,
 ) -> impl Responder {
     // Register user with their storage account
@@ -142,7 +152,7 @@ async fn register_user(
 }
 
 async fn user_status(
-    state: web::Data<AppState>,
+    _state: web::Data<AppState>,
     path: web::Path<String>,
 ) -> impl Responder {
     let user_id = path.into_inner();
