@@ -1754,6 +1754,177 @@ query3: "Keeta security best practices"
 
 ---
 
+#### Entry #4: Keeta SDK Account Object Requirements (2025-10-14)
+**Category:** Pattern Recognition  
+**Discovery:** The Keeta SDK requires proper `Account` objects created via `KeetaNet.lib.Account.fromPublicKeyString()`, not plain JavaScript objects with a `publicKeyString` property. This is critical for all builder operations (send, receive, updatePermissions, etc.).
+
+**Why this matters:**
+- Plain objects like `{ publicKeyString: "keeta_abc123..." }` will cause `TypeError: Cannot read properties of undefined` in SDK methods
+- The SDK's `computeBlocks()` method expects Account objects with specific methods (`.get()`, `.toString()`, etc.)
+- This affects ANY operation that involves account references passed through Chrome messaging
+
+**The Pattern:**
+```typescript
+// ❌ WRONG: Plain JavaScript object
+const toAccount = { publicKeyString: "keeta_abc123..." };
+builder.send(toAccount, amount, token); // Will fail in computeBlocks()
+
+// ✅ CORRECT: Proper SDK Account object
+const toAccount = KeetaNet.lib.Account.fromPublicKeyString("keeta_abc123...");
+builder.send(toAccount, amount, token); // Works correctly
+```
+
+**Conversion Pattern in Wallet Extension:**
+```typescript
+// In wallet-provider-handler.ts, when processing operations from dApp:
+if (op.to && typeof op.to === 'object' && 'publicKeyString' in op.to) {
+  const toPublicKey = op.to.publicKeyString;
+  if (typeof toPublicKey === 'string' && toPublicKey.length > 0) {
+    try {
+      toRef = KeetaNet.lib.Account.fromPublicKeyString(toPublicKey);
+    } catch (error) {
+      secureLogger.error('Failed to convert to Account:', error);
+      toRef = op.to; // Fallback
+    }
+  }
+}
+```
+
+**Impact:** This pattern must be followed for ALL Keeta SDK operations that accept account references. Without it, transactions will fail during the `computeBlocks()` phase.
+
+---
+
+#### Entry #5: builder.send() Signature Confusion (2025-10-14)
+**Category:** Issue Resolution  
+**Discovery:** There's a mismatch between the builder.send() signature in different parts of the wallet integration stack.
+
+**The Confusion:**
+- **Keeta Documentation** shows a 5-parameter signature: `send(to, amount, token, data, options)`
+- **Actual SDK Implementation** uses a 3-parameter signature: `send(to, amount, token)`
+- **Inpage Provider** must accept 5 parameters to match dApp expectations
+- **Wallet Extension** calls the SDK with only 3 parameters
+
+**The Solution Pattern:**
+```typescript
+// In inpage-provider.ts (dApp side):
+send(to: unknown, amount: unknown, token?: unknown, data?: unknown, options?: unknown) {
+  // Serialize all 5 parameters for Chrome messaging
+  operations.push({ type: 'send', to, amount, token, data, options });
+  return this;
+}
+
+// In wallet-provider-handler.ts (extension side):
+case 'send': {
+  const token = (op as { token?: unknown }).token;
+  // Convert to SDK Account objects
+  const toRef = KeetaNet.lib.Account.fromPublicKeyString(op.to.publicKeyString);
+  const tokenRef = token ? KeetaNet.lib.Account.fromPublicKeyString(token.publicKeyString) : undefined;
+  
+  // Call SDK with 3 parameters (SDK infers "from" account from builder context)
+  builder.send(toRef, op.amount, tokenRef);
+  break;
+}
+```
+
+**Key Insight:** The SDK handles the "from" account and "options" internally. The wallet extension only needs to pass `to`, `amount`, and `token` as Account objects.
+
+**Impact:** Understanding this prevents parameter mismatch errors and clarifies the data flow between dApp and wallet extension.
+
+---
+
+#### Entry #6: Chrome Messaging Serialization Limitations (2025-10-14)
+**Category:** Tool Discovery  
+**Discovery:** Chrome's `postMessage` API (used for content script → background script communication) uses the Structured Clone Algorithm, which **cannot serialize complex objects with methods** like Keeta SDK Account objects.
+
+**The Problem:**
+- SDK Account objects have methods (`.get()`, `.toString()`, `.sign()`, etc.)
+- Chrome messaging strips away all methods, leaving only data properties
+- This causes SDK methods to fail with "undefined is not a function" errors
+
+**The Solution Pattern:**
+```
+dApp (Frontend)                 Wallet Extension
+─────────────────               ────────────────
+1. Create plain objects         4. Receive plain objects
+   { publicKeyString: "..." }      from Chrome messaging
+        ↓                               ↓
+2. Serialize for messaging       5. Convert to SDK objects
+   JSON.stringify(...)              KeetaNet.lib.Account
+        ↓                               .fromPublicKeyString()
+3. postMessage() →              6. Call SDK methods
+   Chrome messaging                 with proper objects
+```
+
+**Serialization/Deserialization Pattern:**
+```typescript
+// Frontend (dApp):
+const toAccount = JSON.parse(JSON.stringify({ 
+  publicKeyString: poolStorageAddress 
+}));
+builder.send(toAccount, amount, tokenRef);
+
+// Wallet Extension Background:
+const toRef = KeetaNet.lib.Account.fromPublicKeyString(
+  op.to.publicKeyString
+);
+builder.send(toRef, op.amount, tokenRef);
+```
+
+**Critical Rule:** 
+- **ALWAYS** serialize SDK objects to plain objects before Chrome messaging
+- **ALWAYS** reconstruct SDK objects from plain objects after receiving message
+- **NEVER** try to pass SDK objects directly through `postMessage`
+
+**Impact:** This is a fundamental constraint of browser extension architecture. All future wallet features must follow this serialize → message → deserialize pattern.
+
+---
+
+#### Entry #7: Debugging Wallet Extension Background Scripts (2025-10-14)
+**Category:** Workflow Optimization  
+**Discovery:** The wallet extension uses `secureLogger` which filters out certain log messages. During debugging, this can hide critical information.
+
+**The Bypass Technique:**
+```typescript
+// Regular logging (may be filtered):
+secureLogger.debug('[BUILDER_PUBLISH] Processing operation');
+
+// Bypass filtering for debugging:
+globalThis.console.log('[BUILDER_PUBLISH] Processing operation');
+globalThis.console.error('[BUILDER_PUBLISH] Error details:', error);
+```
+
+**When to Use:**
+- ✅ **During active debugging** - Use `globalThis.console` to see all logs
+- ✅ **For temporary diagnostics** - Add verbose logging to trace execution
+- ❌ **In production code** - Remove or replace with `secureLogger` after fix
+
+**Debugging Workflow:**
+1. Add `globalThis.console.log` statements for detailed tracing
+2. Open background console: `chrome://extensions` → "Inspect views: service worker"
+3. Reproduce the issue and examine all logs
+4. Once issue is identified and fixed, remove debug logs
+5. Replace with production-ready `secureLogger` calls
+
+**Production Pattern:**
+```typescript
+// After debugging, keep only essential logging:
+try {
+  toRef = KeetaNet.lib.Account.fromPublicKeyString(toPublicKey);
+} catch (error) {
+  secureLogger.error('[BUILDER_PUBLISH] Failed to convert account:', error);
+  toRef = op.to; // Fallback
+}
+```
+
+**Tools:**
+- Background console: `chrome://extensions` → "Inspect views: service worker"
+- Clear console: Right-click → "Clear console" or Ctrl+L
+- Filter logs: Use the filter box to search for specific tags
+
+**Impact:** This technique enabled us to identify the exact point where Account objects were failing, leading to the successful fix. Use it for complex debugging, then clean up for production.
+
+---
+
 ### 💡 Future Improvements to Consider
 
 #### Potential Enhancement #1: Automated Browser Testing
@@ -1816,10 +1987,11 @@ query3: "Keeta security best practices"
 - v1.1 (2025-10-13) - Added MCP tool selection framework
 - v1.2 (2025-10-13) - Added Browser MCP debugging patterns
 - v1.3 (2025-10-13) - Added self-learning infrastructure
+- v1.4 (2025-10-14) - Added Keeta SDK Account object patterns and Chrome messaging serialization learnings
 
 **Next Evolution Goals:**
-- [ ] Document all Keeta-specific patterns discovered
-- [ ] Build comprehensive browser debugging playbook
+- [x] Document all Keeta-specific patterns discovered
+- [x] Build comprehensive browser debugging playbook
 - [ ] Create error → solution quick reference
 - [ ] Establish performance benchmarks for common tasks
 
