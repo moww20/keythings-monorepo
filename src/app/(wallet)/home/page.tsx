@@ -762,7 +762,7 @@ export default function HomePage() {
           {activeTab === 'storage' && isLoadingStorage ? (
             <div className="virtualized-card-list">
               <div className="token-card-list">
-                <div className="virtual-table-empty">
+                <div className="virtual-table-empty flex items-center justify-center min-h-[300px]">
                   <div className="flex flex-col items-center gap-3">
                     <svg className="animate-spin h-8 w-8 text-accent" fill="none" viewBox="0 0 24 24">
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
@@ -776,10 +776,10 @@ export default function HomePage() {
           ) : activeTab === 'storage' && storageAccounts.length === 0 ? (
             <div className="virtualized-card-list">
               <div className="token-card-list">
-                <div className="virtual-table-empty">
-                  <div className="flex flex-col items-center gap-3">
+                <div className="virtual-table-empty flex items-center justify-center min-h-[300px]">
+                  <div className="flex flex-col items-center gap-3 text-center">
                     <Wallet className="h-12 w-12 text-muted opacity-50" />
-                    <div className="text-center">
+                    <div>
                       <p className="text-muted mb-2">No storage accounts found</p>
                       <p className="text-sm text-faint">
                         {isTradingEnabled 
