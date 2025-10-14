@@ -20,10 +20,8 @@ interface EstimatedBalanceProps {
   onTransfer?: () => void;
   tokens?: ProcessedToken[];
   ktaPriceData?: KtaPriceData | null;
-  // Trading enablement props
+  // Trading status props (for display only)
   isTradingEnabled?: boolean;
-  isTradingEnabling?: boolean;
-  onEnableTrading?: () => void;
   tradingError?: string | null;
 }
 
@@ -35,8 +33,6 @@ export default function EstimatedBalance({
   tokens = [],
   ktaPriceData = null,
   isTradingEnabled = false,
-  isTradingEnabling = false,
-  onEnableTrading,
   tradingError = null,
 }: EstimatedBalanceProps): React.JSX.Element {
   const calculateTotalUsdValue = (): number => {
@@ -166,47 +162,23 @@ export default function EstimatedBalance({
           )}
           
           <div className="flex flex-col sm:flex-row gap-3">
-            {/* Enable Trading Button - shown when not enabled */}
-            {!isTradingEnabled && onEnableTrading && (
-              <button 
-                onClick={onEnableTrading}
-                disabled={isTradingEnabling}
-                className="inline-flex items-center justify-center gap-2 bg-accent text-white px-6 py-2.5 rounded-md font-medium hover:bg-accent/90 transition-colors duration-200 min-w-[150px] disabled:opacity-70 disabled:cursor-not-allowed"
-              >
-                {isTradingEnabling ? (
-                  <>
-                    <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                    <span>Enabling...</span>
-                  </>
-                ) : (
-                  <>
-                    <TrendingUp className="h-4 w-4" />
-                    <span>Enable Trading</span>
-                  </>
-                )}
-              </button>
-            )}
-            
             <button 
               onClick={onReceive}
-              className="inline-flex items-center justify-center gap-2 bg-black text-white border border-gray-700 px-6 py-2.5 rounded-md font-medium hover:bg-gray-900 hover:border-gray-600 transition-colors duration-200 min-w-[120px]"
+              className="inline-flex items-center justify-center gap-2 bg-surface border border-hairline text-foreground px-6 py-2.5 rounded-lg font-medium hover:bg-surface-strong transition-colors duration-200 min-w-[120px]"
             >
               <ArrowDownLeft className="h-4 w-4" />
               Receive
             </button>
             <button 
               onClick={onSend}
-              className="inline-flex items-center justify-center gap-2 bg-black text-white border border-gray-700 px-6 py-2.5 rounded-md font-medium hover:bg-gray-900 hover:border-gray-600 transition-colors duration-200 min-w-[120px]"
+              className="inline-flex items-center justify-center gap-2 bg-surface border border-hairline text-foreground px-6 py-2.5 rounded-lg font-medium hover:bg-surface-strong transition-colors duration-200 min-w-[120px]"
             >
               <ArrowUpRight className="h-4 w-4" />
               Send
             </button>
             <button 
               onClick={onTransfer}
-              className="inline-flex items-center justify-center gap-2 bg-black text-white border border-gray-700 px-6 py-2.5 rounded-md font-medium hover:bg-gray-900 hover:border-gray-600 transition-colors duration-200 min-w-[120px]"
+              className="inline-flex items-center justify-center gap-2 bg-surface border border-hairline text-foreground px-6 py-2.5 rounded-lg font-medium hover:bg-surface-strong transition-colors duration-200 min-w-[120px]"
             >
               <ArrowRightLeft className="h-4 w-4" />
               Transfer

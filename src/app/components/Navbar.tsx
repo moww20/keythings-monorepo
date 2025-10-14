@@ -34,7 +34,7 @@ export default function Navbar(): React.JSX.Element {
     { path: '/home', label: 'Dashboard', icon: LayoutDashboard, enabled: true },
     { path: '/trade', label: 'Trade', icon: TrendingUp, enabled: true },
     { path: '/pools', label: 'Liquidity Pools (Beta)', icon: Droplets, enabled: true },
-    { path: null, label: 'Open Orders', icon: ShoppingCart, enabled: false },
+    { path: '/swap', label: 'Swap', icon: ArrowLeftRight, enabled: true },
     { path: null, label: 'OTC Swap', icon: ArrowLeftRight, enabled: false },
     { path: null, label: 'Launchpad', icon: Rocket, enabled: false },
     { path: null, label: 'NFT Marketplace', icon: Image, enabled: false },

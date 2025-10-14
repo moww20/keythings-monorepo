@@ -417,27 +417,6 @@ export default function PoolsPage() {
         )}
       </div>
 
-      {/* Footer Note */}
-      <div className="glass rounded-lg border border-hairline p-4 bg-surface/30">
-        <div className="flex items-center justify-between text-xs text-muted">
-          <div className="flex items-center gap-2">
-            <span>Powered by Keeta Network</span>
-            <span>•</span>
-            <span>400ms Settlement</span>
-            <span>•</span>
-            <span>Non-Custodial</span>
-          </div>
-          <a
-            href="/docs"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-1 hover:text-accent transition-colors"
-          >
-            <span>Learn More</span>
-            <ExternalLink className="h-3 w-3" />
-          </a>
-        </div>
-      </div>
 
       {/* Modals */}
       <CreatePoolModal

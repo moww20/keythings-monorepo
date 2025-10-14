@@ -53,13 +53,21 @@ export default function HomePage() {
     name?: string;
     description?: string;
     metadata?: string;
-    balance?: string;
+    ktaBalance?: string;
+    otherTokenBalance?: string;
+    otherTokenSymbol?: string;
     created?: number;
   }>>([]);
   const [isLoadingStorage, setIsLoadingStorage] = useState(false);
 
   const isWalletBusy = isWalletLoading || isWalletFetching;
   const tokensLoading = isTokensLoading || isTokensFetching;
+  
+  // Helper function to get token symbol from address
+  const getTokenSymbolFromAddress = useCallback((address: string): string => {
+    const token = tokens.find(t => t.address === address);
+    return token?.ticker || address.slice(-4).toUpperCase();
+  }, [tokens]);
 
 
   const handleReceive = useCallback(() => {
@@ -114,7 +122,7 @@ export default function HomePage() {
                       : 'unknown'));
             
             // Extract target address
-            const targetStr = acl.target 
+          const targetStr = acl.target 
               ? (typeof acl.target === 'string'
                   ? acl.target
                   : (acl.target?.publicKeyString?.get 
@@ -122,8 +130,8 @@ export default function HomePage() {
                       : (acl.target?.publicKeyString?.toString
                           ? acl.target.publicKeyString.toString()
                           : null)))
-              : null;
-            
+            : null;
+          
             // Extract principal address (user's address)
             const principalStr = typeof acl.principal === 'string'
               ? acl.principal
@@ -140,16 +148,18 @@ export default function HomePage() {
               permissions: acl.permissions || [],
             });
             
-            return {
-              entity: entityStr,
+          return {
+            entity: entityStr,
               principal: principalStr,
-              target: targetStr,
+            target: targetStr,
               permissions: Array.isArray(acl.permissions) ? acl.permissions : [],
               name: 'Storage Account',
-              description: 'Storage account for trading operations',
-              balance: '0', // Balance requires separate API call with capabilities
-              created: Date.now(),
-            };
+            description: 'Storage account for trading operations',
+              ktaBalance: '0.00',
+              otherTokenBalance: '0.00',
+              otherTokenSymbol: 'BASE', // Default to BASE, will be updated if other tokens found
+            created: Date.now(),
+          };
           } catch (mappingError) {
             console.error(`[Storage] Error mapping ACL ${index + 1}:`, mappingError);
             return null;
@@ -157,7 +167,195 @@ export default function HomePage() {
         }).filter((account): account is NonNullable<typeof account> => account !== null);
         
         console.log('[Storage] Enriched accounts:', enrichedAccounts.length);
-        setStorageAccounts(enrichedAccounts);
+        console.log('[Storage] Available tokens in wallet:', tokens.map(t => ({ 
+          address: t.address, 
+          ticker: t.ticker, 
+          isBaseToken: t.isBaseToken 
+        })));
+        
+        // Analyze ACL data to determine which tokens are stored in each storage account
+        const accountsWithBalances = await Promise.all(enrichedAccounts.map(async (account) => {
+          try {
+            // Get account info to fetch balances
+            const accountInfo = await provider.getAccountInfo?.(account.entity);
+            console.log(`[Storage] Account info for ${account.entity}:`, accountInfo);
+            
+            // Try to get actual balances from the storage account
+            let ktaBalance = '0.00';
+            let otherTokenBalance = '0.00';
+            let otherTokenSymbol = 'Unknown';
+            
+            // Check if accountInfo contains balance information
+            if (accountInfo && typeof accountInfo === 'object') {
+              console.log(`[Storage] Parsing account info for ${account.entity}:`, accountInfo);
+              console.log(`[Storage] Account info keys:`, Object.keys(accountInfo));
+              console.log(`[Storage] Has balances?`, 'balances' in accountInfo);
+              console.log(`[Storage] Has tokens?`, 'tokens' in accountInfo);
+              
+              // Try to extract balance information from accountInfo
+              // This depends on the structure of the accountInfo object
+              if ('balances' in accountInfo && Array.isArray((accountInfo as any).balances)) {
+                const balances = (accountInfo as any).balances;
+                
+                // Find KTA balance (base token)
+                const ktaToken = tokens.find(t => t.isBaseToken);
+                if (ktaToken) {
+                  const ktaBalanceEntry = balances.find((b: any) => 
+                    b.token === ktaToken.address || b.tokenAddress === ktaToken.address
+                  );
+                  if (ktaBalanceEntry) {
+                    ktaBalance = typeof ktaBalanceEntry.balance === 'string' 
+                      ? ktaBalanceEntry.balance 
+                      : ktaBalanceEntry.balance?.toString() || '0.00';
+                  }
+                }
+                
+                // Find other token balance (non-KTA)
+                const otherTokenBalanceEntry = balances.find((b: any) => {
+                  const tokenAddress = b.token || b.tokenAddress;
+                  return tokenAddress && !tokens.find(t => t.address === tokenAddress)?.isBaseToken;
+                });
+                
+                if (otherTokenBalanceEntry) {
+                  const tokenAddress = otherTokenBalanceEntry.token || otherTokenBalanceEntry.tokenAddress;
+                  otherTokenBalance = typeof otherTokenBalanceEntry.balance === 'string'
+                    ? otherTokenBalanceEntry.balance
+                    : otherTokenBalanceEntry.balance?.toString() || '0.00';
+                  console.log(`[Storage] Other token address found:`, tokenAddress);
+                  otherTokenSymbol = getTokenSymbolFromAddress(tokenAddress);
+                  console.log(`[Storage] Resolved token symbol:`, otherTokenSymbol);
+                }
+              } else if ('tokens' in accountInfo && Array.isArray((accountInfo as any).tokens)) {
+                // Alternative structure: tokens array
+                const accountTokens = (accountInfo as any).tokens;
+                
+                // Find KTA
+                const ktaToken = tokens.find(t => t.isBaseToken);
+                if (ktaToken) {
+                  const ktaEntry = accountTokens.find((t: any) => 
+                    t.address === ktaToken.address || t.tokenAddress === ktaToken.address
+                  );
+                  if (ktaEntry) {
+                    ktaBalance = typeof ktaEntry.balance === 'string' 
+                      ? ktaEntry.balance 
+                      : ktaEntry.balance?.toString() || '0.00';
+                  }
+                }
+                
+                // Find other token
+                const otherTokenEntry = accountTokens.find((t: any) => {
+                  const tokenAddress = t.address || t.tokenAddress;
+                  return tokenAddress && !tokens.find(wt => wt.address === tokenAddress)?.isBaseToken;
+                });
+                
+                if (otherTokenEntry) {
+                  const tokenAddress = otherTokenEntry.address || otherTokenEntry.tokenAddress;
+                  otherTokenBalance = typeof otherTokenEntry.balance === 'string'
+                    ? otherTokenEntry.balance
+                    : otherTokenEntry.balance?.toString() || '0.00';
+                  console.log(`[Storage] Other token address found (tokens array):`, tokenAddress);
+                  otherTokenSymbol = getTokenSymbolFromAddress(tokenAddress);
+                  console.log(`[Storage] Resolved token symbol (tokens array):`, otherTokenSymbol);
+                }
+              }
+            }
+            
+            // If no balance info in accountInfo, try to get pool information from backend
+            // Storage accounts are typically associated with liquidity pools
+            if (otherTokenSymbol === 'Unknown') {
+              console.log(`[Storage] Attempting to fetch pool info for storage account: ${account.entity}`);
+              
+              try {
+                // Query backend API for pool information
+                const poolResponse = await fetch('http://localhost:8080/api/pools/list');
+                
+                // Check if response is OK and has content
+                if (!poolResponse.ok) {
+                  console.error(`[Storage] Backend API returned status ${poolResponse.status}`);
+                } else {
+                  // Check if response has content before parsing
+                  const text = await poolResponse.text();
+                  if (!text || text.trim() === '') {
+                    console.warn(`[Storage] Backend API returned empty response`);
+                  } else {
+                
+                const poolsData = JSON.parse(text);
+                console.log(`[Storage] Pools data from backend:`, poolsData);
+                console.log(`[Storage] Looking for storage account:`, account.entity);
+                console.log(`[Storage] Available pool storage accounts:`, poolsData.pools?.map((p: any) => p.storage_account));
+                
+                // Find the pool that uses this storage account
+                const matchingPool = poolsData.pools?.find((pool: any) => {
+                  console.log(`[Storage] Checking pool:`, pool.id, 'storage_account:', pool.storage_account);
+                  return pool.storage_account === account.entity || pool.pool_id === account.entity;
+                });
+                
+                if (matchingPool) {
+                  console.log(`[Storage] Found matching pool:`, matchingPool);
+                  
+                  // Helper function to format pool balance from base units to display units
+                  const formatPoolBalance = (balance: string, decimals: number = 9): string => {
+                    try {
+                      const num = parseFloat(balance) / Math.pow(10, decimals);
+                      return num.toFixed(2);
+                    } catch {
+                      return '0.00';
+                    }
+                  };
+                  
+                  // Extract token symbols from pool data
+                  // token_a and token_b are token symbols (e.g., "KTA", "BASE"), not addresses
+                  const tokenASymbol = matchingPool.token_a;
+                  const tokenBSymbol = matchingPool.token_b;
+                  
+                  console.log(`[Storage] Token symbols from pool: ${tokenASymbol} / ${tokenBSymbol}`);
+                  
+                  // Determine which is KTA and which is the other token
+                  const isTokenAKta = tokenASymbol === 'KTA';
+                  const otherSymbol = isTokenAKta ? tokenBSymbol : tokenASymbol;
+                  
+                  otherTokenSymbol = otherSymbol;
+                  console.log(`[Storage] Determined token pair: KTA / ${otherTokenSymbol}`);
+                  
+                  // Get balances from pool reserves (in base units)
+                  const rawKtaBalance = (isTokenAKta ? matchingPool.reserve_a : matchingPool.reserve_b) || '0';
+                  const rawOtherBalance = (isTokenAKta ? matchingPool.reserve_b : matchingPool.reserve_a) || '0';
+                  
+                  // Find token decimals for proper formatting
+                  const ktaToken = tokens.find(t => t.ticker === 'KTA');
+                  const otherToken = tokens.find(t => t.ticker === otherSymbol);
+                  
+                  ktaBalance = formatPoolBalance(rawKtaBalance, ktaToken?.decimals || 9);
+                  otherTokenBalance = formatPoolBalance(rawOtherBalance, otherToken?.decimals || 9);
+                  
+                  console.log(`[Storage] Pool reserves: ${ktaBalance} KTA / ${otherTokenBalance} ${otherTokenSymbol}`);
+                }
+                  }
+                }
+              } catch (poolError) {
+                console.error(`[Storage] Error fetching pool data:`, poolError);
+              }
+            }
+            
+            console.log(`[Storage] Final balances for ${account.entity}:`, {
+              ktaBalance,
+              otherTokenBalance,
+              otherTokenSymbol
+            });
+            
+            return {
+              ...account,
+              ktaBalance,
+              otherTokenBalance,
+              otherTokenSymbol,
+            };
+          } catch (balanceError) {
+            console.error(`[Storage] Error fetching balance for ${account.entity}:`, balanceError);
+            return account; // Return account without balance updates
+          }
+        }));
+        
+        setStorageAccounts(accountsWithBalances);
       } catch (error) {
         console.error('Failed to fetch storage accounts:', error);
         setStorageAccounts([]);
@@ -167,7 +365,7 @@ export default function HomePage() {
     }
     
     fetchStorageAccounts();
-  }, [activeTab, isUnlocked, isTradingEnabled]);
+  }, [activeTab, isUnlocked, isTradingEnabled, tokens, getTokenSymbolFromAddress]);
 
   const fetchKtaPrice = useCallback(async () => {
     if (!window.keeta || isFetchingPrice.current) {
@@ -490,22 +688,6 @@ export default function HomePage() {
                 'Unlock Wallet'
               )}
             </button>
-            <button
-              onClick={() => {
-                console.log('🔍 Wallet Debug Info:');
-                console.log('Wallet object:', wallet);
-                console.log('isDisconnected:', isDisconnected);
-                console.log('isLocked:', isLocked);
-                console.log('isUnlocked:', isUnlocked);
-                console.log('isConnected:', wallet.connected);
-                console.log('accounts:', wallet.accounts);
-                console.log('Provider:', window.keeta);
-                refreshWallet();
-              }}
-              className="mt-3 text-xs text-muted hover:text-foreground transition-colors"
-            >
-              🔍 Debug Wallet State
-            </button>
           </div>
         </div>
       </div>
@@ -556,8 +738,6 @@ export default function HomePage() {
             usd_24h_vol: ktaPriceData.usd_24h_vol
           } : null}
           isTradingEnabled={isTradingEnabled}
-          isTradingEnabling={isTradingEnabling}
-          onEnableTrading={enableTrading}
           tradingError={tradingError}
         />
       </div>
@@ -799,40 +979,117 @@ export default function HomePage() {
               </div>
             </div>
           ) : activeTab === 'storage' ? (
-            <div className="virtualized-card-list">
-              <div className="token-card-list" role="list" aria-busy={isLoadingStorage} aria-live="polite">
-                {storageAccounts.map((account) => (
-                  <div key={account.entity} className="token-card" role="listitem">
-                    <div className="token-card-header">
-                      <div className="token-card-icon">
-                        <div className="w-10 h-10 rounded-full bg-accent/20 flex items-center justify-center flex-shrink-0">
-                          <Wallet className="h-5 w-5 text-accent" />
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-hairline">
+                  <th className="text-left py-4 px-6 text-muted text-sm font-medium">
+                    <div className="flex items-center gap-1">
+                      Storage Account
+                      <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M7 14l5-5 5 5z" />
+                      </svg>
                         </div>
+                  </th>
+                  <th className="text-right py-4 px-6 text-muted text-sm font-medium">
+                    <div className="flex items-center justify-end gap-1">
+                      Status
+                      <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M7 14l5-5 5 5z" />
+                      </svg>
                       </div>
-                      <div className="token-card-info">
-                        <div className="token-card-name">{account.name || 'Storage Account'}</div>
-                        <div className="token-card-meta">
-                          {account.entity.slice(0, 10)}...{account.entity.slice(-6)}
+                  </th>
+                  <th className="text-right py-4 px-6 text-muted text-sm font-medium">
+                    <div className="flex items-center justify-end gap-1">
+                      Balance
+                      <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M7 14l5-5 5 5z" />
+                      </svg>
                         </div>
+                  </th>
+                  <th className="text-right py-4 px-6 text-muted text-sm font-medium">
+                    <div className="flex items-center justify-end gap-1">
+                      Permissions
+                      <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
                       </div>
+                  </th>
+                  <th className="text-right py-4 px-6 text-muted text-sm font-medium">
+                    Owner
+                  </th>
+                  <th className="text-right py-4 px-6 text-muted text-sm font-medium">
+                    Actions
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {isLoadingStorage ? (
+                  <tr>
+                    <td colSpan={6} className="py-12 text-center">
+                      <div className="flex flex-col items-center gap-3">
+                        <svg className="animate-spin h-8 w-8 text-accent" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        <span className="text-muted">Loading storage accounts...</span>
                     </div>
-                    <div className="token-card-amounts">
-                      <div className="token-card-amount">
+                    </td>
+                  </tr>
+                ) : storageAccounts.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="py-12 text-center">
+                      <div className="flex flex-col items-center gap-3">
+                        <Wallet className="h-12 w-12 text-muted opacity-50" />
+                        <div className="text-center">
+                          <p className="text-muted mb-2">No storage accounts found</p>
+                          <p className="text-sm text-faint">
+                            {isTradingEnabled 
+                              ? 'Your storage accounts will appear here' 
+                              : 'Enable trading to create a storage account'}
+                          </p>
+                        </div>
+                      </div>
+                    </td>
+                  </tr>
+                ) : (
+                  storageAccounts.map((account, index) => (
+                    <tr 
+                      key={account.entity} 
+                      className={`hover:bg-surface/50 transition-colors ${index !== storageAccounts.length - 1 ? 'border-b border-hairline' : ''}`}
+                    >
+                      <td className="py-4 px-6">
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-full bg-accent/20 flex items-center justify-center flex-shrink-0">
+                            <Wallet className="h-4 w-4 text-accent" />
+                          </div>
+                          <div>
+                            <div className="text-foreground font-medium">{account.name || 'Storage Account'}</div>
+                            <div className="text-muted text-sm font-mono">
+                              {account.entity.slice(0, 10)}...{account.entity.slice(-6)}
+                            </div>
                         {account.description && (
-                          <div className="text-sm text-muted mb-2">{account.description}</div>
-                        )}
-                        <div className="flex items-center gap-2 mb-2">
-                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-500/10 text-green-500 border border-green-500/20">
+                              <div className="text-xs text-faint mt-1">{account.description}</div>
+                            )}
+                          </div>
+                        </div>
+                      </td>
+                      <td className="py-4 px-6 text-right">
+                        <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-500/10 text-green-500 border border-green-500/20">
                             Active
                           </span>
-                          {account.balance && (
-                            <span className="text-sm text-foreground font-medium">
-                              {parseFloat(account.balance).toFixed(2)} KTA
-                            </span>
-                          )}
+                      </td>
+                      <td className="py-4 px-6 text-right">
+                        <div className="space-y-1">
+                          <div className="text-foreground font-medium">
+                            {account.ktaBalance || '0.00'} KTA
                         </div>
-                        {account.permissions.length > 0 && (
-                          <div className="flex flex-wrap gap-1">
+                          <div className="text-muted text-sm">
+                            {account.otherTokenBalance || '0.00'} {account.otherTokenSymbol || 'BASE'}
+                          </div>
+                        </div>
+                      </td>
+                      <td className="py-4 px-6 text-right">
+                        <div className="flex flex-wrap gap-1 justify-end">
                             {account.permissions.slice(0, 2).map((perm, idx) => (
                               <span 
                                 key={idx}
@@ -847,18 +1104,22 @@ export default function HomePage() {
                               </span>
                             )}
                           </div>
-                        )}
-                        {account.principal && (
-                          <div className="mt-2 text-xs text-faint">
-                            Owner: {account.principal.slice(0, 8)}...{account.principal.slice(-4)}
+                      </td>
+                      <td className="py-4 px-6 text-right">
+                        <div className="text-muted text-sm font-mono">
+                          {account.principal ? `${account.principal.slice(0, 8)}...${account.principal.slice(-4)}` : '—'}
                           </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
+                      </td>
+                      <td className="py-4 px-6 text-right">
+                        <button className="text-accent hover:text-foreground transition-colors text-sm">
+                          Manage
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
           ) : null}
 
           {/* Other Tabs */}

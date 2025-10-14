@@ -16,6 +16,9 @@ interface Token {
   name: string;
   balance: string;
   address: string; // Full Keeta address for SDK calls
+  decimals: number;
+  icon: string;
+  fallbackIcon: any; // TokenIcon from ProcessedToken
 }
 
 const POOL_TYPES = [
@@ -76,6 +79,9 @@ export default function CreatePoolModal({ isOpen, onClose, onSuccess }: CreatePo
       name: token.name || 'Unknown Token',
       balance: token.formattedAmount,
       address: token.address, // Full Keeta address
+      decimals: token.decimals,
+      icon: token.icon,
+      fallbackIcon: token.fallbackIcon,
     }));
   }, [tokens]);
 
@@ -136,6 +142,11 @@ export default function CreatePoolModal({ isOpen, onClose, onSuccess }: CreatePo
   const getTokenSymbol = (address: string) => {
     const token = availableTokens.find(t => t.address === address);
     return token?.symbol || address.slice(-4).toUpperCase();
+  };
+
+  const getTokenDecimals = (address: string): number => {
+    const token = availableTokens.find(t => t.address === address);
+    return token?.decimals || 9; // Default to 9 if not found (KTA standard)
   };
 
   const handleCreatePool = async () => {
@@ -332,8 +343,15 @@ export default function CreatePoolModal({ isOpen, onClose, onSuccess }: CreatePo
       }
       
       // Convert amounts to string for serialization (BigInt can't be serialized through Chrome messaging)
-      const amountAStr = Math.floor(parseFloat(amountA) * 1e9).toString();
-      const amountBStr = Math.floor(parseFloat(amountB) * 1e9).toString();
+      const tokenADecimals = getTokenDecimals(tokenA);
+      const tokenBDecimals = getTokenDecimals(tokenB);
+      const amountAStr = Math.floor(parseFloat(amountA) * Math.pow(10, tokenADecimals)).toString();
+      const amountBStr = Math.floor(parseFloat(amountB) * Math.pow(10, tokenBDecimals)).toString();
+      
+      console.log('[CreatePool] Token A decimals:', tokenADecimals);
+      console.log('[CreatePool] Token B decimals:', tokenBDecimals);
+      console.log('[CreatePool] Amount A (raw):', amountA, '→ (units):', amountAStr);
+      console.log('[CreatePool] Amount B (raw):', amountB, '→ (units):', amountBStr);
       
       // Send token A to pool storage account
       console.log('[CreatePool] Adding send operation for token A...');
@@ -629,9 +647,29 @@ export default function CreatePoolModal({ isOpen, onClose, onSuccess }: CreatePo
                       onClick={() => setShowTokenADropdown(!showTokenADropdown)}
                       className="w-full flex items-center justify-between px-4 py-3 rounded-lg border border-hairline bg-surface hover:bg-surface-strong transition-colors"
                     >
-                      <span className={tokenA ? 'text-foreground font-medium' : 'text-muted'}>
-                        {tokenA ? getTokenSymbol(tokenA) : 'Select token'}
-                      </span>
+                      <div className="flex items-center gap-3">
+                        {tokenA ? (() => {
+                          const token = availableTokens.find(t => t.address === tokenA);
+                          return token?.icon ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={token.icon} alt={token.symbol} className="w-6 h-6 rounded-full object-cover" />
+                          ) : token?.fallbackIcon ? (
+                            <div
+                              className="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0"
+                              style={{ backgroundColor: token.fallbackIcon.bgColor || '#6aa8ff', color: token.fallbackIcon.textColor || '#ffffff' }}
+                            >
+                              <span className="text-xs font-bold">{token.fallbackIcon.letter}</span>
+                            </div>
+                          ) : (
+                            <div className="w-6 h-6 rounded-full bg-accent/20 flex items-center justify-center flex-shrink-0">
+                              <span className="text-xs font-bold text-accent">{getTokenSymbol(tokenA).slice(0, 2)}</span>
+                            </div>
+                          );
+                        })() : null}
+                        <span className={tokenA ? 'text-foreground font-medium' : 'text-muted'}>
+                          {tokenA ? getTokenSymbol(tokenA) : 'Select token'}
+                        </span>
+                      </div>
                       <ChevronDown className="h-4 w-4 text-muted" />
                     </button>
 
@@ -655,12 +693,29 @@ export default function CreatePoolModal({ isOpen, onClose, onSuccess }: CreatePo
                                   className="w-full p-3 rounded-md text-left hover:bg-surface-strong transition-colors"
                                 >
                                   <div className="flex items-center justify-between">
-                                    <div>
-                                      <div className="font-medium text-foreground">{token.symbol}</div>
-                                      <div className="text-xs text-muted">{token.name}</div>
+                                    <div className="flex items-center gap-3">
+                                      {token.icon ? (
+                                        // eslint-disable-next-line @next/next/no-img-element
+                                        <img src={token.icon} alt={token.symbol} className="w-6 h-6 rounded-full object-cover" />
+                                      ) : token.fallbackIcon ? (
+                                        <div
+                                          className="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0"
+                                          style={{ backgroundColor: token.fallbackIcon.bgColor || '#6aa8ff', color: token.fallbackIcon.textColor || '#ffffff' }}
+                                        >
+                                          <span className="text-xs font-bold">{token.fallbackIcon.letter}</span>
+                                        </div>
+                                      ) : (
+                                        <div className="w-6 h-6 rounded-full bg-accent/20 flex items-center justify-center flex-shrink-0">
+                                          <span className="text-xs font-bold text-accent">{token.symbol.slice(0, 2)}</span>
+                                        </div>
+                                      )}
+                                      <div>
+                                        <div className="font-medium text-foreground">{token.symbol}</div>
+                                        <div className="text-xs text-muted">{token.name}</div>
+                                      </div>
                                     </div>
-                                    <div className="text-xs text-muted">
-                                      {parseFloat(token.balance).toLocaleString()}
+                                    <div className="text-xs text-muted font-mono">
+                                      {token.balance}
                                     </div>
                                   </div>
                                 </button>
@@ -679,9 +734,29 @@ export default function CreatePoolModal({ isOpen, onClose, onSuccess }: CreatePo
                       onClick={() => setShowTokenBDropdown(!showTokenBDropdown)}
                       className="w-full flex items-center justify-between px-4 py-3 rounded-lg border border-hairline bg-surface hover:bg-surface-strong transition-colors"
                     >
-                      <span className={tokenB ? 'text-foreground font-medium' : 'text-muted'}>
-                        {tokenB ? getTokenSymbol(tokenB) : 'Select token'}
-                      </span>
+                      <div className="flex items-center gap-3">
+                        {tokenB ? (() => {
+                          const token = availableTokens.find(t => t.address === tokenB);
+                          return token?.icon ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={token.icon} alt={token.symbol} className="w-6 h-6 rounded-full object-cover" />
+                          ) : token?.fallbackIcon ? (
+                            <div
+                              className="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0"
+                              style={{ backgroundColor: token.fallbackIcon.bgColor || '#6aa8ff', color: token.fallbackIcon.textColor || '#ffffff' }}
+                            >
+                              <span className="text-xs font-bold">{token.fallbackIcon.letter}</span>
+                            </div>
+                          ) : (
+                            <div className="w-6 h-6 rounded-full bg-accent/20 flex items-center justify-center flex-shrink-0">
+                              <span className="text-xs font-bold text-accent">{getTokenSymbol(tokenB).slice(0, 2)}</span>
+                            </div>
+                          );
+                        })() : null}
+                        <span className={tokenB ? 'text-foreground font-medium' : 'text-muted'}>
+                          {tokenB ? getTokenSymbol(tokenB) : 'Select token'}
+                        </span>
+                      </div>
                       <ChevronDown className="h-4 w-4 text-muted" />
                     </button>
 
@@ -705,12 +780,29 @@ export default function CreatePoolModal({ isOpen, onClose, onSuccess }: CreatePo
                                   className="w-full p-3 rounded-md text-left hover:bg-surface-strong transition-colors"
                                 >
                                   <div className="flex items-center justify-between">
-                                    <div>
-                                      <div className="font-medium text-foreground">{token.symbol}</div>
-                                      <div className="text-xs text-muted">{token.name}</div>
+                                    <div className="flex items-center gap-3">
+                                      {token.icon ? (
+                                        // eslint-disable-next-line @next/next/no-img-element
+                                        <img src={token.icon} alt={token.symbol} className="w-6 h-6 rounded-full object-cover" />
+                                      ) : token.fallbackIcon ? (
+                                        <div
+                                          className="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0"
+                                          style={{ backgroundColor: token.fallbackIcon.bgColor || '#6aa8ff', color: token.fallbackIcon.textColor || '#ffffff' }}
+                                        >
+                                          <span className="text-xs font-bold">{token.fallbackIcon.letter}</span>
+                                        </div>
+                                      ) : (
+                                        <div className="w-6 h-6 rounded-full bg-accent/20 flex items-center justify-center flex-shrink-0">
+                                          <span className="text-xs font-bold text-accent">{token.symbol.slice(0, 2)}</span>
+                                        </div>
+                                      )}
+                                      <div>
+                                        <div className="font-medium text-foreground">{token.symbol}</div>
+                                        <div className="text-xs text-muted">{token.name}</div>
+                                      </div>
                                     </div>
-                                    <div className="text-xs text-muted">
-                                      {parseFloat(token.balance).toLocaleString()}
+                                    <div className="text-xs text-muted font-mono">
+                                      {token.balance}
                                     </div>
                                   </div>
                                 </button>
