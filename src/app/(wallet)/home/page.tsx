@@ -91,78 +91,60 @@ export default function HomePage() {
           return;
         }
 
-        // Try to get user client to access storage accounts
-        let userClient = null;
-        if (typeof provider.getUserClient === 'function') {
-          userClient = await provider.getUserClient();
-        } else if (typeof provider.createUserClient === 'function') {
-          userClient = await provider.createUserClient();
-        }
-
-        if (!userClient) {
-          console.warn('User client not available');
+        // Use provider's listStorageAccounts method directly
+        if (typeof provider.listStorageAccounts !== 'function') {
+          console.warn('[Storage] listStorageAccounts not available on provider');
           setStorageAccounts([]);
           return;
         }
 
-        // List ACLs by principal to get storage accounts
-        if (typeof userClient.listACLsByPrincipal !== 'function') {
-          console.warn('listACLsByPrincipal not available');
-          setStorageAccounts([]);
-          return;
-        }
-
-        const acls = await userClient.listACLsByPrincipal();
-        console.log('[Storage] Total ACLs fetched:', Array.isArray(acls) ? acls.length : 0);
+        const acls = await provider.listStorageAccounts();
+        console.log('[Storage] Total storage ACLs fetched:', Array.isArray(acls) ? acls.length : 0);
+        console.log('[Storage] Raw ACL data:', acls);
         
-        // Filter for storage accounts using SDK's isStorage() method
-        const storageAcls = (Array.isArray(acls) ? acls : [])
-          .filter((acl: any) => {
-            try {
-              return typeof acl.entity?.isStorage === 'function' ? acl.entity.isStorage() : false;
-            } catch {
-              return false;
-            }
-          });
-        
-        console.log('[Storage] Storage accounts found:', storageAcls.length);
-
-        const enrichedAccounts = storageAcls.map((acl: any, index: number) => {
+        const enrichedAccounts = (Array.isArray(acls) ? acls : []).map((acl: any, index: number) => {
           try {
-            // Extract entity address using SDK methods
-            const entityStr = acl.entity?.publicKeyString?.get 
-              ? acl.entity.publicKeyString.get() 
-              : (acl.entity?.publicKeyString?.toString 
-                  ? acl.entity.publicKeyString.toString() 
-                  : (typeof acl.entity === 'string' ? acl.entity : 'unknown'));
+            // Extract entity address (storage account address)
+            const entityStr = typeof acl.entity === 'string' 
+              ? acl.entity 
+              : (acl.entity?.publicKeyString?.get 
+                  ? acl.entity.publicKeyString.get() 
+                  : (acl.entity?.publicKeyString?.toString 
+                      ? acl.entity.publicKeyString.toString() 
+                      : 'unknown'));
             
-            // Extract target address using SDK methods
+            // Extract target address
             const targetStr = acl.target 
-              ? (acl.target?.publicKeyString?.get 
-                  ? acl.target.publicKeyString.get()
-                  : (acl.target?.publicKeyString?.toString
-                      ? acl.target.publicKeyString.toString()
-                      : (typeof acl.target === 'string' ? acl.target : null)))
+              ? (typeof acl.target === 'string'
+                  ? acl.target
+                  : (acl.target?.publicKeyString?.get 
+                      ? acl.target.publicKeyString.get()
+                      : (acl.target?.publicKeyString?.toString
+                          ? acl.target.publicKeyString.toString()
+                          : null)))
               : null;
             
-            // Extract principal address using SDK methods
-            const principalStr = acl.principal?.publicKeyString?.get
-              ? acl.principal.publicKeyString.get()
-              : (acl.principal?.publicKeyString?.toString
-                  ? acl.principal.publicKeyString.toString()
-                  : (typeof acl.principal === 'string' ? acl.principal : ''));
+            // Extract principal address (user's address)
+            const principalStr = typeof acl.principal === 'string'
+              ? acl.principal
+              : (acl.principal?.publicKeyString?.get
+                  ? acl.principal.publicKeyString.get()
+                  : (acl.principal?.publicKeyString?.toString
+                      ? acl.principal.publicKeyString.toString()
+                      : ''));
             
             console.log(`[Storage] Account ${index + 1}:`, {
               entity: entityStr,
               principal: principalStr,
-              permissions: acl.permissions?.base?.flags || [],
+              target: targetStr,
+              permissions: acl.permissions || [],
             });
             
             return {
               entity: entityStr,
               principal: principalStr,
               target: targetStr,
-              permissions: acl.permissions?.base?.flags || [],
+              permissions: Array.isArray(acl.permissions) ? acl.permissions : [],
               name: 'Storage Account',
               description: 'Storage account for trading operations',
               balance: '0', // Balance requires separate API call with capabilities

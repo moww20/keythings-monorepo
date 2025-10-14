@@ -84,6 +84,8 @@ export interface KeetaProvider {
   off?: (event: string, listener: (...args: unknown[]) => void) => void;
   createUserClient?: () => KeetaUserClient | Promise<KeetaUserClient>;
   getUserClient?: () => KeetaUserClient | Promise<KeetaUserClient>;
+  listStorageAccounts?: () => Promise<KeetaACLRecord[]>;
+  getAccountInfo?: (address: string) => Promise<unknown>;
 }
 
 declare global {
