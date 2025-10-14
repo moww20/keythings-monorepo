@@ -113,43 +113,68 @@ export default function HomePage() {
         }
 
         const acls = await userClient.listACLsByPrincipal();
-        console.log('Storage ACLs fetched:', acls);
+        console.log('[Storage] Total ACLs fetched:', Array.isArray(acls) ? acls.length : 0);
         
-        // Filter for storage accounts and transform to display format
+        // Filter for storage accounts using SDK's isStorage() method
         const storageAcls = (Array.isArray(acls) ? acls : [])
           .filter((acl: any) => {
-            // Filter for storage-related ACLs
-            const entityStr = typeof acl.entity === 'string' 
-              ? acl.entity 
-              : acl.entity?.publicKeyString || '';
-            return entityStr.toLowerCase().includes('storage') || 
-                   acl.permissions?.base?.flags?.includes('STORAGE_DEPOSIT') ||
-                   acl.permissions?.base?.flags?.includes('SEND_ON_BEHALF');
+            try {
+              return typeof acl.entity?.isStorage === 'function' ? acl.entity.isStorage() : false;
+            } catch {
+              return false;
+            }
           });
-
-        const enrichedAccounts = storageAcls.map((acl: any) => {
-          const entityStr = typeof acl.entity === 'string' 
-            ? acl.entity 
-            : acl.entity?.publicKeyString || 'unknown';
-          
-          const targetStr = acl.target 
-            ? (typeof acl.target === 'string' ? acl.target : acl.target?.publicKeyString || null)
-            : null;
-          
-          return {
-            entity: entityStr,
-            principal: typeof acl.principal === 'string'
-              ? acl.principal
-              : acl.principal?.publicKeyString || '',
-            target: targetStr,
-            permissions: acl.permissions?.base?.flags || [],
-            name: 'DEX Storage Account',
-            description: 'Storage account for trading operations',
-            balance: '0', // Balance requires separate API call with capabilities
-            created: Date.now(),
-          };
-        });
         
+        console.log('[Storage] Storage accounts found:', storageAcls.length);
+
+        const enrichedAccounts = storageAcls.map((acl: any, index: number) => {
+          try {
+            // Extract entity address using SDK methods
+            const entityStr = acl.entity?.publicKeyString?.get 
+              ? acl.entity.publicKeyString.get() 
+              : (acl.entity?.publicKeyString?.toString 
+                  ? acl.entity.publicKeyString.toString() 
+                  : (typeof acl.entity === 'string' ? acl.entity : 'unknown'));
+            
+            // Extract target address using SDK methods
+            const targetStr = acl.target 
+              ? (acl.target?.publicKeyString?.get 
+                  ? acl.target.publicKeyString.get()
+                  : (acl.target?.publicKeyString?.toString
+                      ? acl.target.publicKeyString.toString()
+                      : (typeof acl.target === 'string' ? acl.target : null)))
+              : null;
+            
+            // Extract principal address using SDK methods
+            const principalStr = acl.principal?.publicKeyString?.get
+              ? acl.principal.publicKeyString.get()
+              : (acl.principal?.publicKeyString?.toString
+                  ? acl.principal.publicKeyString.toString()
+                  : (typeof acl.principal === 'string' ? acl.principal : ''));
+            
+            console.log(`[Storage] Account ${index + 1}:`, {
+              entity: entityStr,
+              principal: principalStr,
+              permissions: acl.permissions?.base?.flags || [],
+            });
+            
+            return {
+              entity: entityStr,
+              principal: principalStr,
+              target: targetStr,
+              permissions: acl.permissions?.base?.flags || [],
+              name: 'Storage Account',
+              description: 'Storage account for trading operations',
+              balance: '0', // Balance requires separate API call with capabilities
+              created: Date.now(),
+            };
+          } catch (mappingError) {
+            console.error(`[Storage] Error mapping ACL ${index + 1}:`, mappingError);
+            return null;
+          }
+        }).filter((account): account is NonNullable<typeof account> => account !== null);
+        
+        console.log('[Storage] Enriched accounts:', enrichedAccounts.length);
         setStorageAccounts(enrichedAccounts);
       } catch (error) {
         console.error('Failed to fetch storage accounts:', error);
