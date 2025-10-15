@@ -58,13 +58,13 @@ impl SettlementQueue {
         let user_id = request.user_id.clone();
         let token = request.token.clone();
         self.ledger.record_withdrawal(&id, &request);
-        
+
         let op = SettlementOp::Withdraw {
             id: id.clone(),
             request,
             amount,
         };
-        
+
         if let Err(err) = self.tx.send(op) {
             let message = format!("failed to enqueue withdrawal: {}", err);
             error!("{}", message);
@@ -91,7 +91,7 @@ impl SettlementQueue {
         amount: u64,
     ) -> String {
         let id = Uuid::new_v4().to_string();
-        
+
         let op = SettlementOp::PoolDeposit {
             id: id.clone(),
             user_id,
@@ -99,12 +99,12 @@ impl SettlementQueue {
             token,
             amount,
         };
-        
+
         if let Err(err) = self.tx.send(op) {
             error!("failed to enqueue pool deposit: {}", err);
             return id;
         }
-        
+
         info!("[settlement] Pool deposit {} enqueued", id);
         id
     }
@@ -119,7 +119,7 @@ impl SettlementQueue {
         amount: u64,
     ) -> String {
         let id = Uuid::new_v4().to_string();
-        
+
         let op = SettlementOp::PoolWithdraw {
             id: id.clone(),
             pool_storage_account,
@@ -127,12 +127,12 @@ impl SettlementQueue {
             token,
             amount,
         };
-        
+
         if let Err(err) = self.tx.send(op) {
             error!("failed to enqueue pool withdraw: {}", err);
             return id;
         }
-        
+
         info!("[settlement] Pool withdraw {} enqueued", id);
         id
     }
@@ -142,7 +142,11 @@ fn spawn_worker(mut rx: UnboundedReceiver<SettlementOp>, client: KeetaClient, le
     tokio::spawn(async move {
         while let Some(op) = rx.recv().await {
             match op {
-                SettlementOp::Withdraw { id, request, amount } => {
+                SettlementOp::Withdraw {
+                    id,
+                    request,
+                    amount,
+                } => {
                     info!("processing withdrawal {}", id);
                     match client.send_on_behalf(&request).await {
                         Ok(tx_id) => {
@@ -179,16 +183,16 @@ fn spawn_worker(mut rx: UnboundedReceiver<SettlementOp>, client: KeetaClient, le
                         "[settlement] processing pool deposit {} user={} token={} amount={} pool={}",
                         id, user_id, token, amount, pool_storage_account
                     );
-                    
+
                     // TODO: Build Keeta transaction with SEND_ON_BEHALF
                     // For demo mode, we simulate instant settlement
                     let tx_id = Uuid::new_v4().to_string();
-                    
+
                     info!(
                         "[settlement] pool deposit {} settled on-chain (tx={})",
                         id, tx_id
                     );
-                    
+
                     // In production:
                     // 1. Build SEND block from S_user to S_pool
                     // 2. Sign with operator key (has SEND_ON_BEHALF permission)
@@ -207,16 +211,16 @@ fn spawn_worker(mut rx: UnboundedReceiver<SettlementOp>, client: KeetaClient, le
                         "[settlement] processing pool withdraw {} user={} token={} amount={} pool={}",
                         id, user_id, token, amount, pool_storage_account
                     );
-                    
+
                     // TODO: Build Keeta transaction to return funds
                     // For demo mode, we simulate instant settlement
                     let tx_id = Uuid::new_v4().to_string();
-                    
+
                     info!(
                         "[settlement] pool withdraw {} settled on-chain (tx={})",
                         id, tx_id
                     );
-                    
+
                     // In production:
                     // 1. Build SEND block from S_pool to S_user
                     // 2. Sign with operator key (OWNER of S_pool)
