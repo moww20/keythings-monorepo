@@ -6,7 +6,8 @@
     "dev": "next dev --turbo",
     "build": "next build --turbo",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "autosigner": "bun tools/autosigner/index.ts"
   },
   "dependencies": {
     "@keetanetwork/keetanet-client": "^0.14.8",

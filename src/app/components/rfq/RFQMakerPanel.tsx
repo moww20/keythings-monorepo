@@ -3,8 +3,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, CheckCircle2, ClipboardCopy, Loader2, Zap } from 'lucide-react';
 
-import { useRFQContext } from '@/app/contexts/RFQContext';
-import type { RFQQuoteDraft, RFQQuoteSubmission } from '@/app/types/rfq';
+import { useMakerProfiles, useRFQContext } from '@/app/contexts/RFQContext';
+import type { RFQMakerMeta, RFQQuoteDraft, RFQQuoteSubmission } from '@/app/types/rfq';
 import { useWallet } from '@/app/contexts/WalletContext';
 
 const EXPIRY_PRESETS: Array<{ value: RFQQuoteDraft['expiryPreset']; label: string }> = [
@@ -46,6 +46,7 @@ function trimPubkey(pubkey: string | null): string {
 
 export function RFQMakerPanel(): React.JSX.Element {
   const { pair, createQuote, cancelQuote, selectedOrder, orders } = useRFQContext();
+  const makerProfiles = useMakerProfiles();
   const { publicKey, isConnected } = useWallet();
   const [draft, setDraft] = useState<MakerDraftState>(DEFAULT_DRAFT);
   const [isPublishing, setIsPublishing] = useState(false);
@@ -80,19 +81,27 @@ export function RFQMakerPanel(): React.JSX.Element {
     setError(null);
   }, [pair]);
 
-  const makerProfile = useMemo(
-    () => ({
+  const makerProfile = useMemo(() => {
+    const networkProfile = publicKey ? makerProfiles.find((maker) => maker.id === publicKey) : undefined;
+
+    if (networkProfile) {
+      return {
+        ...networkProfile,
+        allowlistLabel: draft.allowlistLabel || networkProfile.allowlistLabel,
+      } satisfies RFQMakerMeta;
+    }
+
+    return {
       id: publicKey ?? 'maker-local',
       displayName: publicKey ? `You (${trimPubkey(publicKey)})` : 'Your Desk',
       verified: Boolean(publicKey),
-      reputationScore: 82,
-      autoSignSlaMs: 380,
-      fillsCompleted: 214,
-      failureRate: 0.7,
+      reputationScore: 0,
+      autoSignSlaMs: 0,
+      fillsCompleted: 0,
+      failureRate: 0,
       allowlistLabel: draft.allowlistLabel || undefined,
-    }),
-    [draft.allowlistLabel, publicKey],
-  );
+    } satisfies RFQMakerMeta;
+  }, [draft.allowlistLabel, makerProfiles, publicKey]);
 
   const selectedMakerOrder = useMemo(() => orders.find((order) => order.id === selectedOrder?.id), [orders, selectedOrder]);
 
@@ -177,6 +186,11 @@ export function RFQMakerPanel(): React.JSX.Element {
         <div className="rounded-full bg-surface-strong px-3 py-1 text-[11px] font-medium text-muted">
           Maker profile · {trimPubkey(publicKey)}
         </div>
+      </div>
+
+      <div className="rounded-lg border border-dashed border-hairline bg-surface px-3 py-2 text-xs text-muted">
+        Live RFQ publishing on Keeta testnet now routes through the maker autosigner bot. Use the CLI or automation service to
+        post partially signed quotes, then monitor fills from this dashboard.
       </div>
 
       <div className="grid grid-cols-2 gap-3 text-xs">
