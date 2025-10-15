@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeftRight, Info, Link as LinkIcon } from 'lucide-react';
+import { ArrowLeftRight, Info, Link as LinkIcon, Loader2 } from 'lucide-react';
 import { SwapPanel } from '@/app/components/SwapPanel';
 import { useWallet } from '@/app/contexts/WalletContext';
 import { usePoolsApi } from '@/app/hooks/usePoolsApi';
@@ -38,6 +38,9 @@ export default function SwapPage(): React.JSX.Element {
     tokens,
     userClient,
     storageAccountAddress,
+    enableTrading,
+    isTradingEnabling,
+    tradingError,
   } = useWallet();
   const { fetchPools, getQuote, notifySwapTelemetry } = usePoolsApi();
 
@@ -299,6 +302,14 @@ export default function SwapPage(): React.JSX.Element {
     return `${pool.token_a}/${pool.token_b}`;
   }, []);
 
+  const handleEnableTrading = useCallback(async () => {
+    try {
+      await enableTrading();
+    } catch (error) {
+      console.error('[Swap] Failed to enable trading from swap page:', error);
+    }
+  }, [enableTrading]);
+
   if (!isConnected) {
     return (
       <div className="min-h-screen bg-[color:var(--background)] px-6 py-8">
@@ -337,6 +348,30 @@ export default function SwapPage(): React.JSX.Element {
                     ? 'Enable trading to create a storage account before submitting swaps.'
                     : 'Unlock your wallet to grant swap permissions.'}
                 </p>
+                {tradingDisabled && !walletNotReady && (
+                  <div className="mt-3 flex flex-wrap items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={handleEnableTrading}
+                      disabled={isTradingEnabling}
+                      className="inline-flex items-center gap-2 rounded-md bg-accent px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-accent/90 focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {isTradingEnabling ? (
+                        <>
+                          <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                          Enabling…
+                        </>
+                      ) : (
+                        'Enable trading'
+                      )}
+                    </button>
+                    {tradingError && (
+                      <p className="text-xs text-yellow-100/80" role="alert">
+                        {tradingError}
+                      </p>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           </div>
