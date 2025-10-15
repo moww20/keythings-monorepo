@@ -8,6 +8,7 @@ This directory contains the comprehensive design documentation for the Keeta Cen
 - **[KEETA_CEX_BLUEPRINT.md](./KEETA_CEX_BLUEPRINT.md)** - Main architectural blueprint covering the complete CEX system
 - **[RFQ_ORDER_BOOK_IMPLEMENTATION.md](./RFQ_ORDER_BOOK_IMPLEMENTATION.md)** - Detailed implementation plan for RFQ functionality
 - **[RFQ_INTEGRATION_SUMMARY.md](./RFQ_INTEGRATION_SUMMARY.md)** - Integration guide for RFQ with existing CEX architecture
+- **[TRADE_PAGE_RFQ_CONVERSION.md](./TRADE_PAGE_RFQ_CONVERSION.md)** - UX and workflow plan for turning the Trade page into an RFQ-first experience
 
 ## 🏗️ System Architecture
 
