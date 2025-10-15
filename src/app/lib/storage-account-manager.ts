@@ -11,7 +11,7 @@ function isPublicKeyLike(value: unknown): value is KeetaPublicKeyLike {
   return Boolean(value) && typeof (value as KeetaPublicKeyLike).toString === "function";
 }
 
-function normalizePublicKeyString(value: unknown): string | null {
+export function normalizePublicKeyString(value: unknown): string | null {
   if (typeof value === "string") {
     return value;
   }
@@ -80,7 +80,7 @@ function createPermissionPayload(flags: string[]): KeetaPermissionDescriptor {
   };
 }
 
-function normalizeAccountRef(value: unknown): KeetaAccountRef {
+export function normalizeAccountRef(value: unknown): KeetaAccountRef {
   if (typeof value === "string") {
     return { publicKeyString: value };
   }
@@ -130,7 +130,7 @@ function extractAccount(value: unknown): KeetaAccountRef | null {
   return null;
 }
 
-function extractBlockHash(result: KeetaBuilderPublishResult | null | undefined): string | null {
+export function extractBlockHash(result: KeetaBuilderPublishResult | null | undefined): string | null {
   if (!result?.blocks) {
     return null;
   }

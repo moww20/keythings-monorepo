@@ -9,9 +9,9 @@ use crate::models::{
     AuthChallenge, AuthSession, Balance, CancelOrderRequest, DepositAddress, LimitOrder,
     PlaceOrderResponse, PlacedOrder, WithdrawEnqueued, WithdrawRequest,
 };
-use serde::Serialize;
 use crate::reconcile::Reconciler;
 use crate::settlement::SettlementQueue;
+use serde::Serialize;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -95,13 +95,31 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
             // Pool routes
             .route("/pools/list", web::get().to(crate::pool_api::list_pools))
             .route("/pools/{pool_id}", web::get().to(crate::pool_api::get_pool))
-            .route("/pools/create", web::post().to(crate::pool_api::create_pool))
-            .route("/pools/created", web::post().to(crate::pool_api::notify_pool_created))
-            .route("/pools/add-liquidity", web::post().to(crate::pool_api::add_liquidity))
-            .route("/pools/remove-liquidity", web::post().to(crate::pool_api::remove_liquidity))
-            .route("/pools/swap", web::post().to(crate::pool_api::swap))
+            .route(
+                "/pools/create",
+                web::post().to(crate::pool_api::create_pool),
+            )
+            .route(
+                "/pools/created",
+                web::post().to(crate::pool_api::notify_pool_created),
+            )
+            .route(
+                "/pools/add-liquidity",
+                web::post().to(crate::pool_api::add_liquidity),
+            )
+            .route(
+                "/pools/remove-liquidity",
+                web::post().to(crate::pool_api::remove_liquidity),
+            )
+            .route(
+                "/pools/swap/telemetry",
+                web::post().to(crate::pool_api::record_swap_telemetry),
+            )
             .route("/pools/quote", web::post().to(crate::pool_api::quote))
-            .route("/pools/{pool_id}/unpause", web::post().to(crate::pool_api::unpause_pool)),
+            .route(
+                "/pools/{pool_id}/unpause",
+                web::post().to(crate::pool_api::unpause_pool),
+            ),
     );
 }
 
@@ -139,10 +157,10 @@ async fn register_user(
         "Registering user {} with storage account {}",
         payload.user_id, payload.storage_account
     );
-    
+
     // TODO: Store in database
     // For now, we'll just log and return success
-    
+
     HttpResponse::Ok().json(serde_json::json!({
         "success": true,
         "message": "User registered successfully",
@@ -151,25 +169,22 @@ async fn register_user(
     }))
 }
 
-async fn user_status(
-    _state: web::Data<AppState>,
-    path: web::Path<String>,
-) -> impl Responder {
+async fn user_status(_state: web::Data<AppState>, path: web::Path<String>) -> impl Responder {
     let user_id = path.into_inner();
-    
+
     // TODO: Query database for user status
     // For now, return a mock response
     // In production, this would check if user has a registered storage account
-    
+
     info!("Checking status for user {}", user_id);
-    
+
     // For development: return false so users see the "Enable Trading" button
     let status = UserStatusResponse {
         user_id: user_id.clone(),
         trading_enabled: false,
         storage_account: None,
     };
-    
+
     HttpResponse::Ok().json(status)
 }
 
