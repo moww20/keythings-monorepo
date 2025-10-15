@@ -102,6 +102,16 @@ export function normalizeAccountRef(value: unknown): KeetaAccountRef {
   throw new Error("Unable to normalize account reference: missing publicKeyString");
 }
 
+/**
+ * Serialize account ref to a plain object safe for Chrome messaging.
+ * This ensures no methods or circular references exist.
+ */
+export function serializeAccountRef(value: unknown): KeetaAccountRef {
+  const normalized = normalizeAccountRef(value);
+  // Create a fresh plain object with only the publicKeyString property
+  return { publicKeyString: normalized.publicKeyString };
+}
+
 function extractAccount(value: unknown): KeetaAccountRef | null {
   if (!value) {
     return null;

@@ -11,7 +11,7 @@ import type {
   SwapExecutionResult,
   SwapParams,
 } from '@/app/types/pools';
-import { extractBlockHash, normalizeAccountRef } from '@/app/lib/storage-account-manager';
+import { extractBlockHash, normalizeAccountRef, serializeAccountRef } from '@/app/lib/storage-account-manager';
 
 function shortenSignature(signature: string): string {
   if (signature.length <= 12) {
@@ -201,10 +201,11 @@ export default function SwapPage(): React.JSX.Element {
       }
 
       const amountOut = expectedAmountOut && expectedAmountOut >= minAmountOut ? expectedAmountOut : minAmountOut;
-      const userStorageRef = normalizeAccountRef(storageAccountAddress);
-      const poolStorageRef = normalizeAccountRef(pool.storage_account);
-      const tokenInRef = normalizeAccountRef(tokenInAddress);
-      const tokenOutRef = normalizeAccountRef(tokenOutAddress);
+      // Use serializeAccountRef to ensure objects are plain and serializable via Chrome messaging
+      const userStorageRef = serializeAccountRef(storageAccountAddress);
+      const poolStorageRef = serializeAccountRef(pool.storage_account);
+      const tokenInRef = serializeAccountRef(tokenInAddress);
+      const tokenOutRef = serializeAccountRef(tokenOutAddress);
 
       onStatusChange?.({ status: 'awaiting-signature', details: 'Authorize the swap in your wallet.' });
 

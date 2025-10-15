@@ -253,6 +253,13 @@ pub async fn get_pool(state: web::Data<PoolState>, path: web::Path<String>) -> H
                 },
                 // Add paused status for debugging
                 is_paused: pool.paused,
+                pending_settlement: pool.pending_settlement,
+                last_swap_signature: pool.last_swap_signature.clone(),
+                last_swap_confirmed_at: pool.last_swap_at.clone(),
+                last_swap_token_in: pool.last_swap_token_in.clone(),
+                last_swap_token_out: pool.last_swap_token_out.clone(),
+                last_swap_amount_in: pool.last_swap_amount_in.map(|v| v.to_string()),
+                last_swap_amount_out: pool.last_swap_amount_out.map(|v| v.to_string()),
             };
             HttpResponse::Ok().json(serde_json::json!({ "pool": pool_info }))
         }

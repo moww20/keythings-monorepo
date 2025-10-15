@@ -96,9 +96,17 @@
 - Expand frontend to surface transaction hashes, explorer links, and retry guidance.
 - Harden API auth (JWT tied to wallet signatures) and rate limiting ahead of public testing.
 
-### 8.3 Phase 4+ Roadmap
-- Deliver smart router decision engine combining CLOB depth and AMM quotes with optional order splitting.
-- Launch advanced analytics, LP dashboards, and MM API endpoints.
+### 8.3 RFQ Order Book Implementation (New Priority)
+- **Phase 1**: Implement RFQ backend infrastructure (order book, API endpoints, validation)
+- **Phase 2**: Create RFQ frontend components (order book display, order creation, atomic swaps)
+- **Phase 3**: Integrate RFQ with existing trade page (unified interface, mode toggle)
+- **Phase 4**: Testing, security audit, and production deployment
+- **See**: `RFQ_ORDER_BOOK_IMPLEMENTATION.md` for detailed implementation plan
+- **See**: `RFQ_INTEGRATION_SUMMARY.md` for architecture integration details
+
+### 8.4 Phase 4+ Roadmap
+- Deliver smart router decision engine combining CLOB depth, AMM quotes, and RFQ orders with optional order splitting.
+- Launch advanced analytics, LP dashboards, MM API endpoints, and RFQ market making tools.
 - Prepare for security audit, load testing, liquidity incentive programs, and eventual mobile/institutional clients.
 
 ## 9. Testing & Operational Playbooks
