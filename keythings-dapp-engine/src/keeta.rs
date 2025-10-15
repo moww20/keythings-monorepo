@@ -33,7 +33,7 @@ impl KeetaClient {
     // NON-CUSTODIAL ARCHITECTURE: Read-Only Query Methods
     // Backend has NO operator key and CANNOT move funds
     // ============================================================================
-    
+
     /// Placeholder for legacy withdrawal support (to be refactored)
     /// In non-custodial model, users withdraw directly via their wallet
     pub async fn send_on_behalf(&self, request: &WithdrawRequest) -> Result<String, KeetaError> {
@@ -111,11 +111,7 @@ impl KeetaClient {
     /// This should query the actual on-chain balance, not internal ledger
     /// Reserved for future production use when Keeta RPC balance query is implemented
     #[allow(dead_code)]
-    pub async fn query_balance(
-        &self,
-        wallet_address: &str,
-        token: &str,
-    ) -> Result<u64, String> {
+    pub async fn query_balance(&self, wallet_address: &str, token: &str) -> Result<u64, String> {
         info!(
             "[keeta] query_balance wallet={} token={}",
             wallet_address, token
@@ -137,7 +133,7 @@ impl KeetaClient {
             "[keeta] query_balance is placeholder - real integration needed. Wallet: {}, Token: {}",
             wallet_address, token
         );
-        
+
         Ok(0) // Placeholder - will be replaced with real RPC call
     }
 }

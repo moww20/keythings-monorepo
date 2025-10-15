@@ -1,12 +1,14 @@
-import { useCallback } from 'react';
-import type { PoolInfo, QuoteResponse, SwapResponse } from '@/app/types/pools';
+import { useCallback, useMemo } from 'react';
+import type { PoolInfo, QuoteResponse, SwapTelemetryPayload } from '@/app/types/pools';
 
 export function usePoolsApi() {
+  const apiBase = useMemo(() => process.env.NEXT_PUBLIC_DEX_API_URL || 'http://localhost:8080', []);
+
   const fetchPools = useCallback(async (): Promise<{ pools: PoolInfo[] }> => {
-    const response = await fetch('http://localhost:8080/api/pools/list');
+    const response = await fetch(`${apiBase}/api/pools/list`);
     if (!response.ok) throw new Error('Failed to fetch pools');
     return await response.json();
-  }, []);
+  }, [apiBase]);
 
   const getQuote = useCallback(async (
     poolId: string,
@@ -19,7 +21,7 @@ export function usePoolsApi() {
       amount_in: amountIn
     });
     
-    const response = await fetch('http://localhost:8080/api/pools/quote', {
+    const response = await fetch(`${apiBase}/api/pools/quote`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ pool_id: poolId, token_in: tokenIn, amount_in: amountIn })
@@ -36,45 +38,39 @@ export function usePoolsApi() {
     const result = await response.json();
     console.log('[usePoolsApi] Quote result:', result);
     return result;
-  }, []);
+  }, [apiBase]);
 
-  const executeSwap = useCallback(async (
-    poolId: string,
-    tokenIn: string,
-    amountIn: string,
-    minAmountOut?: string
-  ): Promise<SwapResponse> => {
-    console.log('[usePoolsApi] Executing swap:', {
-      pool_id: poolId,
-      token_in: tokenIn,
-      amount_in: amountIn,
-      min_amount_out: minAmountOut || '0'
-    });
-    
-    const response = await fetch('http://localhost:8080/api/pools/swap', {
+  const notifySwapTelemetry = useCallback(async (
+    payload: SwapTelemetryPayload
+  ): Promise<void> => {
+    console.log('[usePoolsApi] Sending swap telemetry:', payload);
+
+    const response = await fetch(`${apiBase}/api/pools/swap/telemetry`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        pool_id: poolId,
-        token_in: tokenIn,
-        amount_in: amountIn,
-        min_amount_out: minAmountOut || '0'
-      })
+        pool_id: payload.poolId,
+        token_in: payload.tokenIn,
+        token_out: payload.tokenOut,
+        amount_in: payload.amountIn,
+        amount_out: payload.amountOut,
+        min_amount_out: payload.minAmountOut,
+        wallet_address: payload.walletAddress,
+        storage_account: payload.storageAccount,
+        tx_signature: payload.txSignature,
+        confirmed_at: payload.confirmedAt,
+      }),
     });
-    
-    console.log('[usePoolsApi] Swap response status:', response.status);
-    
+
+    console.log('[usePoolsApi] Swap telemetry status:', response.status);
+
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('[usePoolsApi] Swap failed:', errorText);
-      throw new Error(`Failed to execute swap: ${errorText}`);
+      console.error('[usePoolsApi] Telemetry failed:', errorText);
+      throw new Error(`Failed to send swap telemetry: ${errorText}`);
     }
-    
-    const result = await response.json();
-    console.log('[usePoolsApi] Swap result:', result);
-    return result;
-  }, []);
+  }, [apiBase]);
 
-  return { fetchPools, getQuote, executeSwap };
+  return { fetchPools, getQuote, notifySwapTelemetry };
 }
 
