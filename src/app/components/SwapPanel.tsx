@@ -25,6 +25,12 @@ export function SwapPanel({ pool, tokens, onSwap, onGetQuote, disabled = false }
   // Initialize token selections from pool
   useEffect(() => {
     if (pool) {
+      console.log('[SwapPanel] Pool received:', {
+        id: pool.id,
+        is_paused: pool.is_paused,
+        token_a: pool.token_a,
+        token_b: pool.token_b
+      });
       setTokenInSymbol(pool.token_a);
       setTokenOutSymbol(pool.token_b);
     }
@@ -260,11 +266,14 @@ export function SwapPanel({ pool, tokens, onSwap, onGetQuote, disabled = false }
       )}
 
       {/* Pool Paused Warning */}
-      {pool.is_paused && (
-        <div className="glass rounded-lg border border-yellow-500/20 bg-yellow-500/10 p-4">
-          <p className="text-sm text-yellow-400">This pool is currently paused. Swaps are disabled.</p>
-        </div>
-      )}
+      {pool.is_paused && (() => {
+        console.log('[SwapPanel] WARNING: Pool is paused:', pool.id, 'is_paused:', pool.is_paused);
+        return (
+          <div className="glass rounded-lg border border-yellow-500/20 bg-yellow-500/10 p-4">
+            <p className="text-sm text-yellow-400">This pool is currently paused. Swaps are disabled.</p>
+          </div>
+        );
+      })()}
 
       {/* Swap Button */}
       <button

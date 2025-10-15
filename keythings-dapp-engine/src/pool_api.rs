@@ -594,8 +594,7 @@ pub async fn swap(
     state: web::Data<PoolState>,
     body: web::Json<SwapRequest>,
 ) -> HttpResponse {
-    // TODO: Add wallet_address to SwapRequest
-    let wallet_address = "temp-user"; // Temporary until we update SwapRequest struct
+    // NON-CUSTODIAL: wallet_address not needed - swaps happen on-chain
     
     let amount_in: u64 = body.amount_in.parse().unwrap_or(0);
     let min_amount_out: u64 = body.min_amount_out.as_ref()
@@ -613,18 +612,13 @@ pub async fn swap(
     
     // Determine output token
     let token_out = if body.token_in == pool.token_a {
-        &pool.token_b
+        pool.token_b.clone()
     } else {
-        &pool.token_a
+        pool.token_a.clone()
     };
     
-    // Check user balance
-    let (available, _) = state.ledger.internal_balance(wallet_address, &body.token_in);
-    if available < amount_in as f64 {
-        return HttpResponse::BadRequest().json(serde_json::json!({
-            "error": "Insufficient balance"
-        }));
-    }
+    // NON-CUSTODIAL: No balance check - user will sign transaction on-chain
+    // The swap calculation is done here, but actual token transfer happens on-chain
     
     // Calculate swap output
     match pool.get_amount_out(amount_in, &body.token_in) {
@@ -641,9 +635,16 @@ pub async fn swap(
             // Calculate price impact
             let price_impact = pool.calculate_price_impact(amount_in, &body.token_in).unwrap_or(0.0);
             
-            // Execute swap (update internal balances)
-            state.ledger.debit_total(wallet_address, &body.token_in, amount_in as f64);
-            state.ledger.credit(wallet_address, token_out, amount_out as f64);
+            // Update pool reserves (optimistic update - will be reconciled later)
+            if let Err(e) = state.pool_manager.execute_swap(&body.pool_id, &body.token_in, amount_in, amount_out) {
+                log::error!("[pool] Failed to update pool reserves: {:?}", e);
+                return HttpResponse::InternalServerError().json(serde_json::json!({
+                    "error": "Failed to update pool state"
+                }));
+            }
+            
+            log::info!("[pool] Swap calculated: {} {} → {} {} (fee: {}, impact: {:.2}%)", 
+                amount_in, body.token_in, amount_out, token_out, fee, price_impact);
             
             // Calculate execution price
             let execution_price = amount_out as f64 / amount_in as f64;
@@ -749,6 +750,20 @@ pub async fn notify_pool_created(
         log::warn!("[pool] Failed to update storage account: {:?}", e);
     } else {
         log::info!("[pool] Updated storage account for pool {}: {}", pool_id, body.storage_account);
+    }
+    
+    // Update on-chain reserves to prevent auto-pausing by reconciler
+    if let Err(e) = state.pool_manager.update_on_chain_reserves(&pool_id, initial_a, initial_b) {
+        log::warn!("[pool] Failed to update on-chain reserves: {:?}", e);
+    } else {
+        log::info!("[pool] Updated on-chain reserves for pool {}: {}/{}", pool_id, initial_a, initial_b);
+    }
+    
+    // Explicitly unpause the pool to make it immediately available for swaps
+    if let Err(e) = state.pool_manager.unpause_pool(&pool_id) {
+        log::warn!("[pool] Failed to unpause pool: {:?}", e);
+    } else {
+        log::info!("[pool] Pool {} unpaused and ready for trading", pool_id);
     }
     
     log::info!(

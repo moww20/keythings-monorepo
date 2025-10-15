@@ -395,9 +395,14 @@ export default function CreatePoolModal({ isOpen, onClose, onSuccess }: CreatePo
       }
       
       console.log('[CreatePool] ⚠️ Please approve the liquidity deposit transaction in your wallet extension!');
+      console.warn('🔐 SECURITY: Wallet approval required for liquidity deposit');
+      console.warn(`🔐 You are about to deposit ${amountA} ${getTokenSymbol(tokenA)} and ${amountB} ${getTokenSymbol(tokenB)} to the pool`);
+      console.warn('🔐 Please review and approve the transaction in your Keeta Wallet extension');
+      
       setSettlementStatus('signing');
       
-      // Publish the transaction (user will sign via wallet extension)
+      // SECURITY: This publishBuilder call MUST trigger wallet approval
+      // User must explicitly approve the liquidity deposit transaction
       const depositResult = await userClient.publishBuilder(builder);
       console.log('[CreatePool] ✅ Liquidity deposit transaction signed and published');
       console.log('[CreatePool] Transaction result:', depositResult);
@@ -1013,6 +1018,19 @@ export default function CreatePoolModal({ isOpen, onClose, onSuccess }: CreatePo
           {/* Step 4: Add Liquidity */}
           {step === 'liquidity' && (
             <div className="space-y-6">
+              {/* Security Warning */}
+              <div className="p-4 rounded-lg bg-yellow-500/10 border border-yellow-500/30 flex items-start gap-3">
+                <svg className="h-5 w-5 text-yellow-500 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M12 2L1 21h22L12 2zm0 3.5L19.5 19h-15L12 5.5zM11 10v4h2v-4h-2zm0 5v2h2v-2h-2z"/>
+                </svg>
+                <div className="flex-1">
+                  <div className="text-sm font-semibold text-yellow-500 mb-1">🔐 Wallet Approval Required</div>
+                  <div className="text-xs text-yellow-400">
+                    Clicking &quot;Add Liquidity&quot; will prompt your Keeta Wallet to approve a transaction that deposits {amountA} {getTokenSymbol(tokenA)} and {amountB} {getTokenSymbol(tokenB)} to the pool storage account. Please review and approve the transaction.
+                  </div>
+                </div>
+              </div>
+
               <div className="text-center">
                 <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-green-500/10 border border-green-500/30 mb-4">
                   <svg className="w-8 h-8 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">

@@ -147,7 +147,7 @@ export default function HomePage() {
               target: targetStr,
               permissions: acl.permissions || [],
             });
-            
+          
           return {
             entity: entityStr,
               principal: principalStr,

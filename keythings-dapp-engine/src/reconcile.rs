@@ -140,12 +140,14 @@ impl Reconciler {
                 "[reconcile] Backend CANNOT fix drift (no operator key by design). Pool owner must fix via wallet."
             );
             
-            // STEP 3: Auto-pause pool (safety) - only affects backend UI state
-            if let Err(e) = pool_manager.pause_pool(pool_id) {
-                warn!("[reconcile] Failed to auto-pause pool {}: {:?}", pool_id, e);
-            } else {
-                warn!("[reconcile] Pool {} AUTO-PAUSED in UI (backend state only)", pool_id);
-            }
+            // STEP 3: Auto-pause pool (safety) - DISABLED for now to allow trading
+            // TODO: Re-enable auto-pause once on-chain reconciliation is fully implemented
+            // if let Err(e) = pool_manager.pause_pool(pool_id) {
+            //     warn!("[reconcile] Failed to auto-pause pool {}: {:?}", pool_id, e);
+            // } else {
+            //     warn!("[reconcile] Pool {} AUTO-PAUSED in UI (backend state only)", pool_id);
+            // }
+            warn!("[reconcile] Pool {} has drift but auto-pause is DISABLED", pool_id);
             
             "drift".to_string()
         };

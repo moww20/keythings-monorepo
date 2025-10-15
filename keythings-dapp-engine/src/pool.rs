@@ -1,5 +1,6 @@
 use dashmap::DashMap;
 use std::sync::Arc;
+use chrono;
 
 #[derive(Debug, Clone)]
 pub struct LiquidityPool {
@@ -125,6 +126,7 @@ impl PoolManager {
 
     /// Pause a pool to prevent all operations (swaps, liquidity changes)
     /// Used in emergencies or when drift is detected
+    #[allow(dead_code)]
     pub fn pause_pool(&self, pool_id: &str) -> Result<(), PoolError> {
         let mut pool = self.pools.get_mut(pool_id)
             .ok_or(PoolError::PoolNotFound)?;
@@ -141,6 +143,39 @@ impl PoolManager {
             .ok_or(PoolError::PoolNotFound)?;
         pool.paused = false;
         log::info!("Pool {} has been UNPAUSED", pool_id);
+        Ok(())
+    }
+    
+    /// Update on-chain reserve tracking for a pool
+    /// Called when pool is created or after reconciliation
+    pub fn update_on_chain_reserves(&self, pool_id: &str, reserve_a: u64, reserve_b: u64) -> Result<(), PoolError> {
+        let mut pool = self.pools.get_mut(pool_id)
+            .ok_or(PoolError::PoolNotFound)?;
+        pool.on_chain_reserve_a = reserve_a;
+        pool.on_chain_reserve_b = reserve_b;
+        pool.last_reconciled_at = Some(chrono::Utc::now().to_rfc3339());
+        log::info!("Pool {} on-chain reserves updated: {}/{}", pool_id, reserve_a, reserve_b);
+        Ok(())
+    }
+    
+    /// Execute a swap by updating pool reserves
+    /// Called after swap calculation to update pool state
+    pub fn execute_swap(&self, pool_id: &str, token_in: &str, amount_in: u64, amount_out: u64) -> Result<(), PoolError> {
+        let mut pool = self.pools.get_mut(pool_id)
+            .ok_or(PoolError::PoolNotFound)?;
+        
+        // Update reserves based on which token is being swapped
+        if token_in == pool.token_a {
+            pool.reserve_a += amount_in;
+            pool.reserve_b = pool.reserve_b.saturating_sub(amount_out);
+        } else if token_in == pool.token_b {
+            pool.reserve_b += amount_in;
+            pool.reserve_a = pool.reserve_a.saturating_sub(amount_out);
+        } else {
+            return Err(PoolError::InvalidToken);
+        }
+        
+        log::info!("Pool {} reserves updated after swap: {}/{}", pool_id, pool.reserve_a, pool.reserve_b);
         Ok(())
     }
 

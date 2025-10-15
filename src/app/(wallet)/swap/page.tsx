@@ -21,13 +21,30 @@ export default function SwapPage(): React.JSX.Element {
     async function loadPools() {
       try {
         setIsLoadingPools(true);
+        console.log('[Swap] Fetching pools from backend...');
         const data = await fetchPools();
+        console.log('[Swap] Pools fetched:', data.pools);
+        console.log('[Swap] Pool count:', data.pools.length);
+        
+        // Log each pool's paused status
+        data.pools.forEach((pool, index) => {
+          console.log(`[Swap] Pool ${index + 1}:`, {
+            id: pool.id,
+            is_paused: pool.is_paused,
+            token_a: pool.token_a,
+            token_b: pool.token_b,
+            reserve_a: pool.reserve_a,
+            reserve_b: pool.reserve_b
+          });
+        });
+        
         // Show all pools (including paused ones) - SwapPanel will handle paused state
         setPools(data.pools);
         
         // Auto-select first pool
         if (data.pools.length > 0 && !selectedPoolId) {
           setSelectedPoolId(data.pools[0].id);
+          console.log('[Swap] Auto-selected pool:', data.pools[0].id);
         }
       } catch (error) {
         console.error('[Swap] Error loading pools:', error);
@@ -42,6 +59,20 @@ export default function SwapPage(): React.JSX.Element {
   }, [isConnected, fetchPools, selectedPoolId]);
 
   const selectedPool = pools.find(p => p.id === selectedPoolId) || null;
+  
+  // Log selected pool details
+  useEffect(() => {
+    if (selectedPool) {
+      console.log('[Swap] Selected pool details:', {
+        id: selectedPool.id,
+        is_paused: selectedPool.is_paused,
+        token_a: selectedPool.token_a,
+        token_b: selectedPool.token_b,
+      });
+    } else {
+      console.log('[Swap] No pool selected');
+    }
+  }, [selectedPool]);
 
   // Handle swap execution
   const handleSwap = useCallback(async (params: SwapParams) => {
