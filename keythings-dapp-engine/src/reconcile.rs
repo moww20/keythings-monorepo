@@ -6,9 +6,9 @@ use dashmap::DashMap;
 use log::{info, warn};
 use tokio::time::interval;
 
+use crate::keeta::KeetaClient;
 use crate::ledger::Ledger;
 use crate::models::Balance;
-use crate::keeta::KeetaClient;
 use crate::pool::PoolManager;
 
 const RECONCILE_INTERVAL_SECS: u64 = 300;
@@ -27,8 +27,8 @@ pub struct PoolReconcileResult {
 pub struct Reconciler {
     ledger: Ledger,
     reports: Arc<DashMap<(String, String), AccountReport>>,
-    keeta_client: Option<KeetaClient>,      // Phase 5: For querying on-chain balances
-    pool_manager: Option<PoolManager>,       // Phase 5: For pool reconciliation
+    keeta_client: Option<KeetaClient>, // Phase 5: For querying on-chain balances
+    pool_manager: Option<PoolManager>, // Phase 5: For pool reconciliation
 }
 
 impl Reconciler {
@@ -92,42 +92,50 @@ impl Reconciler {
     }
 
     /// Phase 5: Reconcile a specific pool's reserves with on-chain balances
-    /// 
+    ///
     /// NON-CUSTODIAL MODEL: This method is QUERY-ONLY
     /// - Queries on-chain balances (read-only)
     /// - Updates internal tracking to match chain (UI state only)
     /// - Pauses pool if drift detected (safety mechanism)
     /// - CANNOT fix drift on-chain (no operator key, by design)
-    /// 
+    ///
     /// In non-custodial architecture, only the pool owner (user) can fix drift
     /// by signing transactions via their wallet.
     pub async fn reconcile_pool(&self, pool_id: &str) -> Result<PoolReconcileResult, String> {
-        let keeta_client = self.keeta_client.as_ref()
+        let keeta_client = self
+            .keeta_client
+            .as_ref()
             .ok_or_else(|| "Keeta client not initialized".to_string())?;
-        
-        let pool_manager = self.pool_manager.as_ref()
+
+        let pool_manager = self
+            .pool_manager
+            .as_ref()
             .ok_or_else(|| "Pool manager not initialized".to_string())?;
-        
-        let pool = pool_manager.get_pool(pool_id)
+
+        let pool = pool_manager
+            .get_pool(pool_id)
             .ok_or_else(|| format!("Pool not found: {}", pool_id))?;
-        
-        info!("[reconcile] Reconciling pool: {} (READ-ONLY query)", pool_id);
-        
+
+        info!(
+            "[reconcile] Reconciling pool: {} (READ-ONLY query)",
+            pool_id
+        );
+
         // STEP 1: Query on-chain balances (READ-ONLY - cannot modify)
         let on_chain_a = keeta_client
             .verify_pool_reserves(&pool.on_chain_storage_account, &pool.token_a)
             .await
             .unwrap_or(0);
-        
+
         let on_chain_b = keeta_client
             .verify_pool_reserves(&pool.on_chain_storage_account, &pool.token_b)
             .await
             .unwrap_or(0);
-        
+
         // STEP 2: Compare with internal tracking (not on-chain state)
         let drift_a = (on_chain_a as i64) - (pool.reserve_a as i64);
         let drift_b = (on_chain_b as i64) - (pool.reserve_b as i64);
-        
+
         let status = if drift_a == 0 && drift_b == 0 {
             info!("[reconcile] Pool {} is healthy (no drift)", pool_id);
             "ok".to_string()
@@ -139,7 +147,7 @@ impl Reconciler {
             warn!(
                 "[reconcile] Backend CANNOT fix drift (no operator key by design). Pool owner must fix via wallet."
             );
-            
+
             // STEP 3: Auto-pause pool (safety) - DISABLED for now to allow trading
             // TODO: Re-enable auto-pause once on-chain reconciliation is fully implemented
             // if let Err(e) = pool_manager.pause_pool(pool_id) {
@@ -147,17 +155,23 @@ impl Reconciler {
             // } else {
             //     warn!("[reconcile] Pool {} AUTO-PAUSED in UI (backend state only)", pool_id);
             // }
-            warn!("[reconcile] Pool {} has drift but auto-pause is DISABLED", pool_id);
-            
+            warn!(
+                "[reconcile] Pool {} has drift but auto-pause is DISABLED",
+                pool_id
+            );
+
             "drift".to_string()
         };
-        
+
         // STEP 4: Update internal tracking (UI state only - NOT on-chain)
         let now = Utc::now().to_rfc3339();
         if let Err(e) = pool_manager.update_reconciliation(pool_id, on_chain_a, on_chain_b, now) {
-            warn!("[reconcile] Failed to update reconciliation status: {:?}", e);
+            warn!(
+                "[reconcile] Failed to update reconciliation status: {:?}",
+                e
+            );
         }
-        
+
         Ok(PoolReconcileResult {
             pool_id: pool_id.to_string(),
             drift_a,
@@ -175,10 +189,10 @@ impl Reconciler {
                 return;
             }
         };
-        
+
         let pools = pool_manager.list_pools();
         info!("[reconcile] Reconciling {} pools", pools.len());
-        
+
         for pool in pools {
             match self.reconcile_pool(&pool.id).await {
                 Ok(result) => {

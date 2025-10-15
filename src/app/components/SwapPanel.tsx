@@ -1,17 +1,32 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ArrowDownUp } from 'lucide-react';
-import type { PoolInfo, QuoteResponse, SwapParams } from '@/app/types/pools';
+import { AlertTriangle, ArrowDownUp, CheckCircle2, Loader2 } from 'lucide-react';
+import type {
+  PoolInfo,
+  QuoteResponse,
+  SwapExecutionOptions,
+  SwapExecutionResult,
+  SwapParams,
+  SwapStatus,
+  SwapStatusUpdate,
+} from '@/app/types/pools';
 import type { ProcessedToken } from '@/app/lib/token-utils';
 
 interface SwapPanelProps {
   pool: PoolInfo | null;
   tokens: ProcessedToken[];
-  onSwap: (params: SwapParams) => Promise<void>;
+  onSwap: (params: SwapParams, options?: SwapExecutionOptions) => Promise<SwapExecutionResult>;
   onGetQuote: (poolId: string, tokenIn: string, amountIn: string) => Promise<QuoteResponse>;
   disabled?: boolean;
 }
+
+const shortenSignature = (signature: string): string => {
+  if (signature.length <= 12) {
+    return signature;
+  }
+  return `${signature.slice(0, 6)}…${signature.slice(-6)}`;
+};
 
 export function SwapPanel({ pool, tokens, onSwap, onGetQuote, disabled = false }: SwapPanelProps) {
   const [tokenInSymbol, setTokenInSymbol] = useState<string>('');
@@ -21,6 +36,9 @@ export function SwapPanel({ pool, tokens, onSwap, onGetQuote, disabled = false }
   const [isLoadingQuote, setIsLoadingQuote] = useState(false);
   const [isSwapping, setIsSwapping] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [swapStatus, setSwapStatus] = useState<SwapStatus>('idle');
+  const [statusDetails, setStatusDetails] = useState<string | null>(null);
+  const [statusTxSignature, setStatusTxSignature] = useState<string | null>(null);
 
   // Initialize token selections from pool
   useEffect(() => {
@@ -35,6 +53,12 @@ export function SwapPanel({ pool, tokens, onSwap, onGetQuote, disabled = false }
       setTokenOutSymbol(pool.token_b);
     }
   }, [pool]);
+
+  useEffect(() => {
+    setSwapStatus('idle');
+    setStatusDetails(null);
+    setStatusTxSignature(null);
+  }, [pool?.id]);
 
   // Get token details from wallet
   const tokenInDetails = useMemo(() => 
@@ -85,6 +109,12 @@ export function SwapPanel({ pool, tokens, onSwap, onGetQuote, disabled = false }
     setQuote(null);
   }, [tokenInSymbol, tokenOutSymbol]);
 
+  const handleStatusChange = useCallback((update: SwapStatusUpdate) => {
+    setSwapStatus(update.status);
+    setStatusDetails(update.details ?? null);
+    setStatusTxSignature(update.txSignature ?? null);
+  }, []);
+
   // Handle swap execution
   const handleSwap = useCallback(async () => {
     if (!pool || !amountIn || !quote) {
@@ -94,17 +124,24 @@ export function SwapPanel({ pool, tokens, onSwap, onGetQuote, disabled = false }
     try {
       setIsSwapping(true);
       setError(null);
+       setStatusTxSignature(null);
+      setSwapStatus('preparing');
+      setStatusDetails('Preparing swap transaction.');
 
       // Convert amount to base units
       const decimals = tokenInDetails?.decimals || 9;
       const amountInBaseUnits = Math.floor(parseFloat(amountIn) * Math.pow(10, decimals)).toString();
 
-      await onSwap({
+      await onSwap(
+        {
         poolId: pool.id,
         tokenIn: tokenInSymbol,
         amountIn: amountInBaseUnits,
         minAmountOut: quote.minimum_received,
-      });
+          expectedAmountOut: quote.amount_out,
+        },
+        { onStatusChange: handleStatusChange },
+      );
 
       // Reset form on success
       setAmountIn('');
@@ -112,10 +149,15 @@ export function SwapPanel({ pool, tokens, onSwap, onGetQuote, disabled = false }
     } catch (swapError) {
       console.error('[SwapPanel] Error executing swap:', swapError);
       setError(swapError instanceof Error ? swapError.message : 'Failed to execute swap');
+      setSwapStatus('failed');
+      setStatusDetails(
+        swapError instanceof Error ? swapError.message : 'The wallet reported an unexpected error during swap execution.',
+      );
+      setStatusTxSignature(null);
     } finally {
       setIsSwapping(false);
     }
-  }, [pool, amountIn, quote, tokenInSymbol, tokenInDetails, onSwap]);
+  }, [pool, amountIn, quote, tokenInSymbol, tokenInDetails, onSwap, handleStatusChange]);
 
   // Format amount from base units to display units
   const formatAmount = (amount: string, decimals: number = 9): string => {
@@ -130,13 +172,51 @@ export function SwapPanel({ pool, tokens, onSwap, onGetQuote, disabled = false }
   // Calculate exchange rate
   const exchangeRate = useMemo(() => {
     if (!quote || !amountIn || parseFloat(amountIn) === 0) return null;
-    
+
     const decimalsOut = tokenOutDetails?.decimals || 9;
     const amountOut = formatAmount(quote.amount_out, decimalsOut);
     const rate = parseFloat(amountOut) / parseFloat(amountIn);
-    
+
     return `1 ${tokenInSymbol} = ${rate.toFixed(6)} ${tokenOutSymbol}`;
   }, [quote, amountIn, tokenInSymbol, tokenOutSymbol, tokenOutDetails]);
+
+  const statusDisplay = useMemo(() => {
+    switch (swapStatus) {
+      case 'preparing':
+      case 'awaiting-signature':
+      case 'submitting':
+      case 'confirming':
+        return {
+          label:
+            swapStatus === 'awaiting-signature'
+              ? 'Awaiting Wallet Signature'
+              : swapStatus === 'submitting'
+                ? 'Submitting Transaction'
+                : swapStatus === 'confirming'
+                  ? 'Awaiting Confirmation'
+                  : 'Preparing Swap',
+          icon: <Loader2 className="h-4 w-4 animate-spin text-accent" aria-hidden />,
+          container: 'border-accent/20 bg-accent/10',
+          textClass: 'text-accent',
+        } as const;
+      case 'confirmed':
+        return {
+          label: 'Swap Confirmed',
+          icon: <CheckCircle2 className="h-4 w-4 text-green-400" aria-hidden />,
+          container: 'border-green-500/20 bg-green-500/10',
+          textClass: 'text-green-300',
+        } as const;
+      case 'failed':
+        return {
+          label: 'Swap Failed',
+          icon: <AlertTriangle className="h-4 w-4 text-red-400" aria-hidden />,
+          container: 'border-red-500/20 bg-red-500/10',
+          textClass: 'text-red-300',
+        } as const;
+      default:
+        return null;
+    }
+  }, [swapStatus]);
 
   if (!pool) {
     return (
@@ -262,6 +342,25 @@ export function SwapPanel({ pool, tokens, onSwap, onGetQuote, disabled = false }
       {error && (
         <div className="glass rounded-lg border border-red-500/20 bg-red-500/10 p-4">
           <p className="text-sm text-red-400">{error}</p>
+        </div>
+      )}
+
+      {statusDisplay && swapStatus !== 'idle' && (
+        <div
+          className={`glass rounded-lg border ${statusDisplay.container} p-4`}
+          role="status"
+          aria-live="polite"
+        >
+          <div className="flex items-start gap-3">
+            <div className="mt-0.5">{statusDisplay.icon}</div>
+            <div className="space-y-1 text-sm">
+              <p className={`font-medium ${statusDisplay.textClass}`}>{statusDisplay.label}</p>
+              {statusDetails && <p className="text-xs text-muted-foreground/80">{statusDetails}</p>}
+              {statusTxSignature && (
+                <p className="font-mono text-xs text-muted">Tx: {shortenSignature(statusTxSignature)}</p>
+              )}
+            </div>
+          </div>
         </div>
       )}
 

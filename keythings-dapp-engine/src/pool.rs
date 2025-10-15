@@ -1,6 +1,6 @@
+use chrono;
 use dashmap::DashMap;
 use std::sync::Arc;
-use chrono;
 
 #[derive(Debug, Clone)]
 pub struct LiquidityPool {
@@ -19,13 +19,19 @@ pub struct LiquidityPool {
     pub protocol_fees_a: u64,
     #[allow(dead_code)]
     pub protocol_fees_b: u64,
-    
+
     // Phase 2: On-chain state tracking
-    pub on_chain_storage_account: String,   // Real Keeta storage account address
-    pub on_chain_reserve_a: u64,             // Last reconciled on-chain balance for token A
-    pub on_chain_reserve_b: u64,             // Last reconciled on-chain balance for token B
-    pub last_reconciled_at: Option<String>,  // ISO 8601 timestamp of last reconciliation
-    pub pending_settlement: bool,             // True if there are unconfirmed on-chain txs
+    pub on_chain_storage_account: String, // Real Keeta storage account address
+    pub on_chain_reserve_a: u64,          // Last reconciled on-chain balance for token A
+    pub on_chain_reserve_b: u64,          // Last reconciled on-chain balance for token B
+    pub last_reconciled_at: Option<String>, // ISO 8601 timestamp of last reconciliation
+    pub pending_settlement: bool,         // True if there are unconfirmed on-chain txs
+    pub last_swap_signature: Option<String>, // Last confirmed swap tx signature
+    pub last_swap_at: Option<String>,     // Timestamp of last confirmed swap
+    pub last_swap_token_in: Option<String>, // Token sent into pool in last swap
+    pub last_swap_token_out: Option<String>, // Token received from pool in last swap
+    pub last_swap_amount_in: Option<u64>, // Amount in (raw units) for last swap
+    pub last_swap_amount_out: Option<u64>, // Amount out (raw units) for last swap
 }
 
 #[derive(Debug, Clone)]
@@ -85,6 +91,12 @@ impl PoolManager {
             on_chain_reserve_b: 0,
             last_reconciled_at: None,
             pending_settlement: false,
+            last_swap_signature: None,
+            last_swap_at: None,
+            last_swap_token_in: None,
+            last_swap_token_out: None,
+            last_swap_amount_in: None,
+            last_swap_amount_out: None,
         };
 
         self.pools.insert(pool_id.clone(), pool);
@@ -96,7 +108,10 @@ impl PoolManager {
     }
 
     pub fn list_pools(&self) -> Vec<LiquidityPool> {
-        self.pools.iter().map(|entry| entry.value().clone()).collect()
+        self.pools
+            .iter()
+            .map(|entry| entry.value().clone())
+            .collect()
     }
 
     fn calculate_initial_liquidity(&self, amount_a: u64, amount_b: u64) -> Result<u64, PoolError> {
@@ -113,12 +128,15 @@ impl PoolManager {
     }
 
     // Phase 6: Security - Emergency pause functionality
-    
+
     /// Update the on-chain storage account address for a pool
     /// Called after successfully creating storage account on Keeta
-    pub fn update_storage_account(&self, pool_id: &str, storage_account: String) -> Result<(), PoolError> {
-        let mut pool = self.pools.get_mut(pool_id)
-            .ok_or(PoolError::PoolNotFound)?;
+    pub fn update_storage_account(
+        &self,
+        pool_id: &str,
+        storage_account: String,
+    ) -> Result<(), PoolError> {
+        let mut pool = self.pools.get_mut(pool_id).ok_or(PoolError::PoolNotFound)?;
         pool.on_chain_storage_account = storage_account;
         pool.pending_settlement = false;
         Ok(())
@@ -128,8 +146,7 @@ impl PoolManager {
     /// Used in emergencies or when drift is detected
     #[allow(dead_code)]
     pub fn pause_pool(&self, pool_id: &str) -> Result<(), PoolError> {
-        let mut pool = self.pools.get_mut(pool_id)
-            .ok_or(PoolError::PoolNotFound)?;
+        let mut pool = self.pools.get_mut(pool_id).ok_or(PoolError::PoolNotFound)?;
         pool.paused = true;
         log::warn!("Pool {} has been PAUSED", pool_id);
         Ok(())
@@ -139,43 +156,30 @@ impl PoolManager {
     /// Reserved for future pool management API
     #[allow(dead_code)]
     pub fn unpause_pool(&self, pool_id: &str) -> Result<(), PoolError> {
-        let mut pool = self.pools.get_mut(pool_id)
-            .ok_or(PoolError::PoolNotFound)?;
+        let mut pool = self.pools.get_mut(pool_id).ok_or(PoolError::PoolNotFound)?;
         pool.paused = false;
         log::info!("Pool {} has been UNPAUSED", pool_id);
         Ok(())
     }
-    
+
     /// Update on-chain reserve tracking for a pool
     /// Called when pool is created or after reconciliation
-    pub fn update_on_chain_reserves(&self, pool_id: &str, reserve_a: u64, reserve_b: u64) -> Result<(), PoolError> {
-        let mut pool = self.pools.get_mut(pool_id)
-            .ok_or(PoolError::PoolNotFound)?;
+    pub fn update_on_chain_reserves(
+        &self,
+        pool_id: &str,
+        reserve_a: u64,
+        reserve_b: u64,
+    ) -> Result<(), PoolError> {
+        let mut pool = self.pools.get_mut(pool_id).ok_or(PoolError::PoolNotFound)?;
         pool.on_chain_reserve_a = reserve_a;
         pool.on_chain_reserve_b = reserve_b;
         pool.last_reconciled_at = Some(chrono::Utc::now().to_rfc3339());
-        log::info!("Pool {} on-chain reserves updated: {}/{}", pool_id, reserve_a, reserve_b);
-        Ok(())
-    }
-    
-    /// Execute a swap by updating pool reserves
-    /// Called after swap calculation to update pool state
-    pub fn execute_swap(&self, pool_id: &str, token_in: &str, amount_in: u64, amount_out: u64) -> Result<(), PoolError> {
-        let mut pool = self.pools.get_mut(pool_id)
-            .ok_or(PoolError::PoolNotFound)?;
-        
-        // Update reserves based on which token is being swapped
-        if token_in == pool.token_a {
-            pool.reserve_a += amount_in;
-            pool.reserve_b = pool.reserve_b.saturating_sub(amount_out);
-        } else if token_in == pool.token_b {
-            pool.reserve_b += amount_in;
-            pool.reserve_a = pool.reserve_a.saturating_sub(amount_out);
-        } else {
-            return Err(PoolError::InvalidToken);
-        }
-        
-        log::info!("Pool {} reserves updated after swap: {}/{}", pool_id, pool.reserve_a, pool.reserve_b);
+        log::info!(
+            "Pool {} on-chain reserves updated: {}/{}",
+            pool_id,
+            reserve_a,
+            reserve_b
+        );
         Ok(())
     }
 
@@ -188,11 +192,36 @@ impl PoolManager {
         on_chain_reserve_b: u64,
         timestamp: String,
     ) -> Result<(), PoolError> {
-        let mut pool = self.pools.get_mut(pool_id)
-            .ok_or(PoolError::PoolNotFound)?;
+        let mut pool = self.pools.get_mut(pool_id).ok_or(PoolError::PoolNotFound)?;
         pool.on_chain_reserve_a = on_chain_reserve_a;
         pool.on_chain_reserve_b = on_chain_reserve_b;
         pool.last_reconciled_at = Some(timestamp);
+        pool.pending_settlement = false;
+        Ok(())
+    }
+
+    /// Record a confirmed swap without mutating reserves optimistically.
+    /// The reconciler will refresh reserves using on-chain balances.
+    pub fn record_swap_confirmation(
+        &self,
+        pool_id: &str,
+        token_in: &str,
+        token_out: &str,
+        amount_in: u64,
+        amount_out: u64,
+        tx_signature: Option<String>,
+        confirmed_at: Option<String>,
+    ) -> Result<(), PoolError> {
+        let mut pool = self.pools.get_mut(pool_id).ok_or(PoolError::PoolNotFound)?;
+
+        pool.pending_settlement = true;
+        pool.last_swap_signature = tx_signature;
+        pool.last_swap_at = confirmed_at.or_else(|| Some(chrono::Utc::now().to_rfc3339()));
+        pool.last_swap_token_in = Some(token_in.to_string());
+        pool.last_swap_token_out = Some(token_out.to_string());
+        pool.last_swap_amount_in = Some(amount_in);
+        pool.last_swap_amount_out = Some(amount_out);
+
         Ok(())
     }
 }
@@ -213,7 +242,9 @@ impl LiquidityPool {
         };
 
         match self.pool_type {
-            PoolType::ConstantProduct => self.constant_product_out(amount_in, reserve_in, reserve_out),
+            PoolType::ConstantProduct => {
+                self.constant_product_out(amount_in, reserve_in, reserve_out)
+            }
             PoolType::StableSwap { amplification } => {
                 self.stable_swap_out(amount_in, reserve_in, reserve_out, amplification)
             }
@@ -264,11 +295,11 @@ impl LiquidityPool {
     ) -> Result<u64, PoolError> {
         // Simplified Curve stable swap approximation
         // Full implementation would use Newton's method to solve the invariant
-        
+
         // For now, use a hybrid approach:
         // - Low slippage near balance point
         // - Falls back to constant product for larger swaps
-        
+
         let balance_ratio = if reserve_in > reserve_out {
             reserve_in as f64 / reserve_out as f64
         } else {
@@ -279,11 +310,11 @@ impl LiquidityPool {
         if balance_ratio < 1.1 {
             let amplified_reserve_in = reserve_in as u128 * amplification as u128;
             let amplified_reserve_out = reserve_out as u128 * amplification as u128;
-            
+
             let amount_in_with_fee = (amount_in as u128 * (10000 - self.fee_rate) as u128) / 10000;
             let numerator = amount_in_with_fee * amplified_reserve_out;
             let denominator = amplified_reserve_in + amount_in_with_fee;
-            
+
             let amount_out = (numerator / denominator) as u64;
             Ok(amount_out)
         } else {
@@ -302,18 +333,18 @@ impl LiquidityPool {
     ) -> Result<u64, PoolError> {
         // Balancer weighted pool formula
         // amount_out = reserve_out * (1 - (reserve_in / (reserve_in + amount_in))^(weight_in/weight_out))
-        
+
         let amount_in_with_fee = (amount_in as u128 * (10000 - self.fee_rate) as u128) / 10000;
-        
+
         let ratio = (reserve_in as f64 / (reserve_in as f64 + amount_in_with_fee as f64))
             .powf(weight_in as f64 / weight_out as f64);
-        
+
         let amount_out = (reserve_out as f64 * (1.0 - ratio)) as u64;
-        
+
         if amount_out == 0 {
             return Err(PoolError::InsufficientOutputAmount);
         }
-        
+
         Ok(amount_out)
     }
 
@@ -337,7 +368,8 @@ impl LiquidityPool {
         }
 
         let numerator = reserve_in as u128 * amount_out as u128 * 10000;
-        let denominator = (reserve_out as u128 - amount_out as u128) * (10000 - self.fee_rate) as u128;
+        let denominator =
+            (reserve_out as u128 - amount_out as u128) * (10000 - self.fee_rate) as u128;
 
         // Add 1 for rounding up
         let amount_in = (numerator / denominator + 1) as u64;
@@ -353,8 +385,10 @@ impl LiquidityPool {
         }
 
         // Calculate based on the smaller ratio to prevent imbalanced deposits
-        let liquidity_a = (amount_a as u128 * self.total_lp_supply as u128) / self.reserve_a as u128;
-        let liquidity_b = (amount_b as u128 * self.total_lp_supply as u128) / self.reserve_b as u128;
+        let liquidity_a =
+            (amount_a as u128 * self.total_lp_supply as u128) / self.reserve_a as u128;
+        let liquidity_b =
+            (amount_b as u128 * self.total_lp_supply as u128) / self.reserve_b as u128;
 
         log::debug!(
             "[pool] calculate_lp_mint: amount_a={} amount_b={} total_lp_supply={} reserve_a={} reserve_b={} liquidity_a={} liquidity_b={}",
@@ -367,7 +401,9 @@ impl LiquidityPool {
         if liquidity == 0 {
             log::warn!(
                 "[pool] InsufficientLiquidityMinted: liquidity_a={} liquidity_b={} min={}",
-                liquidity_a, liquidity_b, liquidity
+                liquidity_a,
+                liquidity_b,
+                liquidity
             );
             return Err(PoolError::InsufficientLiquidityMinted);
         }
@@ -376,18 +412,24 @@ impl LiquidityPool {
     }
 
     /// Calculate optimal deposit amounts to match pool ratio
-    pub fn calculate_optimal_amounts(&self, amount_a_desired: u64, amount_b_desired: u64) -> (u64, u64) {
+    pub fn calculate_optimal_amounts(
+        &self,
+        amount_a_desired: u64,
+        amount_b_desired: u64,
+    ) -> (u64, u64) {
         if self.reserve_a == 0 || self.reserve_b == 0 {
             return (amount_a_desired, amount_b_desired);
         }
 
-        let amount_b_optimal = (amount_a_desired as u128 * self.reserve_b as u128) / self.reserve_a as u128;
+        let amount_b_optimal =
+            (amount_a_desired as u128 * self.reserve_b as u128) / self.reserve_a as u128;
 
         if amount_b_optimal <= amount_b_desired as u128 {
             return (amount_a_desired, amount_b_optimal as u64);
         }
 
-        let amount_a_optimal = (amount_b_desired as u128 * self.reserve_a as u128) / self.reserve_b as u128;
+        let amount_a_optimal =
+            (amount_b_desired as u128 * self.reserve_a as u128) / self.reserve_b as u128;
         (amount_a_optimal as u64, amount_b_desired)
     }
 
@@ -602,10 +644,10 @@ mod tests {
             .unwrap();
 
         let pool = manager.get_pool(&pool_id).unwrap();
-        
+
         // Swap 1000 USDT -> USDX
         let amount_out = pool.get_amount_out(1000, "USDT").unwrap();
-        
+
         // With 0.3% fee: (1000 * 0.997 * 1_000_000) / (1_000_000 + 1000 * 0.997)
         // ≈ 996
         assert!(amount_out > 995 && amount_out < 998);
@@ -626,10 +668,10 @@ mod tests {
             .unwrap();
 
         let mut pool = manager.get_pool(&pool_id).unwrap();
-        
+
         // Add 10% more liquidity
         let lp_tokens = pool.add_liquidity(100_000, 100_000, 0).unwrap();
-        
+
         // Should get ~10% of total supply (minus minimum liquidity)
         let expected = pool.total_lp_supply / 10;
         assert!(lp_tokens > expected - 1000 && lp_tokens < expected + 1000);
@@ -650,11 +692,11 @@ mod tests {
             .unwrap();
 
         let mut pool = manager.get_pool(&pool_id).unwrap();
-        
+
         // Remove 10% of liquidity
         let lp_to_burn = pool.total_lp_supply / 10;
         let (amount_a, amount_b) = pool.remove_liquidity(lp_to_burn, 0, 0).unwrap();
-        
+
         // Should get back ~10% of reserves
         assert!(amount_a > 95_000 && amount_a < 105_000);
         assert!(amount_b > 95_000 && amount_b < 105_000);
@@ -675,14 +717,13 @@ mod tests {
             .unwrap();
 
         let pool = manager.get_pool(&pool_id).unwrap();
-        
+
         // Small swap should have minimal impact
         let impact_small = pool.calculate_price_impact(1000, "USDT").unwrap();
         assert!(impact_small < 0.2); // < 0.2%
-        
+
         // Large swap should have significant impact
         let impact_large = pool.calculate_price_impact(100_000, "USDT").unwrap();
         assert!(impact_large > 5.0); // > 5%
     }
 }
-
