@@ -1,5 +1,6 @@
 'use client';
 
+import Image from 'next/image';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, CheckCircle2, ClipboardCopy, Loader2, Zap } from 'lucide-react';
 
@@ -963,9 +964,12 @@ export function RFQMakerPanel({ mode, onModeChange }: RFQMakerPanelProps): React
                             {/* Token Icon */}
                             <div className="w-8 h-8 rounded-full bg-accent/20 flex items-center justify-center flex-shrink-0">
                               {fullToken?.icon ? (
-                                <img 
-                                  src={fullToken.icon} 
+                                <Image
+                                  src={fullToken.icon}
                                   alt={token.symbol}
+                                  width={24}
+                                  height={24}
+                                  unoptimized
                                   className="w-6 h-6 rounded-full object-cover"
                                 />
                               ) : fullToken?.fallbackIcon ? (
@@ -1045,9 +1049,12 @@ export function RFQMakerPanel({ mode, onModeChange }: RFQMakerPanelProps): React
                             {/* Token Icon */}
                             <div className="w-8 h-8 rounded-full bg-accent/20 flex items-center justify-center flex-shrink-0">
                               {fullToken?.icon ? (
-                                <img 
-                                  src={fullToken.icon} 
+                                <Image
+                                  src={fullToken.icon}
                                   alt={token.symbol}
+                                  width={24}
+                                  height={24}
+                                  unoptimized
                                   className="w-6 h-6 rounded-full object-cover"
                                 />
                               ) : fullToken?.fallbackIcon ? (
