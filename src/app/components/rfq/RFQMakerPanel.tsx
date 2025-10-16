@@ -1065,8 +1065,8 @@ export function RFQMakerPanel({ mode, onModeChange }: RFQMakerPanelProps): React
                     className="w-full rounded-lg border border-hairline bg-surface-strong px-3 py-2 pr-8 text-sm text-foreground focus:border-accent focus:outline-none appearance-none cursor-pointer"
                     aria-label="Select order side"
                   >
-                    <option value="sell" className="bg-surface-strong text-foreground">Sell (maker provides base)</option>
-                    <option value="buy" className="bg-surface-strong text-foreground">Buy (maker provides quote)</option>
+                    <option value="sell" style={{ backgroundColor: 'var(--surface-strong)', color: 'var(--foreground)' }}>Sell (maker provides base)</option>
+                    <option value="buy" style={{ backgroundColor: 'var(--surface-strong)', color: 'var(--foreground)' }}>Buy (maker provides quote)</option>
                   </select>
                   {/* Custom dropdown arrow */}
                   <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
@@ -1110,7 +1110,7 @@ export function RFQMakerPanel({ mode, onModeChange }: RFQMakerPanelProps): React
                     aria-label="Select expiry time"
                   >
                     {EXPIRY_PRESETS.map((preset) => (
-                      <option key={preset.value} value={preset.value} className="bg-surface-strong text-foreground">
+                      <option key={preset.value} value={preset.value} style={{ backgroundColor: 'var(--surface-strong)', color: 'var(--foreground)' }}>
                         {preset.label}
                       </option>
                     ))}
