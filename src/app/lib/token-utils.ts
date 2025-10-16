@@ -3,7 +3,124 @@
  * Simplified version based on extension wallet patterns
  */
 
+import type { RFQOrder } from '@/app/types/rfq';
+import type { OrderSide } from '@/app/types/trading';
+
 export type TokenFieldType = "decimalPlaces" | "decimals";
+
+const TOKEN_FALLBACK_DECIMALS = 6;
+
+function normalizeSymbol(symbol: string | undefined | null): string {
+  if (!symbol) {
+    return '';
+  }
+  return symbol.trim().toUpperCase();
+}
+
+function getEnvString(key: string | undefined, fallback: string): string {
+  if (!key) {
+    return fallback;
+  }
+  const value = process.env[key];
+  return typeof value === 'string' && value.length > 0 ? value : fallback;
+}
+
+function getEnvNumber(key: string | undefined, fallback: number): number {
+  if (!key) {
+    return fallback;
+  }
+  const raw = process.env[key];
+  if (!raw) {
+    return fallback;
+  }
+  const parsed = Number.parseInt(raw, 10);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function splitPair(pair: string): { base: string; quote: string } {
+  const [rawBase, rawQuote] = pair.split('/');
+  const base = normalizeSymbol(rawBase) || normalizeSymbol(pair);
+  const quote = normalizeSymbol(rawQuote) || base;
+  return { base, quote };
+}
+
+export function getTokenAddressForSymbol(symbol: string): string {
+  const normalized = normalizeSymbol(symbol);
+  if (!normalized) {
+    return '';
+  }
+  const directKey = `NEXT_PUBLIC_${normalized}_TOKEN_ADDRESS`;
+  const pubkeyKey = `NEXT_PUBLIC_${normalized}_TOKEN_PUBKEY`;
+  return getEnvString(directKey, getEnvString(pubkeyKey, `PLACEHOLDER_${normalized}`));
+}
+
+export function getTokenDecimalsForSymbol(symbol: string): number {
+  const normalized = normalizeSymbol(symbol);
+  if (!normalized) {
+    return TOKEN_FALLBACK_DECIMALS;
+  }
+  const decimalsKey = `NEXT_PUBLIC_${normalized}_DECIMALS`;
+  return getEnvNumber(decimalsKey, TOKEN_FALLBACK_DECIMALS);
+}
+
+export function getMakerTokenSymbol(pair: string, side: OrderSide): string {
+  const { base, quote } = splitPair(pair);
+  return side === 'sell' ? quote : base;
+}
+
+export function getTakerTokenSymbol(pair: string, side: OrderSide): string {
+  const { base, quote } = splitPair(pair);
+  return side === 'sell' ? base : quote;
+}
+
+export function getMakerTokenAddress(pair: string, side: OrderSide): string {
+  return getTokenAddressForSymbol(getMakerTokenSymbol(pair, side));
+}
+
+export function getTakerTokenAddress(pair: string, side: OrderSide): string {
+  return getTokenAddressForSymbol(getTakerTokenSymbol(pair, side));
+}
+
+export function getMakerTokenAddressFromOrder(order: RFQOrder): string {
+  return getMakerTokenAddress(order.pair, order.side);
+}
+
+export function getTakerTokenAddressFromOrder(order: RFQOrder): string {
+  return getTakerTokenAddress(order.pair, order.side);
+}
+
+export function getMakerTokenDecimals(pair: string, side: OrderSide): number {
+  return getTokenDecimalsForSymbol(getMakerTokenSymbol(pair, side));
+}
+
+export function getTakerTokenDecimals(pair: string, side: OrderSide): number {
+  return getTokenDecimalsForSymbol(getTakerTokenSymbol(pair, side));
+}
+
+export function getMakerTokenDecimalsFromOrder(order: RFQOrder): number {
+  return getMakerTokenDecimals(order.pair, order.side);
+}
+
+export function getTakerTokenDecimalsFromOrder(order: RFQOrder): number {
+  return getTakerTokenDecimals(order.pair, order.side);
+}
+
+export function toBaseUnits(amount: number, decimals: number): bigint {
+  if (!Number.isFinite(amount)) {
+    throw new Error('Amount must be a finite number');
+  }
+  const multiplier = 10 ** Math.max(decimals, 0);
+  const scaled = Math.floor(amount * multiplier);
+  return BigInt(scaled);
+}
+
+export function fromBaseUnits(amount: bigint, decimals: number): number {
+  if (decimals <= 0) {
+    return Number(amount);
+  }
+  const divisor = 10 ** decimals;
+  return Number(amount) / divisor;
+}
 
 interface TokenMetadata {
   decimalPlaces?: number;

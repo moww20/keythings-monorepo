@@ -44,6 +44,16 @@ function trimPubkey(pubkey: string | null): string {
   return `${pubkey.slice(0, 4)}…${pubkey.slice(-4)}`;
 }
 
+function shorten(address: string | undefined | null, chars = 4): string {
+  if (!address) {
+    return 'unknown';
+  }
+  if (address.length <= chars * 2) {
+    return address;
+  }
+  return `${address.slice(0, chars)}…${address.slice(-chars)}`;
+}
+
 export function RFQMakerPanel(): React.JSX.Element {
   const { pair, createQuote, cancelQuote, selectedOrder, orders } = useRFQContext();
   const makerProfiles = useMakerProfiles();
@@ -53,6 +63,7 @@ export function RFQMakerPanel(): React.JSX.Element {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [progressMessage, setProgressMessage] = useState<string | null>(null);
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -79,6 +90,7 @@ export function RFQMakerPanel(): React.JSX.Element {
   useEffect(() => {
     setSuccess(null);
     setError(null);
+    setProgressMessage(null);
   }, [pair]);
 
   const makerProfile = useMemo(() => {
@@ -157,12 +169,17 @@ export function RFQMakerPanel(): React.JSX.Element {
     setIsPublishing(true);
     setError(null);
     setSuccess(null);
+    setProgressMessage('Confirm the Keeta wallet prompt to fund the RFQ escrow.');
 
     try {
       const order = await createQuote(submission);
-      setSuccess(`Quote ${order.id} published. Auto-sign SLA ${makerProfile.autoSignSlaMs} ms.`);
+      setSuccess(
+        `Quote ${order.id} published with escrow ${shorten(order.storageAccount ?? order.unsignedBlock)}. Auto-sign SLA ${makerProfile.autoSignSlaMs} ms.`,
+      );
+      setProgressMessage('Escrow created on Keeta and indexed by the RFQ backend.');
     } catch (publishError) {
       setError(publishError instanceof Error ? publishError.message : 'Failed to publish RFQ.');
+      setProgressMessage(null);
     } finally {
       setIsPublishing(false);
     }
@@ -284,6 +301,12 @@ export function RFQMakerPanel(): React.JSX.Element {
         <div className="flex items-start gap-2 rounded-lg border border-green-500/40 bg-green-500/10 p-3 text-xs text-green-200">
           <CheckCircle2 className="mt-0.5 h-4 w-4" />
           <span>{success}</span>
+        </div>
+      )}
+
+      {progressMessage && (
+        <div className="rounded-lg border border-hairline bg-surface-strong p-3 text-xs text-muted">
+          {progressMessage}
         </div>
       )}
 

@@ -17,6 +17,7 @@ import { RFQDepthChart } from '@/app/components/rfq/RFQDepthChart';
 import { RFQOrderBook } from '@/app/components/rfq/RFQOrderBook';
 import { RFQTakerPanel } from '@/app/components/rfq/RFQTakerPanel';
 import { RFQMakerPanel } from '@/app/components/rfq/RFQMakerPanel';
+import { RFQStatusBar } from '@/app/components/rfq/RFQStatusBar';
 
 const TIMEFRAMES: TradingViewTimeframe[] = ['1s', '15m', '1H', '4H', '1D', '1W'];
 const MODES = [
@@ -201,6 +202,9 @@ export default function TradePage(): React.JSX.Element {
           </div>
         ) : (
           <RFQProvider pair={selectedPair}>
+            <div className="mb-4">
+              <RFQStatusBar />
+            </div>
             <div className="grid grid-cols-12 gap-6">
               <section className="col-span-12 lg:col-span-8">
                 <div className="grid grid-cols-1 gap-4">

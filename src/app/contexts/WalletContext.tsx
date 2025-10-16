@@ -7,9 +7,32 @@ import { useEffect, useState } from "react";
 import { z } from "zod";
 import { useWalletData, useTokenBalances } from "../hooks/useWalletData";
 import type { ProcessedToken } from "../lib/token-utils";
-import { processTokenForDisplay } from "../lib/token-utils";
+import {
+  processTokenForDisplay,
+  fromBaseUnits,
+  toBaseUnits,
+  getMakerTokenAddressFromOrder,
+  getTakerTokenAddressFromOrder,
+  getMakerTokenDecimalsFromOrder,
+  getTakerTokenDecimalsFromOrder,
+} from "../lib/token-utils";
 import type { KeetaUserClient, KeetaBalanceEntry } from "../../types/keeta";
-import { StorageAccountManager } from "../lib/storage-account-manager";
+import {
+  StorageAccountManager,
+  normalizeAccountRef,
+  normalizePublicKeyString,
+  extractBlockHash,
+} from "../lib/storage-account-manager";
+import type {
+  RFQStorageAccountDetails,
+  RFQStorageCreationResult,
+  RFQFillDetails,
+  RFQFillResult,
+  RFQCancelDetails,
+  RFQCancelResult,
+  StorageAccountState,
+  StorageAccountPermission,
+} from '@/app/types/rfq-blockchain';
 
 // Exchange operator public key - TODO: Move to environment variable
 const EXCHANGE_OPERATOR_PUBKEY = process.env.NEXT_PUBLIC_EXCHANGE_OPERATOR_PUBKEY || "PLACEHOLDER_OPERATOR_PUBKEY";
@@ -32,6 +55,40 @@ const RegistrationResponseSchema = z.object({
   success: z.boolean().optional(),
   message: z.string().optional(),
 });
+
+function safeBigIntFrom(value: unknown): bigint {
+  if (typeof value === 'bigint') {
+    return value;
+  }
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return BigInt(Math.floor(value));
+  }
+  if (typeof value === 'string' && value.trim().length > 0) {
+    try {
+      return BigInt(value.trim());
+    } catch {
+      return BigInt(0);
+    }
+  }
+  return BigInt(0);
+}
+
+function decodeMetadataBase64(value: unknown): Record<string, unknown> | undefined {
+  if (typeof value !== 'string' || value.length === 0) {
+    return undefined;
+  }
+
+  try {
+    const json =
+      typeof atob === 'function'
+        ? atob(value)
+        : Buffer.from(value, 'base64').toString('utf-8');
+    const parsed = JSON.parse(json);
+    return parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : undefined;
+  } catch {
+    return undefined;
+  }
+}
 
 interface WalletContextValue {
   // Wallet data from useWalletData
@@ -75,6 +132,11 @@ interface WalletContextValue {
   tradingError: string | null;
   storageAccountAddress: string | null;
   enableTrading: () => Promise<void>;
+
+  createRFQStorageAccount: (order: RFQStorageAccountDetails) => Promise<RFQStorageCreationResult>;
+  fillRFQOrder: (details: RFQFillDetails) => Promise<RFQFillResult>;
+  cancelRFQOrder: (details: RFQCancelDetails) => Promise<RFQCancelResult>;
+  verifyStorageAccount: (storageAddress: string) => Promise<StorageAccountState>;
 }
 
 const WalletContext = createContext<WalletContextValue | null>(null);
@@ -413,6 +475,190 @@ export function WalletProvider({ children }: WalletProviderProps) {
     }
   }, [isTradingEnabling, walletData.wallet.accounts]);
 
+  const walletAddress = walletData.wallet.accounts?.[0] ?? '';
+
+  const createRFQStorageAccount = useCallback(
+    async (orderDetails: RFQStorageAccountDetails): Promise<RFQStorageCreationResult> => {
+      if (!userClient || !walletAddress) {
+        throw new Error('Connect your wallet before publishing RFQ orders.');
+      }
+
+      const manager = new StorageAccountManager(userClient);
+      const normalized: RFQStorageAccountDetails = {
+        ...orderDetails,
+        makerAddress: orderDetails.makerAddress || walletAddress,
+      };
+
+      return manager.createRfqStorageAccount(normalized);
+    },
+    [userClient, walletAddress],
+  );
+
+  const fillRFQOrder = useCallback(
+    async ({ order, fillAmount, takerAddress }: RFQFillDetails): Promise<RFQFillResult> => {
+      if (!userClient || !walletAddress) {
+        throw new Error('Connect your wallet to settle RFQ orders.');
+      }
+
+      const storageAddress = order.storageAccount ?? order.unsignedBlock;
+      if (!storageAddress) {
+        throw new Error('RFQ order is missing a storage account reference.');
+      }
+
+      const builder = userClient.initBuilder();
+      if (!builder) {
+        throw new Error('Wallet did not provide a transaction builder for RFQ settlement.');
+      }
+
+      const sendFn = (builder as { send?: (...args: unknown[]) => unknown }).send;
+      if (typeof sendFn !== 'function') {
+        throw new Error('Wallet builder does not expose a send method.');
+      }
+
+      const makerAccount = normalizeAccountRef(order.maker.id);
+      const takerAccount = normalizeAccountRef(takerAddress ?? walletAddress);
+      const storageAccount = normalizeAccountRef(storageAddress);
+
+      const makerTokenAddress = getMakerTokenAddressFromOrder(order);
+      const takerTokenAddress = getTakerTokenAddressFromOrder(order);
+      if (!makerTokenAddress || !takerTokenAddress) {
+        throw new Error('RFQ order does not specify token addresses for settlement.');
+      }
+
+      const makerToken = normalizeAccountRef(makerTokenAddress);
+      const takerToken = normalizeAccountRef(takerTokenAddress);
+
+      const makerDecimals = getMakerTokenDecimalsFromOrder(order);
+      const takerDecimals = getTakerTokenDecimalsFromOrder(order);
+      const takerAmount = toBaseUnits(fillAmount, takerDecimals);
+      const makerAmount = toBaseUnits(fillAmount * order.price, makerDecimals);
+
+      await Promise.resolve(sendFn.call(builder, makerAccount, takerAmount, takerToken));
+      await Promise.resolve(
+        sendFn.call(builder, takerAccount, makerAmount, makerToken, undefined, { account: storageAccount }),
+      );
+
+      const receipt = await userClient.publishBuilder(builder);
+      return { blockHash: extractBlockHash(receipt) ?? null } satisfies RFQFillResult;
+    },
+    [userClient, walletAddress],
+  );
+
+  const cancelRFQOrder = useCallback(
+    async ({ order, tokenAddress, tokenDecimals, amount }: RFQCancelDetails): Promise<RFQCancelResult> => {
+      if (!userClient || !walletAddress) {
+        throw new Error('Connect your wallet to cancel RFQ orders.');
+      }
+
+      const storageAddress = order.storageAccount ?? order.unsignedBlock;
+      if (!storageAddress) {
+        throw new Error('RFQ order is missing a storage account reference.');
+      }
+
+      const builder = userClient.initBuilder();
+      if (!builder) {
+        throw new Error('Wallet did not provide a transaction builder for cancellation.');
+      }
+
+      const sendFn = (builder as { send?: (...args: unknown[]) => unknown }).send;
+      if (typeof sendFn !== 'function') {
+        throw new Error('Wallet builder does not expose a send method.');
+      }
+
+      const storageAccount = normalizeAccountRef(storageAddress);
+      const destinationAccount = normalizeAccountRef(walletAddress);
+      const tokenAccount = normalizeAccountRef(tokenAddress);
+      const withdrawalAmount = toBaseUnits(amount, tokenDecimals);
+
+      await Promise.resolve(
+        sendFn.call(builder, destinationAccount, withdrawalAmount, tokenAccount, undefined, {
+          account: storageAccount,
+        }),
+      );
+
+      const receipt = await userClient.publishBuilder(builder);
+      return { blockHash: extractBlockHash(receipt) ?? null } satisfies RFQCancelResult;
+    },
+    [userClient, walletAddress],
+  );
+
+  const verifyStorageAccount = useCallback(
+    async (storageAddress: string): Promise<StorageAccountState> => {
+      if (!storageAddress) {
+        throw new Error('Storage account address is required for verification.');
+      }
+
+      if (typeof window === 'undefined') {
+        throw new Error('Storage account verification is only available in the browser.');
+      }
+
+      const provider = window.keeta;
+      if (!provider || typeof provider.getAccountInfo !== 'function') {
+        throw new Error('Keeta wallet provider does not expose getAccountInfo.');
+      }
+
+      const rawInfo = await provider.getAccountInfo(storageAddress);
+      const infoObject =
+        rawInfo && typeof rawInfo === 'object'
+          ? (rawInfo as Record<string, unknown>)
+          : ({} as Record<string, unknown>);
+
+      const metadataBase64 =
+        typeof infoObject.metadata === 'string'
+          ? infoObject.metadata
+          : typeof (infoObject.info as Record<string, unknown> | undefined)?.metadata === 'string'
+            ? ((infoObject.info as Record<string, unknown>).metadata as string)
+            : undefined;
+
+      const balancesSource = Array.isArray(infoObject.balances)
+        ? (infoObject.balances as unknown[])
+        : Array.isArray((infoObject.info as Record<string, unknown> | undefined)?.balances)
+          ? (((infoObject.info as Record<string, unknown>).balances as unknown[]))
+          : [];
+
+      const balances = balancesSource.map((entry) => {
+        const balanceRecord = (entry ?? {}) as Record<string, unknown>;
+        const token = typeof balanceRecord.token === 'string' ? balanceRecord.token : '';
+        const decimals = typeof balanceRecord.decimals === 'number' ? balanceRecord.decimals : 0;
+        const amount = safeBigIntFrom(balanceRecord.balance ?? balanceRecord.amount);
+        return {
+          token,
+          amount,
+          decimals,
+          normalizedAmount: fromBaseUnits(amount, decimals),
+        };
+      });
+
+      let permissions: StorageAccountPermission[] = [];
+      if (userClient && typeof userClient.listACLsByEntity === 'function') {
+        try {
+          const aclEntries = await userClient.listACLsByEntity({ account: normalizeAccountRef(storageAddress) });
+          if (Array.isArray(aclEntries)) {
+            permissions = aclEntries.map((acl) => ({
+              principal: normalizePublicKeyString(acl.principal) ?? '',
+              flags:
+                (Array.isArray(acl.permissions?.base?.flags)
+                  ? (acl.permissions.base.flags as string[])
+                  : []) ?? [],
+              target: acl.target ? normalizePublicKeyString(acl.target) : null,
+            }));
+          }
+        } catch (error) {
+          console.warn('[WalletContext] Unable to load storage permissions', error);
+        }
+      }
+
+      return {
+        address: storageAddress,
+        metadata: metadataBase64 ? decodeMetadataBase64(metadataBase64) : undefined,
+        balances,
+        permissions,
+        raw: rawInfo,
+      } satisfies StorageAccountState;
+    },
+    [userClient],
+  );
+
   const signMessage = useCallback(async (message: string) => {
     if (typeof window === 'undefined') {
       throw new Error('signMessage is only available in the browser context');
@@ -480,8 +726,27 @@ export function WalletProvider({ children }: WalletProviderProps) {
       tradingError,
       storageAccountAddress,
       enableTrading,
+      createRFQStorageAccount,
+      fillRFQOrder,
+      cancelRFQOrder,
+      verifyStorageAccount,
     };
-  }, [signMessage, walletData, tokenBalances, processedTokens, isTradingEnabled, isTradingEnabling, tradingError, storageAccountAddress, enableTrading, userClient]);
+  }, [
+    signMessage,
+    walletData,
+    tokenBalances,
+    processedTokens,
+    isTradingEnabled,
+    isTradingEnabling,
+    tradingError,
+    storageAccountAddress,
+    enableTrading,
+    userClient,
+    createRFQStorageAccount,
+    fillRFQOrder,
+    cancelRFQOrder,
+    verifyStorageAccount,
+  ]);
 
   return <WalletContext.Provider value={contextValue}>{children}</WalletContext.Provider>;
 }

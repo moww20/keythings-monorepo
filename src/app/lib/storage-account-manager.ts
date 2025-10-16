@@ -6,6 +6,8 @@ import type {
   KeetaPublicKeyLike,
   KeetaUserClient,
 } from "@/types/keeta";
+import type { RFQStorageAccountDetails, RFQStorageCreationResult } from '@/app/types/rfq-blockchain';
+import { toBaseUnits } from './token-utils';
 
 function isPublicKeyLike(value: unknown): value is KeetaPublicKeyLike {
   return Boolean(value) && typeof (value as KeetaPublicKeyLike).toString === "function";
@@ -171,7 +173,7 @@ export class StorageAccountManager {
 
   async createStorageAccount(exchangeOperatorPubkey: string, allowedTokens: string[]): Promise<string> {
     console.log('Creating storage account...');
-    
+
     if (!exchangeOperatorPubkey || typeof exchangeOperatorPubkey !== "string") {
       throw new Error("exchangeOperatorPubkey must be a non-empty string");
     }
@@ -243,6 +245,65 @@ export class StorageAccountManager {
 
     console.log('Storage account created:', publicKey);
     return publicKey;
+  }
+
+  async createRfqStorageAccount(order: RFQStorageAccountDetails): Promise<RFQStorageCreationResult> {
+    const builder = this.userClient.initBuilder();
+    if (!builder) {
+      throw new Error('User client did not return a builder instance');
+    }
+
+    const storageAccount = await this.generateStorageAccount(builder);
+    await this.invokeIfAvailable(builder, ['computeBlocks']);
+
+    const metadataBase64 = this.encodeMetadata({
+      kind: 'rfq_order',
+      pair: order.pair,
+      side: order.side,
+      price: order.price,
+      size: order.size,
+      minFill: order.minFill ?? null,
+      expiry: order.expiry,
+      maker: order.makerAddress,
+      allowlistLabel: order.allowlistLabel ?? null,
+      createdAt: new Date().toISOString(),
+    });
+
+    const setInfo = this.getMethod(builder, ['setInfo', 'info']);
+    if (setInfo) {
+      await Promise.resolve(
+        setInfo(
+          {
+            name: `RFQ-${Date.now()}`,
+            description: `${order.side.toUpperCase()} ${order.size} ${order.pair} @ ${order.price}`,
+            metadata: metadataBase64,
+            defaultPermission: createPermissionPayload(['STORAGE_DEPOSIT', 'STORAGE_CAN_HOLD']),
+          },
+          { account: storageAccount },
+        ),
+      );
+    }
+
+    const sendFn = this.getMethod(builder, ['send']);
+    if (!sendFn) {
+      throw new Error('Builder does not support send operations');
+    }
+
+    const tokenAccount = normalizeAccountRef(order.tokenAddress);
+    const depositAmount = toBaseUnits(order.size, order.tokenDecimals);
+    await Promise.resolve(sendFn(storageAccount, depositAmount, tokenAccount));
+
+    const publishReceipt = await this.userClient.publishBuilder(builder);
+    const address = normalizePublicKeyString(storageAccount);
+    if (!address) {
+      throw new Error('Failed to resolve storage account public key after publishing');
+    }
+
+    return {
+      address,
+      blockHash: extractBlockHash(publishReceipt),
+      metadataBase64,
+    } satisfies RFQStorageCreationResult;
   }
 
   async grantTokenPermission(storageAccountPubkey: string, operatorPubkey: string, tokenPubkey: string): Promise<void> {
@@ -354,6 +415,11 @@ export class StorageAccountManager {
     } satisfies Record<string, unknown>;
 
     await Promise.resolve(setInfo(metadata, { account: storageAccount }));
+  }
+
+  private encodeMetadata(data: Record<string, unknown>): string {
+    const json = JSON.stringify(data);
+    return typeof btoa !== 'undefined' ? btoa(json) : Buffer.from(json).toString('base64');
   }
 
   private async grantSendOnBehalf(
