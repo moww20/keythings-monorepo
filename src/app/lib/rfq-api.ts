@@ -241,7 +241,7 @@ export async function createRfqOrder(order: RFQOrder): Promise<RFQOrder> {
     side: order.side,
     price: order.price,
     size: order.size,
-    min_fill: order.minFill || null,
+    ...(order.minFill !== undefined ? { min_fill: order.minFill } : {}),
     expiry: order.expiry,
     maker: {
       id: order.maker.id,
@@ -251,15 +251,17 @@ export async function createRfqOrder(order: RFQOrder): Promise<RFQOrder> {
       auto_sign_sla_ms: order.maker.autoSignSlaMs,
       fills_completed: order.maker.fillsCompleted,
       failure_rate: order.maker.failureRate,
-      allowlist_label: order.maker.allowlistLabel || null,
+      ...(order.maker.allowlistLabel !== undefined
+        ? { allowlist_label: order.maker.allowlistLabel }
+        : {}),
     },
-    unsigned_block: order.unsignedBlock || null,
-    maker_signature: order.makerSignature || null,
-    storage_account: order.storageAccount,
+    unsigned_block: order.unsignedBlock ?? null,
+    maker_signature: order.makerSignature ?? null,
+    ...(order.storageAccount !== undefined ? { storage_account: order.storageAccount } : {}),
     allowlisted: order.allowlisted,
     status: order.status,
-    taker_fill_amount: order.takerFillAmount || null,
-    taker_address: order.takerAddress || null,
+    ...(order.takerFillAmount !== undefined ? { taker_fill_amount: order.takerFillAmount } : {}),
+    ...(order.takerAddress !== undefined ? { taker_address: order.takerAddress } : {}),
     created_at: order.createdAt,
     updated_at: order.updatedAt,
   };
