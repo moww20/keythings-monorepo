@@ -296,6 +296,7 @@ pub async fn fill_order(
 // Create a new RFQ order
 pub async fn create_order(payload: web::Json<RFQOrder>) -> impl Responder {
     let order = payload.into_inner();
+    log::info!("[RFQ] Received order with storage_account: {:?}", order.storage_account);
     
     // Generate a unique ID if not provided
     let order_id = if order.id.is_empty() {
@@ -319,7 +320,8 @@ pub async fn create_order(payload: web::Json<RFQOrder>) -> impl Responder {
             // Also store in local memory for quick access
             let mut orders = RFQ_ORDERS.lock().unwrap();
             orders.insert(order_id.clone(), new_order.clone());
-            
+
+            log::info!("[RFQ] Returning order with storage_account: {:?}", new_order.storage_account);
             HttpResponse::Created().json(new_order)
         }
         Err(e) => {
