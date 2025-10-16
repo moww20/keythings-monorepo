@@ -220,7 +220,7 @@ export function RFQMakerPanel({ mode, onModeChange }: RFQMakerPanelProps): React
     }
   }, [setCurrentSubmission, step]);
 
-  // Step 4: Publish Quote (following CreatePoolModal pattern)
+  // Step 4: Fund Quote (following CreatePoolModal pattern)
   const handleFundStorage = useCallback(async () => {
     if (!userClient || !publicKey || !storageAccountAddress || !currentSubmission) {
       setError('Missing required data for funding. Please try creating the order again.');
@@ -358,7 +358,7 @@ export function RFQMakerPanel({ mode, onModeChange }: RFQMakerPanelProps): React
       // SECURITY: This publishBuilder call MUST trigger wallet approval
       // User must explicitly approve the RFQ funding transaction
       const fundingResult = await userClient.publishBuilder(builder);
-      console.log('[RFQMakerPanel] ✅ RFQ funding transaction signed and published');
+      console.log('[RFQMakerPanel] ✅ RFQ funding transaction signed and funded');
       console.log('[RFQMakerPanel] Transaction result:', fundingResult);
       
       // Wait for Keeta settlement (400ms)
@@ -368,7 +368,7 @@ export function RFQMakerPanel({ mode, onModeChange }: RFQMakerPanelProps): React
       // Create the order in the backend
       const order = await createQuote(currentSubmission);
       setSuccess(
-        `Quote ${order.id} published with escrow ${shorten(storageAccountAddress)}. Auto-sign SLA ${makerProfile.autoSignSlaMs} ms.`,
+        `Quote ${order.id} funded with escrow ${shorten(storageAccountAddress)}. Auto-sign SLA ${makerProfile.autoSignSlaMs} ms.`,
       );
       setProgressMessage(null); // Clear progress message since process is complete
       setStep('details');
@@ -1056,7 +1056,7 @@ export function RFQMakerPanel({ mode, onModeChange }: RFQMakerPanelProps): React
                 ) : (
                   <>
                     <Zap className="h-4 w-4" />
-                    Publish Quote
+                    Fund Quote
                   </>
                 )}
               </button>
