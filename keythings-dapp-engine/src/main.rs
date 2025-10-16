@@ -1,11 +1,13 @@
 mod api;
 mod engine;
 mod keeta;
+mod keeta_rfq;
 mod ledger;
 mod models;
 mod pool;
 mod pool_api;
 mod reconcile;
+mod rfq_api;
 mod settlement;
 mod websocket;
 
@@ -45,6 +47,9 @@ async fn main() -> std::io::Result<()> {
         keeta_client.clone(),
         pool_manager.clone(),
     );
+
+    // Initialize RFQ data
+    rfq_api::init_rfq_data();
 
     let state = AppState::new(
         ledger.clone(),

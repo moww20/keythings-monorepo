@@ -23,64 +23,16 @@ export interface TradingPairSelectorProps {
 
 export const DEFAULT_TRADING_PAIRS: TradingPairInfo[] = [
   {
-    base: 'USDX',
-    quote: 'USDT',
-    symbol: 'USDX/USDT',
-    price: 1.0,
-    change24h: 0.0,
-    changePercent24h: 0.01,
-    high24h: 1.01,
-    low24h: 0.99,
-    volume24h: 5423456.12,
-    volume24hQuote: 5421000.0,
-  },
-  {
-    base: 'BTC',
-    quote: 'USDT',
-    symbol: 'BTC/USDT',
-    price: 112526.79,
-    change24h: -8705.86,
-    changePercent24h: -7.18,
-    high24h: 122550.0,
-    low24h: 102000.0,
-    volume24h: 73840.66,
-    volume24hQuote: 8413402510.69,
-  },
-  {
-    base: 'ETH',
-    quote: 'USDT',
-    symbol: 'ETH/USDT',
-    price: 3856.42,
-    change24h: -234.56,
-    changePercent24h: -5.73,
-    high24h: 4091.0,
-    low24h: 3622.0,
-    volume24h: 89234.12,
-    volume24hQuote: 3441234567.89,
-  },
-  {
     base: 'KTA',
-    quote: 'USDT',
-    symbol: 'KTA/USDT',
-    price: 0.0892,
-    change24h: -0.0064,
-    changePercent24h: -7.18,
-    high24h: 0.0956,
-    low24h: 0.0828,
-    volume24h: 1840526.66,
-    volume24hQuote: 164230.45,
-  },
-  {
-    base: 'SOL',
-    quote: 'USDT',
-    symbol: 'SOL/USDT',
-    price: 234.56,
-    change24h: 12.34,
-    changePercent24h: 5.56,
-    high24h: 245.78,
-    low24h: 222.22,
-    volume24h: 45678.9,
-    volume24hQuote: 10712345.67,
+    quote: 'BASE',
+    symbol: 'KTA/BASE',
+    price: 0.3994,
+    change24h: 0.0265,
+    changePercent24h: 7.10,
+    high24h: 0.42,
+    low24h: 0.37,
+    volume24h: 5508599.30,
+    volume24hQuote: 2200000.0,
   },
 ];
 
@@ -164,12 +116,13 @@ export function TradingPairSelector({
                 value={searchTerm}
                 onChange={(event) => setSearchTerm(event.target.value)}
                 placeholder="Search trading pairs"
+                aria-label="Search trading pairs"
                 className="w-full rounded-md border border-hairline bg-surface px-3 py-2 text-sm text-foreground focus:border-accent focus:outline-none"
               />
             </div>
 
             <div className="max-h-80 space-y-1 overflow-y-auto px-4 pb-4" role="listbox">
-              <h4 className="text-xs font-medium uppercase tracking-wide text-muted">Popular Markets</h4>
+              <div className="text-xs font-medium uppercase tracking-wide text-muted">Popular Markets</div>
               {filteredPairs.map((pair) => {
                 const change = formatChange(pair.changePercent24h);
                 const isActive = pair.symbol === selected;

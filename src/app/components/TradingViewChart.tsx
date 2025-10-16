@@ -129,16 +129,25 @@ export function TradingViewChart({
         return;
       }
 
-      if (!container.parentNode) {
+      // Check if container is properly mounted and visible
+      if (!container.parentNode || !container.isConnected) {
         retryCountRef.current++;
         setTimeout(initializeWidget, 100);
         return;
       }
 
+      // Check if container has proper dimensions
       const rect = container.getBoundingClientRect();
       if (rect.width === 0 || rect.height === 0) {
         retryCountRef.current++;
         setTimeout(initializeWidget, 200);
+        return;
+      }
+
+      // Additional check to ensure the container is in the DOM tree
+      if (!document.body.contains(container)) {
+        retryCountRef.current++;
+        setTimeout(initializeWidget, 100);
         return;
       }
 
@@ -295,10 +304,10 @@ export function TradingViewChart({
       }
     };
 
-    // Add a small delay to ensure the DOM is fully ready
+    // Add a delay to ensure the DOM is fully ready and mounted
     const timeoutId = setTimeout(() => {
       initializeWidget();
-    }, 100);
+    }, 300);
 
     const resizeObserver = new ResizeObserver(() => {
       if (!isLoading && !error) {

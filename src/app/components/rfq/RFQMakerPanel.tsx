@@ -189,8 +189,7 @@ export function RFQMakerPanel(): React.JSX.Element {
       </div>
 
       <div className="rounded-lg border border-dashed border-hairline bg-surface px-3 py-2 text-xs text-muted">
-        Live RFQ publishing on Keeta testnet now routes through the maker autosigner bot. Use the CLI or automation service to
-        post partially signed quotes, then monitor fills from this dashboard.
+        Create and publish RFQ quotes to provide liquidity to the market. Your quotes will be visible to other traders.
       </div>
 
       <div className="grid grid-cols-2 gap-3 text-xs">

@@ -1,5 +1,3 @@
-use std::env;
-
 use log::{info, warn};
 use uuid::Uuid;
 
@@ -7,26 +5,25 @@ use crate::models::{DepositAddress, WithdrawRequest};
 
 #[derive(thiserror::Error, Debug)]
 pub enum KeetaError {
-    #[error("rpc call failed: {0}")]
-    Rpc(String),
+    #[error("keeta operation failed: {0}")]
+    #[allow(dead_code)]
+    Operation(String),
 }
 
 #[derive(Clone)]
 pub struct KeetaClient {
-    rpc_url: String,
+    // No RPC URL needed - Keeta uses direct SDK calls
+    // Frontend wallet handles all SDK interactions
 }
 
 impl KeetaClient {
     pub fn new_from_env() -> Self {
-        let rpc_url =
-            env::var("KEETA_RPC_URL").unwrap_or_else(|_| "https://rpc.testnet.keeta".to_string());
-        Self::new(rpc_url)
+        // No environment variables needed for direct SDK approach
+        Self::new()
     }
 
-    pub fn new(rpc_url: impl Into<String>) -> Self {
-        Self {
-            rpc_url: rpc_url.into(),
-        }
+    pub fn new() -> Self {
+        Self {}
     }
 
     // ============================================================================
@@ -41,11 +38,9 @@ impl KeetaClient {
             "[keeta] send_on_behalf called - this should be user-signed! user={} token={} amount={}",
             request.user_id, request.token, request.amount
         );
-        if self.rpc_url.starts_with("http") {
-            Ok(Uuid::new_v4().to_string())
-        } else {
-            Err(KeetaError::Rpc("invalid rpc url".into()))
-        }
+        // Return a placeholder transaction ID - in production, this should not be called
+        // Users should withdraw directly via their wallet using Keeta SDK
+        Ok(Uuid::new_v4().to_string())
     }
 
     /// Derive storage account address (for legacy compatibility)
@@ -66,17 +61,14 @@ impl KeetaClient {
             storage_account, token
         );
 
-        // TODO: In production, call Keeta RPC to:
+        // TODO: In production, use Keeta SDK to:
         // 1. Query storage account balance for specific token
         // 2. Return actual on-chain balance
         // 3. Use fully consistent reads for accuracy
-
-        if !self.rpc_url.starts_with("http") {
-            return Err("Invalid RPC URL".to_string());
-        }
+        // Note: This would require integrating Keeta SDK directly in Rust
 
         // For demo: return 0 (no on-chain balance yet)
-        // In production, this would query the actual balance
+        // In production, this would query the actual balance using Keeta SDK
         Ok(0)
     }
 
@@ -93,15 +85,12 @@ impl KeetaClient {
             user_id, storage_account, permission
         );
 
-        // TODO: In production, call Keeta RPC to:
+        // TODO: In production, use Keeta SDK to:
         // 1. Query ACL entries for storage_account
         // 2. Check if user_id has specified permission
         // 3. Consider permission hierarchy (most specific wins)
         // 4. Return true if permission granted
-
-        if !self.rpc_url.starts_with("http") {
-            return Err("Invalid RPC URL".to_string());
-        }
+        // Note: This would require integrating Keeta SDK directly in Rust
 
         // For demo: return true (permissive)
         Ok(true)
@@ -109,7 +98,7 @@ impl KeetaClient {
 
     /// Query user's token balance from Keeta network
     /// This should query the actual on-chain balance, not internal ledger
-    /// Reserved for future production use when Keeta RPC balance query is implemented
+    /// Reserved for future production use when Keeta SDK integration is implemented
     #[allow(dead_code)]
     pub async fn query_balance(&self, wallet_address: &str, token: &str) -> Result<u64, String> {
         info!(
@@ -117,14 +106,10 @@ impl KeetaClient {
             wallet_address, token
         );
 
-        // TODO: In production, call Keeta RPC:
-        // - GET /api/v1/accounts/{wallet_address}/balances/{token}
-        // - Or use Keeta SDK if we add Node.js bridge
+        // TODO: In production, use Keeta SDK:
+        // - Direct SDK calls to query account balances
         // - Return actual on-chain balance
-
-        if !self.rpc_url.starts_with("http") {
-            return Err("Invalid RPC URL".to_string());
-        }
+        // Note: This would require integrating Keeta SDK directly in Rust
 
         // For now: This should be queried from Keeta network
         // Frontend wallet already shows real balances from Keeta
@@ -134,15 +119,14 @@ impl KeetaClient {
             wallet_address, token
         );
 
-        Ok(0) // Placeholder - will be replaced with real RPC call
+        Ok(0) // Placeholder - will be replaced with real SDK call
     }
 }
 
-pub async fn healthcheck(client: &KeetaClient) -> bool {
-    // Placeholder, would call the RPC node in production.
-    if client.rpc_url.is_empty() {
-        warn!("keeta rpc url missing");
-        return false;
-    }
+pub async fn healthcheck(_client: &KeetaClient) -> bool {
+    // For direct SDK approach, we don't need to check RPC connectivity
+    // The frontend wallet handles all SDK interactions
+    // Backend is just a coordinator with no direct Keeta network dependency
+    info!("[keeta] healthcheck passed - using direct SDK approach");
     true
 }

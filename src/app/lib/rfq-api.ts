@@ -100,29 +100,45 @@ const orderSchema = z
   }));
 
 async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${getApiBase()}${path}`, {
-    ...init,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(init?.headers ?? {}),
-    },
-  });
+  const apiBase = getApiBase();
+  
+  try {
+    const response = await fetch(`${apiBase}${path}`, {
+      ...init,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(init?.headers ?? {}),
+      },
+    });
 
-  if (!response.ok) {
-    const message = await response.text();
-    throw new Error(message || `RFQ API request failed with ${response.status}`);
+    if (!response.ok) {
+      const message = await response.text();
+      throw new Error(message || `RFQ API request failed with ${response.status}`);
+    }
+
+    if (response.status === 204) {
+      return undefined as T;
+    }
+
+    const text = await response.text();
+    if (!text) {
+      return undefined as T;
+    }
+
+    return JSON.parse(text) as T;
+  } catch (error) {
+    // Provide more helpful error messages based on the error type
+    if (error instanceof TypeError && error.message === 'Failed to fetch') {
+      throw new Error(
+        `Unable to connect to RFQ API at ${apiBase}. ` +
+        `Please ensure the RFQ backend service is running. ` +
+        `For development, you may need to start the external RFQ service or configure a local instance.`
+      );
+    }
+    
+    // Re-throw other errors as-is
+    throw error;
   }
-
-  if (response.status === 204) {
-    return undefined as T;
-  }
-
-  const text = await response.text();
-  if (!text) {
-    return undefined as T;
-  }
-
-  return JSON.parse(text) as T;
 }
 
 export async function fetchRfqOrders(pair: string): Promise<RFQOrder[]> {
@@ -206,6 +222,49 @@ export async function submitRfqFill(
   const parsed = fillResponseSchema.safeParse(response);
   if (!parsed.success) {
     throw new Error('Failed to parse RFQ fill response');
+  }
+
+  return parsed.data;
+}
+
+export async function createRfqOrder(order: RFQOrder): Promise<RFQOrder> {
+  // Transform frontend camelCase to backend snake_case
+  const backendOrder = {
+    id: order.id,
+    pair: order.pair,
+    side: order.side,
+    price: order.price,
+    size: order.size,
+    min_fill: order.minFill,
+    expiry: order.expiry,
+    maker: {
+      id: order.maker.id,
+      display_name: order.maker.displayName,
+      verified: order.maker.verified,
+      reputation_score: order.maker.reputationScore,
+      auto_sign_sla_ms: order.maker.autoSignSlaMs,
+      fills_completed: order.maker.fillsCompleted,
+      failure_rate: order.maker.failureRate,
+      allowlist_label: order.maker.allowlistLabel,
+    },
+    unsigned_block: order.unsignedBlock,
+    maker_signature: order.makerSignature,
+    allowlisted: order.allowlisted,
+    status: order.status,
+    taker_fill_amount: order.takerFillAmount,
+    taker_address: order.takerAddress,
+    created_at: order.createdAt,
+    updated_at: order.updatedAt,
+  };
+
+  const response = await apiRequest<unknown>('/api/rfq/orders', {
+    method: 'POST',
+    body: JSON.stringify(backendOrder),
+  });
+
+  const parsed = orderSchema.safeParse(response);
+  if (!parsed.success) {
+    throw new Error('Failed to parse RFQ order creation response');
   }
 
   return parsed.data;
