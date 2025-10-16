@@ -59,8 +59,10 @@ function shorten(address: string | undefined | null, chars = 4): string {
 
 // Token utility functions are now imported from @/app/lib/token-utils
 
+type WizardStep = 'details' | 'controls' | 'review' | 'creating' | 'funding';
+
 export function RFQMakerPanel(): React.JSX.Element {
-  const { pair, createQuote, cancelQuote, selectedOrder, orders } = useRFQContext();
+  const { pair, createQuote, cancelQuote, selectedOrder } = useRFQContext();
   const makerProfiles = useMakerProfiles();
   const { publicKey, isConnected, userClient } = useWallet();
   const [draft, setDraft] = useState<MakerDraftState>(DEFAULT_DRAFT);
@@ -69,9 +71,9 @@ export function RFQMakerPanel(): React.JSX.Element {
   const [success, setSuccess] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [progressMessage, setProgressMessage] = useState<string | null>(null);
-  
-  // Two-step process state (following CreatePoolModal pattern)
-  const [step, setStep] = useState<'form' | 'creating' | 'funding'>('form');
+
+  // Multi-step wizard (following CreatePoolModal pattern)
+  const [step, setStep] = useState<WizardStep>('details');
   const [storageAccountAddress, setStorageAccountAddress] = useState<string | null>(null);
   const [currentSubmission, setCurrentSubmission] = useState<RFQQuoteSubmission | null>(null);
 
@@ -101,6 +103,8 @@ export function RFQMakerPanel(): React.JSX.Element {
     setSuccess(null);
     setError(null);
     setProgressMessage(null);
+    setStep('details');
+    setCurrentSubmission(null);
   }, [pair]);
 
   const makerProfile = useMemo(() => {
@@ -138,6 +142,28 @@ export function RFQMakerPanel(): React.JSX.Element {
     return selectedOrder.maker.id === publicKey ? selectedOrder : undefined;
   }, [selectedOrder, publicKey]);
 
+  const reviewSubmission = useMemo<RFQQuoteSubmission | null>(() => {
+    if (step !== 'review') {
+      return null;
+    }
+
+    if (currentSubmission) {
+      return currentSubmission;
+    }
+
+    return {
+      pair,
+      side: draft.side,
+      price: draft.price,
+      size: draft.size,
+      minFill: draft.minFill || undefined,
+      expiryPreset: draft.expiryPreset,
+      allowlistLabel: draft.allowlistLabel || undefined,
+      autoSignProfileId: draft.autoSignProfileId || undefined,
+      maker: makerProfile,
+    };
+  }, [currentSubmission, draft.allowlistLabel, draft.autoSignProfileId, draft.expiryPreset, draft.price, draft.side, draft.size, draft.minFill, makerProfile, pair, step]);
+
   const handleCopyOrderId = useCallback(() => {
     if (selectedMakerOrder) {
       navigator.clipboard.writeText(selectedMakerOrder.id);
@@ -147,6 +173,42 @@ export function RFQMakerPanel(): React.JSX.Element {
   }, [selectedMakerOrder]);
 
   // Step 1: Create Storage Account (following CreatePoolModal pattern)
+  const validateDetailsStep = useCallback((): boolean => {
+    if (!draft.price || Number.isNaN(Number.parseFloat(draft.price))) {
+      setError('Enter a valid price.');
+      return false;
+    }
+
+    if (!draft.size || Number.isNaN(Number.parseFloat(draft.size))) {
+      setError('Enter a valid size.');
+      return false;
+    }
+
+    setError(null);
+    return true;
+  }, [draft.price, draft.size]);
+
+  const validateControlsStep = useCallback((): boolean => {
+    if (draft.minFill && Number.isNaN(Number.parseFloat(draft.minFill))) {
+      setError('Min fill must be numeric.');
+      return false;
+    }
+
+    setError(null);
+    return true;
+  }, [draft.minFill]);
+
+  const goToPreviousStep = useCallback(() => {
+    if (step === 'controls') {
+      setStep('details');
+      return;
+    }
+    if (step === 'review') {
+      setCurrentSubmission(null);
+      setStep('controls');
+    }
+  }, [setCurrentSubmission, step]);
+
   const handleCreateStorage = useCallback(async () => {
     if (!isConnected || !publicKey || !userClient) {
       setError('Connect your market maker wallet before publishing quotes.');
@@ -158,18 +220,7 @@ export function RFQMakerPanel(): React.JSX.Element {
       return;
     }
 
-    if (!draft.price || Number.isNaN(Number.parseFloat(draft.price))) {
-      setError('Enter a valid price.');
-      return;
-    }
-
-    if (!draft.size || Number.isNaN(Number.parseFloat(draft.size))) {
-      setError('Enter a valid size.');
-      return;
-    }
-
-    if (draft.minFill && Number.isNaN(Number.parseFloat(draft.minFill))) {
-      setError('Min fill must be numeric.');
+    if (!validateDetailsStep() || !validateControlsStep()) {
       return;
     }
 
@@ -244,12 +295,12 @@ export function RFQMakerPanel(): React.JSX.Element {
       console.error('[RFQMakerPanel] Error creating storage account:', err);
       const errorMessage = err instanceof Error ? err.message : 'Failed to create storage account. Please try again.';
       setError(errorMessage);
-      setStep('form');
+      setStep('details');
       setProgressMessage(null);
     } finally {
       setIsPublishing(false);
     }
-  }, [draft, isConnected, makerProfile, pair, publicKey, userClient]);
+  }, [draft, isConnected, makerProfile, pair, publicKey, userClient, validateControlsStep, validateDetailsStep]);
 
   // Step 2: Fund Storage Account (following CreatePoolModal pattern)
   const handleFundStorage = useCallback(async () => {
@@ -354,7 +405,7 @@ export function RFQMakerPanel(): React.JSX.Element {
         `Quote ${order.id} published with escrow ${shorten(storageAccountAddress)}. Auto-sign SLA ${makerProfile.autoSignSlaMs} ms.`,
       );
       setProgressMessage('RFQ order created on Keeta and indexed by the RFQ backend.');
-      setStep('form');
+      setStep('details');
       
       // Reset state
       setStorageAccountAddress(null);
@@ -364,7 +415,7 @@ export function RFQMakerPanel(): React.JSX.Element {
       console.error('[RFQMakerPanel] Error funding storage account:', err);
       const errorMessage = err instanceof Error ? err.message : 'Failed to fund RFQ order. Please try again.';
       setError(errorMessage);
-      setStep('form');
+      setStep('details');
       setProgressMessage(null);
     } finally {
       setIsPublishing(false);
@@ -397,7 +448,7 @@ export function RFQMakerPanel(): React.JSX.Element {
         <div>
           <p className="text-xs uppercase tracking-wide text-muted">Quote Builder</p>
           <h3 className="text-lg font-semibold text-foreground">Publish RFQ</h3>
-          <p className="text-xs text-muted">Post partially signed quotes that auto-fill via maker webhook.</p>
+          <p className="text-xs text-muted">Follow the guided steps to post partially signed quotes that auto-fill via maker webhook.</p>
         </div>
         <div className="rounded-full bg-surface-strong px-3 py-1 text-[11px] font-medium text-muted">
           Maker profile · {trimPubkey(publicKey)}
@@ -405,27 +456,44 @@ export function RFQMakerPanel(): React.JSX.Element {
       </div>
 
       <div className="rounded-lg border border-dashed border-hairline bg-surface px-3 py-2 text-xs text-muted">
-        Create and publish RFQ quotes to provide liquidity to the market. Your quotes will be visible to other traders.
+        Create and publish RFQ quotes to provide liquidity to the market. Complete each step to review details before signing.
       </div>
 
-      {/* Progress Indicator (following CreatePoolModal pattern) */}
-      {step !== 'form' && (
-        <div className="flex items-center justify-center gap-2 p-4 border border-hairline bg-surface/30 rounded-lg">
-          <div className={`flex items-center gap-2 ${step === 'creating' || step === 'funding' ? 'text-foreground' : 'text-muted'}`}>
-            <div className={`h-8 w-8 rounded-full flex items-center justify-center text-sm font-semibold ${step === 'creating' ? 'bg-accent text-white' : 'bg-surface border border-hairline'}`}>
-              1
-            </div>
-            <span className="text-sm font-medium">Create Storage</span>
-          </div>
-          <div className="h-px w-12 bg-hairline" />
-          <div className={`flex items-center gap-2 ${step === 'funding' ? 'text-accent' : 'text-muted'}`}>
-            <div className={`h-8 w-8 rounded-full flex items-center justify-center text-sm font-semibold ${step === 'funding' ? 'bg-accent text-white' : 'bg-surface border border-hairline'}`}>
-              2
-            </div>
-            <span className="text-sm font-medium">Fund Order</span>
-          </div>
+      {/* Progress Indicator */}
+      <div className="flex flex-col gap-3">
+        <div className="grid grid-cols-3 gap-2">
+          {(['details', 'controls', 'review'] as const).map((wizardStep, index) => {
+            const isActive =
+              (wizardStep === 'details' && step === 'details') ||
+              (wizardStep === 'controls' && step === 'controls') ||
+              (wizardStep === 'review' && ['review', 'creating', 'funding'].includes(step));
+            const isComplete =
+              (wizardStep === 'details' && ['controls', 'review', 'creating', 'funding'].includes(step)) ||
+              (wizardStep === 'controls' && ['review', 'creating', 'funding'].includes(step));
+
+            return (
+              <div
+                key={wizardStep}
+                className={`flex flex-col items-center gap-2 rounded-lg border px-3 py-2 text-center ${
+                  isActive ? 'border-accent/60 bg-accent/10 text-foreground' : isComplete ? 'border-hairline bg-surface text-foreground' : 'border-hairline bg-surface text-muted'
+                }`}
+              >
+                <div className={`flex h-8 w-8 items-center justify-center rounded-full text-sm font-semibold ${
+                  isComplete ? 'bg-accent text-white' : isActive ? 'bg-accent text-white' : 'bg-surface-strong text-muted'
+                }`}
+                >
+                  {isComplete ? <CheckCircle2 className="h-4 w-4" /> : index + 1}
+                </div>
+                <span className="text-[11px] font-medium leading-tight">
+                  {wizardStep === 'details' && 'Quote Details'}
+                  {wizardStep === 'controls' && 'Fill Controls'}
+                  {wizardStep === 'review' && 'Review & Publish'}
+                </span>
+              </div>
+            );
+          })}
         </div>
-      )}
+      </div>
 
       {/* Error Banner */}
       {error && (
@@ -457,87 +525,148 @@ export function RFQMakerPanel(): React.JSX.Element {
         </div>
       )}
 
-      {/* Form Fields */}
-      {step === 'form' && (
-        <>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-medium text-muted mb-1">Side</label>
-          <select
-            value={draft.side}
-                onChange={(e) => setDraft(prev => ({ ...prev, side: e.target.value as 'buy' | 'sell' }))}
-                className="w-full px-3 py-2 text-sm rounded-lg border border-hairline bg-surface text-foreground focus:outline-none focus:border-accent"
-                aria-label="Select order side"
-          >
-                <option value="sell">Sell</option>
-                <option value="buy">Buy</option>
-          </select>
+      {/* Step 1: Quote Details */}
+      {step === 'details' && (
+        <div className="space-y-4">
+          <div className="rounded-lg border border-hairline bg-surface-strong p-4">
+            <div className="mb-3 flex items-center justify-between text-xs text-muted">
+              <span>Trading Pair</span>
+              <span className="text-foreground font-medium">{pair}</span>
             </div>
-            <div>
-              <label className="block text-xs font-medium text-muted mb-1">Expiry</label>
-          <select
-            value={draft.expiryPreset}
-                onChange={(e) => setDraft(prev => ({ ...prev, expiryPreset: e.target.value as RFQQuoteDraft['expiryPreset'] }))}
-                className="w-full px-3 py-2 text-sm rounded-lg border border-hairline bg-surface text-foreground focus:outline-none focus:border-accent"
-                aria-label="Select expiry time"
-          >
-            {EXPIRY_PRESETS.map((preset) => (
-              <option key={preset.value} value={preset.value}>
-                {preset.label}
-              </option>
-            ))}
-          </select>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="mb-1 block text-xs font-medium text-muted">Side</label>
+                <select
+                  value={draft.side}
+                  onChange={(e) => setDraft(prev => ({ ...prev, side: e.target.value as 'buy' | 'sell' }))}
+                  className="w-full rounded-lg border border-hairline bg-surface px-3 py-2 text-sm text-foreground focus:border-accent focus:outline-none"
+                  aria-label="Select order side"
+                >
+                  <option value="sell">Sell (maker provides base)</option>
+                  <option value="buy">Buy (maker provides quote)</option>
+                </select>
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-muted">Size</label>
+                <input
+                  type="number"
+                  step="0.000001"
+                  value={draft.size}
+                  onChange={(e) => setDraft(prev => ({ ...prev, size: e.target.value }))}
+                  placeholder="0.00"
+                  className="w-full rounded-lg border border-hairline bg-surface px-3 py-2 text-sm text-foreground focus:border-accent focus:outline-none"
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3 pt-3">
+              <div>
+                <label className="mb-1 block text-xs font-medium text-muted">Price</label>
+                <input
+                  type="number"
+                  step="0.000001"
+                  value={draft.price}
+                  onChange={(e) => setDraft(prev => ({ ...prev, price: e.target.value }))}
+                  placeholder="0.00"
+                  className="w-full rounded-lg border border-hairline bg-surface px-3 py-2 text-sm text-foreground focus:border-accent focus:outline-none"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-muted">Expires In</label>
+                <select
+                  value={draft.expiryPreset}
+                  onChange={(e) => setDraft(prev => ({ ...prev, expiryPreset: e.target.value as RFQQuoteDraft['expiryPreset'] }))}
+                  className="w-full rounded-lg border border-hairline bg-surface px-3 py-2 text-sm text-foreground focus:border-accent focus:outline-none"
+                  aria-label="Select expiry time"
+                >
+                  {EXPIRY_PRESETS.map((preset) => (
+                    <option key={preset.value} value={preset.value}>
+                      {preset.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
           </div>
+        </div>
+      )}
 
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-medium text-muted mb-1">Price</label>
-              <input
-                type="number"
-                step="0.000001"
-                value={draft.price}
-                onChange={(e) => setDraft(prev => ({ ...prev, price: e.target.value }))}
-                placeholder="0.00"
-                className="w-full px-3 py-2 text-sm rounded-lg border border-hairline bg-surface text-foreground focus:outline-none focus:border-accent"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-muted mb-1">Size</label>
-              <input
-                type="number"
-                step="0.000001"
-                value={draft.size}
-                onChange={(e) => setDraft(prev => ({ ...prev, size: e.target.value }))}
-                placeholder="0.00"
-                className="w-full px-3 py-2 text-sm rounded-lg border border-hairline bg-surface text-foreground focus:outline-none focus:border-accent"
-              />
+      {/* Step 2: Controls */}
+      {step === 'controls' && (
+        <div className="space-y-4">
+          <div className="rounded-lg border border-hairline bg-surface-strong p-4">
+            <h4 className="mb-3 text-sm font-semibold text-foreground">Fill Controls</h4>
+            <div className="space-y-3 text-sm">
+              <div>
+                <label className="mb-1 block text-xs font-medium text-muted">Minimum Fill Size (optional)</label>
+                <input
+                  type="number"
+                  step="0.000001"
+                  value={draft.minFill}
+                  onChange={(e) => setDraft(prev => ({ ...prev, minFill: e.target.value }))}
+                  placeholder="No minimum"
+                  className="w-full rounded-lg border border-hairline bg-surface px-3 py-2 text-sm text-foreground focus:border-accent focus:outline-none"
+                />
+                <p className="mt-1 text-xs text-muted">Takers must meet this size to auto-settle the RFQ.</p>
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-muted">Allowlist Label (optional)</label>
+                <input
+                  type="text"
+                  value={draft.allowlistLabel}
+                  onChange={(e) => setDraft(prev => ({ ...prev, allowlistLabel: e.target.value }))}
+                  placeholder="VIP, Institutional, etc."
+                  className="w-full rounded-lg border border-hairline bg-surface px-3 py-2 text-sm text-foreground focus:border-accent focus:outline-none"
+                />
+                <p className="mt-1 text-xs text-muted">Only takers in this segment will see the quote in their RFQ stream.</p>
+              </div>
             </div>
           </div>
-
-          <div>
-            <label className="block text-xs font-medium text-muted mb-1">Min Fill (optional)</label>
-          <input
-              type="number"
-              step="0.000001"
-              value={draft.minFill}
-              onChange={(e) => setDraft(prev => ({ ...prev, minFill: e.target.value }))}
-              placeholder="0.00"
-              className="w-full px-3 py-2 text-sm rounded-lg border border-hairline bg-surface text-foreground focus:outline-none focus:border-accent"
-            />
+          <div className="rounded-lg border border-hairline bg-surface p-4 text-xs text-muted">
+            Use maker preferences to tune settlement automation. Auto-sign SLA stays controlled by your wallet integration ({makerProfile.autoSignSlaMs} ms).
           </div>
+        </div>
+      )}
 
-          <div>
-            <label className="block text-xs font-medium text-muted mb-1">Allowlist Label (optional)</label>
-          <input
-            type="text"
-            value={draft.allowlistLabel}
-              onChange={(e) => setDraft(prev => ({ ...prev, allowlistLabel: e.target.value }))}
-              placeholder="VIP, Institutional, etc."
-              className="w-full px-3 py-2 text-sm rounded-lg border border-hairline bg-surface text-foreground focus:outline-none focus:border-accent"
-          />
-      </div>
-        </>
+      {/* Step 3: Review */}
+      {step === 'review' && reviewSubmission && (
+        <div className="space-y-4">
+          <div className="rounded-lg border border-hairline bg-surface-strong p-4">
+            <h4 className="mb-4 text-sm font-semibold text-foreground">Review Quote Summary</h4>
+            <div className="grid grid-cols-2 gap-4 text-sm">
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-muted">Side</span>
+                  <span className="font-medium text-foreground">{reviewSubmission.side.toUpperCase()}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-muted">Size</span>
+                  <span className="font-medium text-foreground">{reviewSubmission.size}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-muted">Price</span>
+                  <span className="font-medium text-foreground">{reviewSubmission.price}</span>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-muted">Expiry</span>
+                  <span className="font-medium text-foreground">{EXPIRY_PRESETS.find((p) => p.value === reviewSubmission.expiryPreset)?.label}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-muted">Min Fill</span>
+                  <span className="font-medium text-foreground">{reviewSubmission.minFill ?? 'No minimum'}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-muted">Allowlist</span>
+                  <span className="font-medium text-foreground">{reviewSubmission.allowlistLabel ?? 'Public'}</span>
+                </div>
+              </div>
+            </div>
+            <div className="mt-4 rounded-lg border border-accent/30 bg-accent/5 p-3 text-xs text-muted">
+              When you continue, the wallet will create a Keeta storage account and sign the RFQ metadata on-chain.
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Step 1: Create Storage Account */}
@@ -586,28 +715,85 @@ export function RFQMakerPanel(): React.JSX.Element {
       )}
 
       {/* Action Buttons */}
-      <div className="flex gap-3">
-        {step === 'form' && (
-      <button
-        type="button"
-            onClick={handleCreateStorage}
-        disabled={!isConnected || isPublishing}
-        className={`flex items-center justify-center gap-2 rounded-lg px-4 py-3 text-sm font-semibold text-white transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
-          isConnected ? 'bg-accent hover:bg-accent/90' : 'bg-muted'
-        }`}
-      >
-        {isPublishing ? (
-          <>
-            <Loader2 className="h-4 w-4 animate-spin" />
-                Creating...
-          </>
-        ) : (
-          <>
-            <Zap className="h-4 w-4" />
-                Create RFQ Quote
-          </>
-        )}
-      </button>
+      <div className="flex flex-col gap-3">
+        {['details', 'controls', 'review'].includes(step) && (
+          <div className="flex gap-3">
+            {step !== 'details' && (
+              <button
+                type="button"
+                onClick={goToPreviousStep}
+                className="flex flex-1 items-center justify-center gap-2 rounded-lg border border-hairline bg-surface px-4 py-3 text-sm font-semibold text-foreground transition-colors hover:bg-surface-strong"
+              >
+                Back
+              </button>
+            )}
+            {step === 'details' && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (validateDetailsStep()) {
+                    setCurrentSubmission(null);
+                    setStep('controls');
+                  }
+                }}
+                className={`flex flex-1 items-center justify-center gap-2 rounded-lg px-4 py-3 text-sm font-semibold text-white transition-colors ${
+                  isConnected ? 'bg-accent hover:bg-accent/90' : 'bg-muted'
+                }`}
+                disabled={!isConnected}
+              >
+                Continue
+              </button>
+            )}
+            {step === 'controls' && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (validateControlsStep()) {
+                    setCurrentSubmission({
+                      pair,
+                      side: draft.side,
+                      price: draft.price,
+                      size: draft.size,
+                      minFill: draft.minFill || undefined,
+                      expiryPreset: draft.expiryPreset,
+                      allowlistLabel: draft.allowlistLabel || undefined,
+                      autoSignProfileId: draft.autoSignProfileId || undefined,
+                      maker: makerProfile,
+                    });
+                    setStep('review');
+                  }
+                }}
+                className={`flex flex-1 items-center justify-center gap-2 rounded-lg px-4 py-3 text-sm font-semibold text-white transition-colors ${
+                  isConnected ? 'bg-accent hover:bg-accent/90' : 'bg-muted'
+                }`}
+                disabled={!isConnected}
+              >
+                Review Quote
+              </button>
+            )}
+            {step === 'review' && (
+              <button
+                type="button"
+                onClick={handleCreateStorage}
+                disabled={!isConnected || isPublishing}
+                className={`flex flex-1 items-center justify-center gap-2 rounded-lg px-4 py-3 text-sm font-semibold text-white transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+                  isConnected ? 'bg-accent hover:bg-accent/90' : 'bg-muted'
+                }`}
+              >
+                {isPublishing ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Initializing...
+                  </>
+                ) : (
+                  <>
+                    <Zap className="h-4 w-4" />
+                    Publish Quote
+                  </>
+                )}
+              </button>
+            )}
+          </div>
         )}
 
         {step === 'funding' && (
@@ -630,7 +816,7 @@ export function RFQMakerPanel(): React.JSX.Element {
             )}
           </button>
         )}
-        </div>
+      </div>
 
       {/* Selected Order Info */}
         {selectedMakerOrder && (
