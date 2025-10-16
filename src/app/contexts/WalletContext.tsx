@@ -539,9 +539,16 @@ export function WalletProvider({ children }: WalletProviderProps) {
       const takerAmount = toBaseUnits(fillAmount, takerDecimals);
       const makerAmount = toBaseUnits(fillAmount * order.price, makerDecimals);
 
-      await Promise.resolve(sendFn.call(builder, makerAccount, takerAmount, takerToken));
       await Promise.resolve(
-        sendFn.call(builder, takerAccount, makerAmount, makerToken, undefined, { account: storageAccount }),
+        sendFn.call(builder, makerAccount, takerAmount, {
+          token: takerToken,
+        }),
+      );
+      await Promise.resolve(
+        sendFn.call(builder, takerAccount, makerAmount, {
+          token: makerToken,
+          account: storageAccount,
+        }),
       );
 
       const receipt = await userClient.publishBuilder(builder);
