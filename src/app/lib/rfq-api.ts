@@ -241,7 +241,7 @@ export async function createRfqOrder(order: RFQOrder): Promise<RFQOrder> {
     side: order.side,
     price: order.price,
     size: order.size,
-    min_fill: order.minFill,
+    min_fill: order.minFill || null,
     expiry: order.expiry,
     maker: {
       id: order.maker.id,
@@ -258,8 +258,8 @@ export async function createRfqOrder(order: RFQOrder): Promise<RFQOrder> {
     storage_account: order.storageAccount,
     allowlisted: order.allowlisted,
     status: order.status,
-    taker_fill_amount: order.takerFillAmount,
-    taker_address: order.takerAddress,
+    taker_fill_amount: order.takerFillAmount || null,
+    taker_address: order.takerAddress || null,
     created_at: order.createdAt,
     updated_at: order.updatedAt,
   };
