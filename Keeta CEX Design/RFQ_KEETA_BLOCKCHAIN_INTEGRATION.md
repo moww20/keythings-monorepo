@@ -2,7 +2,7 @@
 
 ## Executive Summary
 
-This document outlines the technical architecture for integrating Request for Quote (RFQ) orders with Keeta Network's blockchain, leveraging storage accounts as escrow mechanisms. The design enables trustless, non-custodial trading where makers lock funds on-chain and takers can verify balances before executing trades.
+This document outlines the technical architecture for integrating Request for Quote (RFQ) orders with Keeta Network's blockchain, leveraging storage accounts as escrow mechanisms. The design enables trustless, non-custodial trading where makers lock funds on-chain and takers can verify balances before executing trades. This refined version adds a delivery roadmap focused on phased enablement, atomic settlement, and user experience improvements on the Trade RFQ Page.
 
 **Key Features:**
 - **Zero-Custody Architecture**: Backend never controls user funds
@@ -10,19 +10,82 @@ This document outlines the technical architecture for integrating Request for Qu
 - **Direct Settlement**: Wallet-to-wallet token transfers via Keeta SDK
 - **Sub-Second Finality**: ~400ms settlement time on Keeta testnet
 - **Trustless Verification**: Takers verify locked funds on-chain before trading
+- **Phased Rollout Plan**: Incremental activation across frontend and backend components
+- **Security & UX Balance**: Reduced friction through guided wallet flows without compromising authorization rigor
 
 ---
 
 ## Table of Contents
 
-1. [Architecture Overview](#architecture-overview)
-2. [Keeta Network Fundamentals](#keeta-network-fundamentals)
-3. [Key Technical Components](#key-technical-components)
-4. [Order Lifecycle](#order-lifecycle)
-5. [Implementation Details](#implementation-details)
-6. [Security Model](#security-model)
-7. [Performance Considerations](#performance-considerations)
-8. [Testing Strategy](#testing-strategy)
+1. [Feasibility Assessment](#feasibility-assessment)
+2. [Phased Implementation Roadmap](#phased-implementation-roadmap)
+3. [Trade RFQ Page Integration Plan](#trade-rfq-page-integration-plan)
+4. [Architecture Overview](#architecture-overview)
+5. [Keeta Network Fundamentals](#keeta-network-fundamentals)
+6. [Key Technical Components](#key-technical-components)
+7. [Order Lifecycle](#order-lifecycle)
+8. [Implementation Details](#implementation-details)
+9. [Security Model](#security-model)
+10. [Performance Considerations](#performance-considerations)
+11. [Testing Strategy](#testing-strategy)
+
+---
+
+## Feasibility Assessment
+
+The RFQ integration with Keeta is **feasible** with the current SDK and storage-account primitives. All critical capabilities—account creation, ACL management, and atomic transfers—are exposed through stable APIs, and the existing RFQ backend already consumes on-chain read models. The remaining challenges are predominantly operational:
+
+- **Wallet Readiness**: The Keeta browser wallet already supports transaction signing, ACL updates, and batched instructions needed for atomic fills. No wallet upgrades are necessary beyond UX copy updates.
+- **Backend Constraints**: The indexer can continue to run in read-only mode; required changes are limited to schema extensions and new WebSocket events that broadcast on-chain status transitions.
+- **Network Policies**: Storage-account and token permissions are governed by network ACLs. Current throughput and rate limits are adequate for projected RFQ volumes but should be monitored during rollout.
+- **User Education**: Makers and takers must understand wallet prompts and escrow mechanics. Incremental rollout allows progressive disclosure and training.
+
+**Conclusion**: With deliberate UX scaffolding and staged release gates, the integration is technically achievable and aligns with platform constraints.
+
+---
+
+## Phased Implementation Roadmap
+
+### Phase 0 – Foundations (1 sprint)
+- **Frontend**: Instrument the Trade RFQ Page with feature flags, wallet connection state management, and telemetry to capture drop-off points.
+- **Backend**: Extend the RFQ indexer to ingest mock on-chain events and validate schema updates without affecting production data.
+- **Shared**: Define audit logging requirements, security reviews, and operational runbooks for wallet-driven flows.
+
+### Phase 1 – Maker Onboarding & Escrow Creation (1–2 sprints)
+- **Frontend**: Introduce maker-focused prompts for wallet connection, balance preflight checks, and guided storage-account creation with step indicators.
+- **Backend**: Persist order metadata referencing storage-account IDs, index live Keeta storage accounts, and gate maker actions behind beta feature flags.
+- **Security**: Enforce address allowlists, transaction simulation, and network verification before enabling signature requests.
+
+### Phase 2 – Taker Atomic Fill & Settlement (1–2 sprints)
+- **Frontend**: Allow takers to validate maker escrow balances inline, then initiate fills via a consolidated “Review & Fill” modal that batches signatures.
+- **Backend**: Broadcast real-time fill statuses via WebSockets, implement conflict detection for competing fills, and reconcile partial fills automatically.
+- **Security**: Monitor for expired or underfunded escrows, trigger alerts, and ensure ACL updates are logged.
+
+### Phase 3 – Optimization & Automation (ongoing)
+- **Frontend**: Streamline repeat actions with saved wallet preferences, contextual warnings, and deterministic status badges powered by indexer data.
+- **Backend**: Automate stale order cleanup, expose analytics on fill success rates, and harden recovery workflows for failed transactions.
+- **Security**: Run chaos tests simulating network delays to confirm atomicity under stress and continuously tune rate limits.
+
+---
+
+## Trade RFQ Page Integration Plan
+
+1. **UI Surface Areas**
+   - Maker Panel: Add a “Lock Funds on Keeta” call-to-action with progress indicators for wallet confirmation, escrow creation, and backend verification.
+   - Taker Panel: Display on-chain escrow sufficiency, expiry, and status badges adjacent to each quote card.
+   - Global Status Bar: Surface wallet connection state, network health, and pending signatures to set expectations and reduce user anxiety.
+
+2. **State Management**
+   - Centralize blockchain-derived data in a dedicated store (React Query, Zustand) synchronized with backend WebSocket feeds.
+   - Cache account metadata locally to minimize redundant RPC calls while providing manual refresh options for power users.
+
+3. **User Journey Enhancements**
+   - Offer contextual education modals explaining signature purpose, escrow safety, and settlement timelines.
+   - Provide a “Test Mode” (mock transactions) during early phases so users can practice flows without risking funds.
+
+4. **Observability & Feedback**
+   - Track telemetry for wallet connection attempts, signature declines, and escrow creation failures to iterate quickly on UX.
+   - Capture qualitative feedback directly within the Trade RFQ Page via optional surveys during beta.
 
 ---
 
@@ -903,6 +966,12 @@ const fillRFQOrder = async (
 - Taker can withdraw because they're sending TO the storage owner's designated recipient
 - OR: Maker pre-grants SEND_ON_BEHALF permission to taker
 
+**Atomic Settlement Safeguards:**
+- **Batched Operations**: Maker funding, ACL delegation, and taker settlement are bundled into a single builder flow so no intermediate state leaks on-chain.
+- **Pre-Fill Simulation**: Frontend requests backend-assisted dry runs to catch insufficient balances or permission gaps before the wallet prompts the user.
+- **Optimistic UI with Rollback**: UI surfaces a pending state with timeout-based rollback and user messaging if chain confirmation is delayed or rejected.
+- **Indexer Reconciliation**: Backend cross-checks on-chain balances with cached order state after every fill and raises alerts for discrepancies.
+
 ### 4. Order Cancellation (Maker)
 
 **Frontend Flow:**
@@ -1277,6 +1346,13 @@ Keeta network validates permissions on every operation:
 | **Maker Front-Runs Taker** | Maker can cancel, but taker verifies balance first |
 | **Double-Spend** | Keeta consensus prevents (vote staples are atomic) |
 | **Replay Attack** | Each block has unique previous hash (prevents replay) |
+
+### Balancing Security and User Friction
+
+- **Progressive Permission Requests**: Only request elevated permissions (e.g., SEND_ON_BEHALF) at the moment they are required, ensuring users understand each consent step.
+- **Prefetched Transaction Payloads**: Prepare transactions server-side so wallet prompts appear with clear, human-readable summaries and minimal signing steps.
+- **Session Awareness**: Cache recent wallet connections to skip redundant approvals while still requiring explicit signatures for fund movements.
+- **In-Context Education**: Provide inline explanations and tooltips that reinforce why security steps (like verifying network or reviewing ACL changes) protect funds.
 
 ### Transaction Atomicity
 
