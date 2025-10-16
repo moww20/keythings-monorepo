@@ -273,8 +273,19 @@ export function RFQMakerPanel({ mode, onModeChange }: RFQMakerPanelProps): React
 
   // Step 4: Fund Quote (following CreatePoolModal pattern)
   const handleFundStorage = useCallback(async () => {
-    if (!userClient || !publicKey || !storageAccountAddress || !currentSubmission) {
-      setError('Missing required data for funding. Please try creating the order again.');
+    if (!userClient || !publicKey) {
+      setError('Connect your wallet before funding the RFQ order.');
+      return;
+    }
+    
+    if (!storageAccountAddress) {
+      setError('Storage account not created. Please click "Fund Quote" first to create the storage account.');
+      setStep('review');
+      return;
+    }
+    
+    if (!currentSubmission) {
+      setError('Missing order submission data. Please try creating the order again.');
       return;
     }
 

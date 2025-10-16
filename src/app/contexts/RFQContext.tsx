@@ -317,7 +317,9 @@ export function RFQProvider({ pair, children }: { pair: string; children: ReactN
         maker: submission.maker,
         unsignedBlock: 'blockchain_handled_in_maker_panel',
         makerSignature: 'keeta_wallet_signature',
-        storageAccount: storageAccountAddress || 'blockchain_handled_in_maker_panel',
+        storageAccount: storageAccountAddress && storageAccountAddress.startsWith('keeta_') 
+          ? storageAccountAddress 
+          : 'blockchain_handled_in_maker_panel',
         allowlisted: !!submission.allowlistLabel,
         status: 'open',
         createdAt: nowIso,
