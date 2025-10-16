@@ -1,5 +1,5 @@
 import { useCallback, useMemo } from 'react';
-import type { PoolInfo, QuoteResponse, SwapTelemetryPayload } from '@/app/types/pools';
+import type { PoolInfo, QuoteResponse } from '@/app/types/pools';
 
 export function usePoolsApi() {
   const apiBase = useMemo(() => process.env.NEXT_PUBLIC_DEX_API_URL || 'http://localhost:8080', []);
@@ -63,47 +63,6 @@ export function usePoolsApi() {
     }
   }, [apiBase]);
 
-  const notifySwapTelemetry = useCallback(async (
-    payload: SwapTelemetryPayload
-  ): Promise<void> => {
-    console.log('[usePoolsApi] Sending swap telemetry:', payload);
-
-    try {
-      const response = await fetch(`${apiBase}/api/pools/swap/telemetry`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          pool_id: payload.poolId,
-          token_in: payload.tokenIn,
-          token_out: payload.tokenOut,
-          amount_in: payload.amountIn,
-          amount_out: payload.amountOut,
-          min_amount_out: payload.minAmountOut,
-          wallet_address: payload.walletAddress,
-          storage_account: payload.storageAccount,
-          tx_signature: payload.txSignature,
-          confirmed_at: payload.confirmedAt,
-        }),
-      });
-
-      console.log('[usePoolsApi] Swap telemetry status:', response.status);
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('[usePoolsApi] Telemetry failed:', errorText);
-        throw new Error(`Failed to send swap telemetry: ${errorText}`);
-      }
-    } catch (error) {
-      if (error instanceof TypeError && error.message === 'Failed to fetch') {
-        throw new Error(
-          `Unable to connect to backend server at ${apiBase}. ` +
-          `Please ensure the keythings-dapp-engine is running.`
-        );
-      }
-      throw error;
-    }
-  }, [apiBase]);
-
-  return { fetchPools, getQuote, notifySwapTelemetry };
+  return { fetchPools, getQuote };
 }
 

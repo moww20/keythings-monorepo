@@ -46,9 +46,14 @@ function splitPair(pair: string): { base: string; quote: string } {
 
 // Global token address cache from wallet balances
 let tokenAddressCache: Map<string, string> = new Map();
+let tokenDecimalsCache: Map<string, number> = new Map();
 
 export function setTokenAddressCache(addresses: Map<string, string>) {
   tokenAddressCache = addresses;
+}
+
+export function setTokenDecimalsCache(decimals: Map<string, number>) {
+  tokenDecimalsCache = decimals;
 }
 
 export function getTokenAddressForSymbol(symbol: string): string {
@@ -74,6 +79,14 @@ export function getTokenDecimalsForSymbol(symbol: string): number {
   if (!normalized) {
     return TOKEN_FALLBACK_DECIMALS;
   }
+  
+  // First try to get from wallet cache (REAL DECIMALS!)
+  const cachedDecimals = tokenDecimalsCache.get(normalized);
+  if (cachedDecimals !== undefined) {
+    return cachedDecimals;
+  }
+  
+  // Fallback to environment variables
   const decimalsKey = `NEXT_PUBLIC_${normalized}_DECIMALS`;
   return getEnvNumber(decimalsKey, TOKEN_FALLBACK_DECIMALS);
 }

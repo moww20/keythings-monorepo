@@ -16,6 +16,7 @@ import {
   getMakerTokenDecimalsFromOrder,
   getTakerTokenDecimalsFromOrder,
   setTokenAddressCache,
+  setTokenDecimalsCache,
 } from "../lib/token-utils";
 import type { KeetaUserClient, KeetaBalanceEntry } from "../../types/keeta";
 import {
@@ -271,19 +272,22 @@ export function WalletProvider({ children }: WalletProviderProps) {
           })
         );
 
-        // Update token address cache with real addresses from wallet
+        // Update token address and decimals cache with real data from wallet
         const tokenAddressMap = new Map<string, string>();
+        const tokenDecimalsMap = new Map<string, number>();
         (tokenBalances.balances as KeetaBalanceEntry[]).forEach((entry) => {
           const processedToken = processed.find(p => p.address === entry.token);
           if (processedToken) {
-            // Map common token symbols to their addresses
+            // Map common token symbols to their addresses and decimals
             const symbol = processedToken.ticker.toUpperCase();
             if (symbol === 'KTA' || symbol === 'BASE' || symbol === 'USDT' || symbol === 'USDC') {
               tokenAddressMap.set(symbol, entry.token);
+              tokenDecimalsMap.set(symbol, processedToken.decimals);
             }
           }
         });
         setTokenAddressCache(tokenAddressMap);
+        setTokenDecimalsCache(tokenDecimalsMap);
 
         setProcessedTokens(processed);
       } catch (error) {
