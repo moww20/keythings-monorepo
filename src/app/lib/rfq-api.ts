@@ -255,7 +255,7 @@ export async function createRfqOrder(order: RFQOrder): Promise<RFQOrder> {
     },
     unsigned_block: order.unsignedBlock,
     maker_signature: order.makerSignature,
-    storage_account: order.storageAccount ?? order.unsignedBlock,
+    storage_account: order.storageAccount,
     allowlisted: order.allowlisted,
     status: order.status,
     taker_fill_amount: order.takerFillAmount,
