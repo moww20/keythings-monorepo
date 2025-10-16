@@ -5,7 +5,7 @@ import { BadgeCheck, Clock3, ShieldAlert, ShieldCheck, Zap } from 'lucide-react'
 
 import { useRFQContext } from '@/app/contexts/RFQContext';
 import type { RFQOrder, RFQOrderStatus } from '@/app/types/rfq';
-import type { OrderSide } from '@/app/types/trading';
+import type { OrderSide } from '@/app/types/rfq';
 
 const STATUS_LABELS: Record<RFQOrderStatus, string> = {
   open: 'Open',

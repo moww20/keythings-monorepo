@@ -41,7 +41,12 @@ function shorten(address: string, chars = 4): string {
   return `${address.slice(0, chars)}…${address.slice(-chars)}`;
 }
 
-export function RFQTakerPanel(): React.JSX.Element {
+interface RFQTakerPanelProps {
+  mode: 'rfq_taker' | 'rfq_maker';
+  onModeChange: (mode: 'rfq_taker' | 'rfq_maker') => void;
+}
+
+export function RFQTakerPanel({ mode, onModeChange }: RFQTakerPanelProps): React.JSX.Element {
   const {
     selectedOrder,
     fillAmount,
@@ -205,6 +210,28 @@ export function RFQTakerPanel(): React.JSX.Element {
 
   return (
     <div className="flex h-full flex-col gap-4 rounded-lg border border-hairline bg-surface p-4">
+      {/* RFQ Mode Toggle */}
+      <div className="flex items-center justify-between gap-1 rounded-full bg-surface-strong px-2 py-1 text-xs">
+        <button
+          type="button"
+          onClick={() => onModeChange('rfq_taker')}
+          className={`flex-1 rounded-full px-3 py-1 font-medium transition-colors ${
+            mode === 'rfq_taker' ? 'bg-accent text-white' : 'text-muted hover:text-foreground'
+          }`}
+        >
+          RFQ Taker
+        </button>
+        <button
+          type="button"
+          onClick={() => onModeChange('rfq_maker')}
+          className={`flex-1 rounded-full px-3 py-1 font-medium transition-colors ${
+            mode === 'rfq_maker' ? 'bg-accent text-white' : 'text-muted hover:text-foreground'
+          }`}
+        >
+          RFQ Maker
+        </button>
+      </div>
+
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-xs uppercase tracking-wide text-muted">Selected Quote</p>

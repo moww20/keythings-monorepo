@@ -61,7 +61,12 @@ function shorten(address: string | undefined | null, chars = 4): string {
 
 type WizardStep = 'details' | 'controls' | 'review' | 'creating' | 'funding';
 
-export function RFQMakerPanel(): React.JSX.Element {
+interface RFQMakerPanelProps {
+  mode: 'rfq_taker' | 'rfq_maker';
+  onModeChange: (mode: 'rfq_taker' | 'rfq_maker') => void;
+}
+
+export function RFQMakerPanel({ mode, onModeChange }: RFQMakerPanelProps): React.JSX.Element {
   const { pair, createQuote, cancelQuote, selectedOrder } = useRFQContext();
   const makerProfiles = useMakerProfiles();
   const { publicKey, isConnected, userClient } = useWallet();
@@ -209,100 +214,7 @@ export function RFQMakerPanel(): React.JSX.Element {
     }
   }, [setCurrentSubmission, step]);
 
-  const handleCreateStorage = useCallback(async () => {
-    if (!isConnected || !publicKey || !userClient) {
-      setError('Connect your market maker wallet before publishing quotes.');
-      return;
-    }
-
-    if (!makerProfile) {
-      setError('Maker profile not found. Please check your wallet connection.');
-      return;
-    }
-
-    if (!validateDetailsStep() || !validateControlsStep()) {
-      return;
-    }
-
-    const submission: RFQQuoteSubmission = {
-      pair,
-      side: draft.side,
-      price: draft.price,
-      size: draft.size,
-      minFill: draft.minFill || undefined,
-      expiryPreset: draft.expiryPreset,
-      allowlistLabel: draft.allowlistLabel || undefined,
-      autoSignProfileId: draft.autoSignProfileId || undefined,
-      maker: makerProfile,
-    };
-
-    setCurrentSubmission(submission);
-    setIsPublishing(true);
-    setError(null);
-    setSuccess(null);
-    setStep('creating');
-    setProgressMessage('Creating storage account for your RFQ order...');
-
-    try {
-      console.log('[RFQMakerPanel] Step 1/2: Creating RFQ storage account...');
-      console.log('[RFQMakerPanel] ⚠️ Please approve the transaction in your wallet extension!');
-      
-      const manager = new StorageAccountManager(userClient);
-      
-      let rfqStorageAddress: string;
-      try {
-        // Add timeout since wallet extension might not respond even after approval
-        const createPromise = manager.createStorageAccount('RFQ', []);
-        const timeoutPromise = new Promise<never>((_, reject) => 
-          setTimeout(() => reject(new Error('TIMEOUT')), 30000) // 30 second timeout
-        );
-        
-        rfqStorageAddress = await Promise.race([createPromise, timeoutPromise]);
-        console.log('[RFQMakerPanel] ✅ Storage account created:', rfqStorageAddress);
-      } catch (error) {
-        if (error instanceof Error && error.message === 'TIMEOUT') {
-          // Timeout - but transaction might have succeeded
-          console.warn('[RFQMakerPanel] ⚠️ Wallet response timeout - transaction may still have succeeded');
-          
-          // Ask user if they approved and if they see the storage account in wallet
-          const proceed = confirm(
-            'Storage account creation timed out.\n\n' +
-            'Did you approve the transaction in your wallet?\n\n' +
-            'Click OK if you approved it and want to continue.\n' +
-            'Click Cancel to stop and try again later.'
-          );
-          
-          if (!proceed) {
-            throw new Error('RFQ order creation cancelled by user');
-          }
-          
-          // User confirmed - proceed with a placeholder, they can deposit manually later
-          rfqStorageAddress = 'PENDING_VERIFICATION';
-          console.log('[RFQMakerPanel] User confirmed approval, proceeding...');
-        } else {
-          throw error;
-        }
-      }
-      
-      setStorageAccountAddress(rfqStorageAddress);
-      setStep('funding');
-      setProgressMessage('Storage account created! Now depositing your tokens...');
-      
-      // Wait for settlement
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
-    } catch (err) {
-      console.error('[RFQMakerPanel] Error creating storage account:', err);
-      const errorMessage = err instanceof Error ? err.message : 'Failed to create storage account. Please try again.';
-      setError(errorMessage);
-      setStep('details');
-      setProgressMessage(null);
-    } finally {
-      setIsPublishing(false);
-    }
-  }, [draft, isConnected, makerProfile, pair, publicKey, userClient, validateControlsStep, validateDetailsStep]);
-
-  // Step 2: Fund Storage Account (following CreatePoolModal pattern)
+  // Step 4: Publish Quote (following CreatePoolModal pattern)
   const handleFundStorage = useCallback(async () => {
     if (!userClient || !publicKey || !storageAccountAddress || !currentSubmission) {
       setError('Missing required data for funding. Please try creating the order again.');
@@ -404,7 +316,7 @@ export function RFQMakerPanel(): React.JSX.Element {
       setSuccess(
         `Quote ${order.id} published with escrow ${shorten(storageAccountAddress)}. Auto-sign SLA ${makerProfile.autoSignSlaMs} ms.`,
       );
-      setProgressMessage('RFQ order created on Keeta and indexed by the RFQ backend.');
+      setProgressMessage(null); // Clear progress message since process is complete
       setStep('details');
       
       // Reset state
@@ -421,6 +333,103 @@ export function RFQMakerPanel(): React.JSX.Element {
       setIsPublishing(false);
     }
   }, [userClient, publicKey, storageAccountAddress, currentSubmission, createQuote, makerProfile]);
+
+  const handleCreateStorage = useCallback(async () => {
+    if (!isConnected || !publicKey || !userClient) {
+      setError('Connect your market maker wallet before publishing quotes.');
+      return;
+    }
+
+    if (!makerProfile) {
+      setError('Maker profile not found. Please check your wallet connection.');
+      return;
+    }
+
+    if (!validateDetailsStep() || !validateControlsStep()) {
+      return;
+    }
+
+    const submission: RFQQuoteSubmission = {
+      pair,
+      side: draft.side,
+      price: draft.price,
+      size: draft.size,
+      minFill: draft.minFill || undefined,
+      expiryPreset: draft.expiryPreset,
+      allowlistLabel: draft.allowlistLabel || undefined,
+      autoSignProfileId: draft.autoSignProfileId || undefined,
+      maker: makerProfile,
+    };
+
+    setCurrentSubmission(submission);
+    setIsPublishing(true);
+    setError(null);
+    setSuccess(null);
+    setStep('creating');
+    setProgressMessage('Creating storage account for your RFQ order...');
+
+    try {
+      console.log('[RFQMakerPanel] Step 1/2: Creating RFQ storage account...');
+      console.log('[RFQMakerPanel] ⚠️ Please approve the transaction in your wallet extension!');
+      
+      const manager = new StorageAccountManager(userClient);
+      
+      let rfqStorageAddress: string;
+      try {
+        // Add timeout since wallet extension might not respond even after approval
+        const createPromise = manager.createStorageAccount('RFQ', []);
+        const timeoutPromise = new Promise<never>((_, reject) => 
+          setTimeout(() => reject(new Error('TIMEOUT')), 30000) // 30 second timeout
+        );
+        
+        rfqStorageAddress = await Promise.race([createPromise, timeoutPromise]);
+        console.log('[RFQMakerPanel] ✅ Storage account created:', rfqStorageAddress);
+      } catch (error) {
+        if (error instanceof Error && error.message === 'TIMEOUT') {
+          // Timeout - but transaction might have succeeded
+          console.warn('[RFQMakerPanel] ⚠️ Wallet response timeout - transaction may still have succeeded');
+          
+          // Ask user if they approved and if they see the storage account in wallet
+          const proceed = confirm(
+            'Storage account creation timed out.\n\n' +
+            'Did you approve the transaction in your wallet?\n\n' +
+            'Click OK if you approved it and want to continue.\n' +
+            'Click Cancel to stop and try again later.'
+          );
+          
+          if (!proceed) {
+            throw new Error('RFQ order creation cancelled by user');
+          }
+          
+          // User confirmed - proceed with a placeholder, they can deposit manually later
+          rfqStorageAddress = 'PENDING_VERIFICATION';
+          console.log('[RFQMakerPanel] User confirmed approval, proceeding...');
+        } else {
+          throw error;
+        }
+      }
+      
+      setStorageAccountAddress(rfqStorageAddress);
+      
+      // Wait for settlement
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      // Storage account created successfully - move to step 4 (publish quote)
+      console.log('[RFQMakerPanel] Storage account created successfully! Ready for step 4: Publish Quote');
+      setStep('funding');
+      setProgressMessage('Storage account created! Click "Publish Quote" to complete the RFQ setup.');
+      
+    } catch (err) {
+      console.error('[RFQMakerPanel] Error creating storage account:', err);
+      const errorMessage = err instanceof Error ? err.message : 'Failed to create storage account. Please try again.';
+      setError(errorMessage);
+      setStep('details');
+      setProgressMessage(null);
+    } finally {
+      setIsPublishing(false);
+    }
+  }, [draft, isConnected, makerProfile, pair, publicKey, userClient, validateControlsStep, validateDetailsStep]);
+
 
   // Helper function for expiry calculation
   function getExpiryMs(preset: '5m' | '15m' | '1h' | '4h' | '24h'): number {
@@ -444,6 +453,28 @@ export function RFQMakerPanel(): React.JSX.Element {
 
   return (
     <div className="flex h-full flex-col gap-4 rounded-lg border border-hairline bg-surface p-4">
+      {/* RFQ Mode Toggle */}
+      <div className="flex items-center justify-between gap-1 rounded-full bg-surface-strong px-2 py-1 text-xs">
+        <button
+          type="button"
+          onClick={() => onModeChange('rfq_taker')}
+          className={`flex-1 rounded-full px-3 py-1 font-medium transition-colors ${
+            mode === 'rfq_taker' ? 'bg-accent text-white' : 'text-muted hover:text-foreground'
+          }`}
+        >
+          RFQ Taker
+        </button>
+        <button
+          type="button"
+          onClick={() => onModeChange('rfq_maker')}
+          className={`flex-1 rounded-full px-3 py-1 font-medium transition-colors ${
+            mode === 'rfq_maker' ? 'bg-accent text-white' : 'text-muted hover:text-foreground'
+          }`}
+        >
+          RFQ Maker
+        </button>
+      </div>
+
       <div className="flex items-start justify-between">
         <div>
           <p className="text-xs uppercase tracking-wide text-muted">Quote Builder</p>
@@ -461,15 +492,17 @@ export function RFQMakerPanel(): React.JSX.Element {
 
       {/* Progress Indicator */}
       <div className="flex flex-col gap-3">
-        <div className="grid grid-cols-3 gap-2">
-          {(['details', 'controls', 'review'] as const).map((wizardStep, index) => {
+        <div className="grid grid-cols-4 gap-2">
+          {(['details', 'controls', 'review', 'funding'] as const).map((wizardStep, index) => {
             const isActive =
               (wizardStep === 'details' && step === 'details') ||
               (wizardStep === 'controls' && step === 'controls') ||
-              (wizardStep === 'review' && ['review', 'creating', 'funding'].includes(step));
+              (wizardStep === 'review' && ['review', 'creating'].includes(step)) ||
+              (wizardStep === 'funding' && step === 'funding');
             const isComplete =
               (wizardStep === 'details' && ['controls', 'review', 'creating', 'funding'].includes(step)) ||
-              (wizardStep === 'controls' && ['review', 'creating', 'funding'].includes(step));
+              (wizardStep === 'controls' && ['review', 'creating', 'funding'].includes(step)) ||
+              (wizardStep === 'review' && ['creating', 'funding'].includes(step));
 
             return (
               <div
@@ -487,7 +520,8 @@ export function RFQMakerPanel(): React.JSX.Element {
                 <span className="text-[11px] font-medium leading-tight">
                   {wizardStep === 'details' && 'Quote Details'}
                   {wizardStep === 'controls' && 'Fill Controls'}
-                  {wizardStep === 'review' && 'Review & Publish'}
+                  {wizardStep === 'review' && 'Create Storage'}
+                  {wizardStep === 'funding' && 'Publish Quote'}
                 </span>
               </div>
             );
@@ -682,7 +716,7 @@ export function RFQMakerPanel(): React.JSX.Element {
         </div>
       )}
 
-      {/* Step 2: Fund Storage Account */}
+      {/* Step 4: Publish Quote */}
       {step === 'funding' && (
         <div className="text-center">
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-green-500/10 border border-green-500/30 mb-4">
@@ -806,12 +840,12 @@ export function RFQMakerPanel(): React.JSX.Element {
             {isPublishing ? (
               <>
                 <Loader2 className="h-4 w-4 animate-spin" />
-                Funding...
+                Publishing...
               </>
             ) : (
               <>
                 <Zap className="h-4 w-4" />
-                Fund Order
+                Publish Quote
               </>
             )}
           </button>

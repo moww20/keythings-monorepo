@@ -4,7 +4,7 @@
  */
 
 import type { RFQOrder } from '@/app/types/rfq';
-import type { OrderSide } from '@/app/types/trading';
+import type { OrderSide } from '@/app/types/rfq';
 
 export type TokenFieldType = "decimalPlaces" | "decimals";
 

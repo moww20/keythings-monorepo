@@ -39,7 +39,7 @@ import type {
   RFQOrderBookBuckets,
   RFQQuoteSubmission,
 } from '@/app/types/rfq';
-import type { OrderSide } from '@/app/types/trading';
+import type { OrderSide } from '@/app/types/rfq';
 import { useWallet } from '@/app/contexts/WalletContext';
 import type { RFQStorageAccountDetails, StorageAccountState } from '@/app/types/rfq-blockchain';
 

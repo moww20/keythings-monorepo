@@ -1,5 +1,4 @@
 mod api;
-mod engine;
 mod keeta;
 mod keeta_rfq;
 mod ledger;
@@ -12,7 +11,6 @@ mod settlement;
 mod websocket;
 
 use crate::api::AppState;
-use crate::engine::start_engine;
 use crate::ledger::Ledger;
 use crate::pool::PoolManager;
 use crate::pool_api::PoolState;
@@ -31,7 +29,6 @@ async fn main() -> std::io::Result<()> {
     // Backend will verify balances on-chain before settlement
     log::info!("Ledger initialized - balances from real Keeta wallets only");
 
-    let engine = start_engine(ledger.clone());
     let keeta_client = keeta::KeetaClient::new_from_env();
     if !keeta::healthcheck(&keeta_client).await {
         log::warn!("keeta rpc healthcheck failed");
@@ -53,7 +50,6 @@ async fn main() -> std::io::Result<()> {
 
     let state = AppState::new(
         ledger.clone(),
-        engine,
         settlement_queue.clone(),
         reconciler,
         keeta_client.clone(),

@@ -3,7 +3,7 @@
 import { useMemo } from 'react';
 
 import { useRFQContext } from '@/app/contexts/RFQContext';
-import type { OrderSide } from '@/app/types/trading';
+import type { OrderSide } from '@/app/types/rfq';
 
 interface DepthRow {
   price: number;

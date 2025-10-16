@@ -1,4 +1,4 @@
-import type { OrderSide } from '@/app/types/trading';
+export type OrderSide = 'buy' | 'sell';
 
 export type RFQOrderStatus = 'open' | 'pending_fill' | 'filled' | 'expired';
 

@@ -2,12 +2,10 @@ use actix_web::{web, HttpResponse, Responder};
 use log::info;
 use serde::Deserialize;
 
-use crate::engine::{Engine, EngineError};
 use crate::keeta::KeetaClient;
 use crate::ledger::Ledger;
 use crate::models::{
-    AuthChallenge, AuthSession, Balance, CancelOrderRequest, DepositAddress, LimitOrder,
-    PlaceOrderResponse, PlacedOrder, WithdrawEnqueued, WithdrawRequest,
+    AuthChallenge, AuthSession, Balance, DepositAddress, WithdrawEnqueued, WithdrawRequest,
 };
 use crate::reconcile::Reconciler;
 use crate::settlement::SettlementQueue;
@@ -16,7 +14,6 @@ use serde::Serialize;
 #[derive(Clone)]
 pub struct AppState {
     pub ledger: Ledger,
-    pub engine: Engine,
     pub settlement: SettlementQueue,
     pub reconciler: Reconciler,
     pub keeta: KeetaClient,
@@ -25,14 +22,12 @@ pub struct AppState {
 impl AppState {
     pub fn new(
         ledger: Ledger,
-        engine: Engine,
         settlement: SettlementQueue,
         reconciler: Reconciler,
         keeta: KeetaClient,
     ) -> Self {
         Self {
             ledger,
-            engine,
             settlement,
             reconciler,
             keeta,
@@ -46,12 +41,6 @@ struct AuthSessionRequest {
     signature: String,
 }
 
-#[derive(Deserialize)]
-struct PlaceOrderPayload {
-    user_id: String,
-    #[serde(flatten)]
-    order: LimitOrder,
-}
 
 #[derive(Deserialize)]
 struct CreditBalancePayload {
@@ -60,10 +49,6 @@ struct CreditBalancePayload {
     amount: f64,
 }
 
-#[derive(Deserialize)]
-struct CancelOrderQuery {
-    user_id: String,
-}
 
 #[derive(Deserialize)]
 struct RegisterUserPayload {
@@ -88,8 +73,6 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
             .route("/users/{user_id}/status", web::get().to(user_status))
             .route("/balances/{user_id}", web::get().to(list_balances))
             .route("/internal/credit", web::post().to(credit_balance))
-            .route("/orders", web::post().to(place_order))
-            .route("/orders/{order_id}", web::delete().to(cancel_order))
             .route("/withdrawals", web::post().to(withdraw))
             .route("/deposit/{user_id}/{token}", web::get().to(deposit_address))
             // Pool routes
@@ -211,41 +194,6 @@ async fn credit_balance(
     HttpResponse::Ok().finish()
 }
 
-async fn place_order(
-    state: web::Data<AppState>,
-    payload: web::Json<PlaceOrderPayload>,
-) -> impl Responder {
-    let result: Result<PlacedOrder, EngineError> = state
-        .engine
-        .place_order(payload.user_id.clone(), payload.order.clone())
-        .await;
-
-    match result {
-        Ok(order) => HttpResponse::Ok().json(PlaceOrderResponse { order }),
-        Err(err) => map_engine_error(err),
-    }
-}
-
-async fn cancel_order(
-    state: web::Data<AppState>,
-    path: web::Path<String>,
-    query: web::Query<CancelOrderQuery>,
-    payload: web::Json<CancelOrderRequest>,
-) -> impl Responder {
-    let order_id = path.into_inner();
-    if order_id != payload.id {
-        return HttpResponse::BadRequest().json(serde_json::json!({ "error": "id mismatch" }));
-    }
-
-    match state
-        .engine
-        .cancel_order(query.user_id.clone(), payload.id.clone())
-        .await
-    {
-        Ok(_) => HttpResponse::Ok().finish(),
-        Err(err) => map_engine_error(err),
-    }
-}
 
 async fn withdraw(
     state: web::Data<AppState>,
@@ -280,16 +228,6 @@ async fn deposit_address(
     HttpResponse::Ok().json(deposit)
 }
 
-fn map_engine_error(err: EngineError) -> HttpResponse {
-    match err {
-        EngineError::InvalidMarket => HttpResponse::BadRequest().json(error_body("invalid market")),
-        EngineError::InsufficientBalance => {
-            HttpResponse::BadRequest().json(error_body("insufficient balance"))
-        }
-        EngineError::OrderNotFound => HttpResponse::NotFound().json(error_body("order not found")),
-        EngineError::Internal => HttpResponse::InternalServerError().finish(),
-    }
-}
 
 fn error_body(message: &str) -> serde_json::Value {
     serde_json::json!({ "error": message })

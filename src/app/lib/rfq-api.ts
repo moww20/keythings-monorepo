@@ -6,7 +6,7 @@ import type {
   RFQOrder,
 } from '@/app/types/rfq';
 
-const DEFAULT_API_BASE = 'https://testnet.api.keythings.xyz';
+const DEFAULT_API_BASE = 'http://localhost:8080';
 
 function getApiBase(): string {
   const configured = process.env.NEXT_PUBLIC_RFQ_API_URL ?? DEFAULT_API_BASE;

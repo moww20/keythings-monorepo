@@ -1,4 +1,4 @@
-import type { OrderSide } from '@/app/types/trading';
+import type { OrderSide } from '@/app/types/rfq';
 import type { RFQOrder } from '@/app/types/rfq';
 
 export interface RFQStorageAccountDetails {
