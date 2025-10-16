@@ -24,6 +24,7 @@ export interface RFQOrder {
   maker: RFQMakerMeta;
   unsignedBlock: string;
   makerSignature: string;
+  storageAccount?: string;
   allowlisted: boolean;
   status: RFQOrderStatus;
   takerFillAmount?: number;

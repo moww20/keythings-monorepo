@@ -24,6 +24,14 @@ import {
   fetchRfqOrders,
   submitRfqFill,
 } from '@/app/lib/rfq-api';
+import {
+  getMakerTokenAddress,
+  getMakerTokenDecimals,
+  getMakerTokenAddressFromOrder,
+  getMakerTokenDecimalsFromOrder,
+  getTakerTokenAddressFromOrder,
+  getTakerTokenDecimalsFromOrder,
+} from '@/app/lib/token-utils';
 import type {
   RFQFillRequestResult,
   RFQMakerMeta,
@@ -32,6 +40,8 @@ import type {
   RFQQuoteSubmission,
 } from '@/app/types/rfq';
 import type { OrderSide } from '@/app/types/trading';
+import { useWallet } from '@/app/contexts/WalletContext';
+import type { RFQStorageAccountDetails, StorageAccountState } from '@/app/types/rfq-blockchain';
 
 interface RFQContextValue {
   pair: string;
@@ -48,17 +58,34 @@ interface RFQContextValue {
   refreshOrders: () => Promise<void>;
   isFilling: boolean;
   lastFillResult?: RFQFillRequestResult;
+  escrowState?: StorageAccountState;
+  escrowError?: string | null;
+  isVerifyingEscrow: boolean;
+  refreshEscrowState: () => Promise<void>;
+  lastEscrowVerification: number | null;
 }
 
 const RFQContext = createContext<RFQContextValue | undefined>(undefined);
 
 export function RFQProvider({ pair, children }: { pair: string; children: ReactNode }): React.JSX.Element {
+  const {
+    publicKey,
+    createRFQStorageAccount,
+    fillRFQOrder: walletFillRFQOrder,
+    cancelRFQOrder: walletCancelRFQOrder,
+    verifyStorageAccount: walletVerifyStorageAccount,
+  } = useWallet();
+  const walletIdentity = publicKey ?? '';
   const [orders, setOrders] = useState<RFQOrder[]>([]);
   const [makers, setMakers] = useState<RFQMakerMeta[]>([]);
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   const [fillAmount, setFillAmountState] = useState<number | undefined>(undefined);
   const [isFilling, setIsFilling] = useState(false);
   const [lastFillResult, setLastFillResult] = useState<RFQFillRequestResult | undefined>();
+  const [escrowState, setEscrowState] = useState<StorageAccountState | undefined>();
+  const [escrowError, setEscrowError] = useState<string | null>(null);
+  const [isVerifyingEscrow, setIsVerifyingEscrow] = useState(false);
+  const [lastEscrowVerification, setLastEscrowVerification] = useState<number | null>(null);
 
   const refreshOrders = useCallback(async () => {
     try {
@@ -99,6 +126,50 @@ export function RFQProvider({ pair, children }: { pair: string; children: ReactN
     }
   }, [selectedOrder]);
 
+  const refreshEscrowState = useCallback(async () => {
+    if (!selectedOrder) {
+      setEscrowState(undefined);
+      setEscrowError(null);
+      setLastEscrowVerification(null);
+      return;
+    }
+
+    const storageAddress = selectedOrder.storageAccount ?? selectedOrder.unsignedBlock;
+    if (!storageAddress) {
+      setEscrowState(undefined);
+      setEscrowError('RFQ order is missing an escrow account reference.');
+      setLastEscrowVerification(null);
+      return;
+    }
+
+    try {
+      setIsVerifyingEscrow(true);
+      const state = await walletVerifyStorageAccount(storageAddress);
+      setEscrowState(state);
+      setEscrowError(null);
+      setLastEscrowVerification(Date.now());
+    } catch (error) {
+      setEscrowError(error instanceof Error ? error.message : 'Failed to verify escrow state');
+    } finally {
+      setIsVerifyingEscrow(false);
+    }
+  }, [selectedOrder, walletVerifyStorageAccount]);
+
+  useEffect(() => {
+    if (!selectedOrder) {
+      setEscrowState(undefined);
+      setEscrowError(null);
+      setLastEscrowVerification(null);
+      return;
+    }
+
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    void refreshEscrowState();
+  }, [refreshEscrowState, selectedOrder]);
+
   const buckets = useMemo<RFQOrderBookBuckets>(() => {
     return orders.reduce<RFQOrderBookBuckets>(
       (accumulator, order) => {
@@ -132,9 +203,17 @@ export function RFQProvider({ pair, children }: { pair: string; children: ReactN
       setLastFillResult(undefined);
 
       try {
+        const order = orders.find((candidate) => candidate.id === orderId) ?? selectedOrder;
+        if (!order) {
+          throw new Error('RFQ order not found locally. Refresh and try again.');
+        }
+
+        const takerWallet = takerAddress ?? (walletIdentity || undefined);
+        await walletFillRFQOrder({ order, fillAmount: amount, takerAddress: takerWallet });
+
         const result = await submitRfqFill(orderId, {
           taker_amount: amount,
-          taker_address: takerAddress,
+          taker_address: takerWallet,
           auto_publish: true,
         });
 
@@ -153,6 +232,7 @@ export function RFQProvider({ pair, children }: { pair: string; children: ReactN
         const latency = result.latencyMs || Math.max(0, Math.round(finishedAt - startedAt));
         const normalized: RFQFillRequestResult = { ...result, latencyMs: latency };
         setLastFillResult(normalized);
+        void refreshEscrowState();
         return normalized;
       } catch (error) {
         const fallback = await fetchRfqOrder(orderId);
@@ -185,38 +265,97 @@ export function RFQProvider({ pair, children }: { pair: string; children: ReactN
         setIsFilling(false);
       }
     },
-    [selectedOrder],
+    [orders, refreshEscrowState, selectedOrder, walletFillRFQOrder, walletIdentity],
   );
 
-  const createQuote = useCallback(async (submission: RFQQuoteSubmission) => {
-    // Create a new RFQ order from the submission
-    const newOrder: RFQOrder = {
-      id: '', // Will be generated by the backend
-      pair: submission.pair,
-      side: submission.side,
-      price: Number.parseFloat(submission.price),
-      size: Number.parseFloat(submission.size),
-      minFill: submission.minFill ? Number.parseFloat(submission.minFill) : undefined,
-      expiry: new Date(Date.now() + getExpiryMs(submission.expiryPreset)).toISOString(),
-      maker: submission.maker,
-      unsignedBlock: 'sample_unsigned_block', // This would be generated by the wallet
-      makerSignature: 'sample_maker_signature', // This would be generated by the wallet
-      allowlisted: !!submission.allowlistLabel,
-      status: 'open',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
+  const createQuote = useCallback(
+    async (submission: RFQQuoteSubmission) => {
+      if (!walletIdentity) {
+        throw new Error('Connect your wallet before publishing RFQ orders.');
+      }
 
-    const createdOrder = await createRfqOrder(newOrder);
-    
-    // Add the new order to the local state
-    setOrders(prev => [createdOrder, ...prev]);
-    
-    return createdOrder;
-  }, []);
+      const price = Number.parseFloat(submission.price);
+      const size = Number.parseFloat(submission.size);
+      if (!Number.isFinite(price) || !Number.isFinite(size)) {
+        throw new Error('Enter a valid price and size before publishing.');
+      }
+
+      const minFillValue = submission.minFill ? Number.parseFloat(submission.minFill) : undefined;
+      const expiryIso = new Date(Date.now() + getExpiryMs(submission.expiryPreset)).toISOString();
+      const makerTokenAddress = getMakerTokenAddress(submission.pair, submission.side);
+      const makerTokenDecimals = getMakerTokenDecimals(submission.pair, submission.side);
+
+      if (!makerTokenAddress) {
+        throw new Error('Token mapping missing for selected pair. Configure token addresses in environment variables.');
+      }
+
+      const storagePayload: RFQStorageAccountDetails = {
+        pair: submission.pair,
+        side: submission.side,
+        price,
+        size,
+        minFill: minFillValue,
+        expiry: expiryIso,
+        tokenAddress: makerTokenAddress,
+        tokenDecimals: makerTokenDecimals,
+        makerAddress: walletIdentity,
+        allowlistLabel: submission.allowlistLabel,
+        metadata: {
+          autoSignProfileId: submission.autoSignProfileId ?? null,
+        },
+      };
+
+      const storageResult = await createRFQStorageAccount(storagePayload);
+
+      const nowIso = new Date().toISOString();
+      const newOrder: RFQOrder = {
+        id: '',
+        pair: submission.pair,
+        side: submission.side,
+        price,
+        size,
+        minFill: minFillValue,
+        expiry: expiryIso,
+        maker: submission.maker,
+        unsignedBlock: storageResult.blockHash ?? storageResult.address,
+        makerSignature: 'keeta_wallet_signature',
+        storageAccount: storageResult.address,
+        allowlisted: !!submission.allowlistLabel,
+        status: 'open',
+        createdAt: nowIso,
+        updatedAt: nowIso,
+      };
+
+      const createdOrder = await createRfqOrder(newOrder);
+      setOrders((prev) => [createdOrder, ...prev]);
+      setSelectedOrderId(createdOrder.id);
+      setFillAmountState(createdOrder.minFill ?? createdOrder.size);
+      void refreshEscrowState();
+      return createdOrder;
+    },
+    [createRFQStorageAccount, refreshEscrowState, walletIdentity],
+  );
 
   const cancelQuote = useCallback(
     async (orderId: string) => {
+      const order = orders.find((candidate) => candidate.id === orderId);
+      if (!order) {
+        throw new Error('RFQ order not found locally. Refresh and try again.');
+      }
+
+      const makerTokenAddress = getMakerTokenAddressFromOrder(order);
+      const makerTokenDecimals = getMakerTokenDecimalsFromOrder(order);
+      const remaining = Math.max(order.size - (order.takerFillAmount ?? 0), 0);
+
+      if (makerTokenAddress) {
+        await walletCancelRFQOrder({
+          order,
+          tokenAddress: makerTokenAddress,
+          tokenDecimals: makerTokenDecimals,
+          amount: remaining,
+        });
+      }
+
       await cancelRfqOrder(orderId).catch((error) => {
         console.error('[rfq] Failed to cancel quote', error);
         throw error instanceof Error ? error : new Error('Failed to cancel RFQ quote');
@@ -227,8 +366,9 @@ export function RFQProvider({ pair, children }: { pair: string; children: ReactN
         setSelectedOrderId(null);
         setFillAmountState(undefined);
       }
+      void refreshEscrowState();
     },
-    [selectedOrderId],
+    [orders, refreshEscrowState, selectedOrderId, walletCancelRFQOrder],
   );
 
   const value = useMemo<RFQContextValue>(
@@ -247,6 +387,11 @@ export function RFQProvider({ pair, children }: { pair: string; children: ReactN
       refreshOrders,
       isFilling,
       lastFillResult,
+      escrowState,
+      escrowError,
+      isVerifyingEscrow,
+      refreshEscrowState,
+      lastEscrowVerification,
     }),
     [
       pair,
@@ -263,6 +408,11 @@ export function RFQProvider({ pair, children }: { pair: string; children: ReactN
       refreshOrders,
       isFilling,
       lastFillResult,
+      escrowState,
+      escrowError,
+      isVerifyingEscrow,
+      refreshEscrowState,
+      lastEscrowVerification,
     ],
   );
 

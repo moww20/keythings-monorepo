@@ -133,6 +133,7 @@ interface RFQOrderCardProps {
 function RFQOrderCard({ order, isSelected, onSelect }: RFQOrderCardProps): React.JSX.Element {
   const relativeExpiry = formatRelativeTime(order.expiry);
   const isExpired = order.status === 'expired' || relativeExpiry.startsWith('Expired');
+  const escrowRef = order.storageAccount ?? order.unsignedBlock;
 
   return (
     <button
@@ -182,6 +183,10 @@ function RFQOrderCard({ order, isSelected, onSelect }: RFQOrderCardProps): React
             <span className="inline-flex items-center gap-1">
               <Clock3 className={`h-3 w-3 ${isExpired ? 'text-red-400' : 'text-muted'}`} />
               {relativeExpiry}
+            </span>
+            <span className="inline-flex items-center gap-1 font-mono">
+              <Zap className="h-3 w-3 text-accent" />
+              {escrowRef ? `${escrowRef.slice(0, 4)}…${escrowRef.slice(-4)}` : 'Escrow pending'}
             </span>
           </div>
         </div>

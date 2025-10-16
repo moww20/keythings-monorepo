@@ -6,6 +6,11 @@ import { AlertTriangle, CheckCircle2, ClipboardCopy, Info, Loader2 } from 'lucid
 
 import { useRFQContext } from '@/app/contexts/RFQContext';
 import { useWallet } from '@/app/contexts/WalletContext';
+import {
+  getMakerTokenAddressFromOrder,
+  getMakerTokenDecimalsFromOrder,
+  getTakerTokenAddressFromOrder,
+} from '@/app/lib/token-utils';
 
 function formatCurrency(value?: number): string {
   if (!value || Number.isNaN(value)) {
@@ -29,8 +34,27 @@ function formatToken(value?: number): string {
   });
 }
 
+function shorten(address: string, chars = 4): string {
+  if (!address || address.length <= chars * 2) {
+    return address;
+  }
+  return `${address.slice(0, chars)}…${address.slice(-chars)}`;
+}
+
 export function RFQTakerPanel(): React.JSX.Element {
-  const { selectedOrder, fillAmount, setFillAmount, requestFill, isFilling, lastFillResult } = useRFQContext();
+  const {
+    selectedOrder,
+    fillAmount,
+    setFillAmount,
+    requestFill,
+    isFilling,
+    lastFillResult,
+    escrowState,
+    escrowError,
+    isVerifyingEscrow,
+    refreshEscrowState,
+    lastEscrowVerification,
+  } = useRFQContext();
   const { isConnected, publicKey } = useWallet();
   const [localError, setLocalError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -75,6 +99,36 @@ export function RFQTakerPanel(): React.JSX.Element {
     };
   }, [fillAmount, selectedOrder]);
 
+  const escrowInsights = useMemo(() => {
+    if (!selectedOrder) {
+      return {
+        makerTokenAddress: undefined,
+        makerTokenDecimals: 0,
+        takerTokenAddress: undefined,
+        lockedAmount: null as number | null,
+      };
+    }
+
+    const makerTokenAddress = getMakerTokenAddressFromOrder(selectedOrder);
+    const makerTokenDecimals = getMakerTokenDecimalsFromOrder(selectedOrder);
+    const takerTokenAddress = getTakerTokenAddressFromOrder(selectedOrder);
+    const balanceEntry = escrowState?.balances.find((entry) => entry.token === makerTokenAddress);
+    const lockedAmount = balanceEntry ? balanceEntry.normalizedAmount : null;
+
+    return { makerTokenAddress, makerTokenDecimals, takerTokenAddress, lockedAmount };
+  }, [escrowState, selectedOrder]);
+
+  const { baseAsset, quoteAsset } = useMemo(() => {
+    if (!selectedOrder) {
+      return { baseAsset: 'BASE', quoteAsset: 'QUOTE' };
+    }
+    const [base, quote] = selectedOrder.pair.split('/');
+    return {
+      baseAsset: base ?? selectedOrder.pair,
+      quoteAsset: quote ?? base ?? selectedOrder.pair,
+    };
+  }, [selectedOrder]);
+
   const handleFillAmountChange = useCallback(
     (event: ChangeEvent<HTMLInputElement>) => {
       const value = Number.parseFloat(event.target.value);
@@ -92,7 +146,8 @@ export function RFQTakerPanel(): React.JSX.Element {
       return;
     }
     if (typeof navigator !== 'undefined' && navigator.clipboard) {
-      void navigator.clipboard.writeText(selectedOrder.unsignedBlock);
+      const reference = selectedOrder.storageAccount ?? selectedOrder.unsignedBlock;
+      void navigator.clipboard.writeText(reference);
       setCopied(true);
       setTimeout(() => setCopied(false), 1200);
     }
@@ -125,11 +180,16 @@ export function RFQTakerPanel(): React.JSX.Element {
       return;
     }
 
+    if (escrowInsights.lockedAmount !== null && fillAmount > escrowInsights.lockedAmount + 1e-9) {
+      setLocalError('Fill amount exceeds verified on-chain escrow balance.');
+      return;
+    }
+
     setLocalError(null);
     setSuccessMessage(null);
 
     await requestFill(selectedOrder.id, fillAmount, publicKey ?? undefined);
-  }, [fillAmount, isConnected, publicKey, requestFill, selectedOrder]);
+  }, [escrowInsights.lockedAmount, fillAmount, isConnected, publicKey, requestFill, selectedOrder]);
 
   if (!selectedOrder) {
     return (
@@ -159,7 +219,7 @@ export function RFQTakerPanel(): React.JSX.Element {
           className="inline-flex items-center gap-2 rounded-full border border-hairline px-3 py-1 text-[11px] font-medium text-muted transition-colors hover:border-accent hover:text-foreground"
         >
           <ClipboardCopy className="h-3 w-3" />
-          {copied ? 'Copied!' : 'Unsigned block'}
+          {copied ? 'Copied!' : 'Escrow ref'}
         </button>
       </div>
 
@@ -182,6 +242,46 @@ export function RFQTakerPanel(): React.JSX.Element {
           <p className="font-medium text-foreground">Expiry</p>
           <p>{new Date(selectedOrder.expiry).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
         </div>
+      </div>
+
+      <div className="space-y-2 rounded-lg border border-hairline bg-surface px-3 py-2 text-xs">
+        <div className="flex items-center justify-between">
+          <p className="font-medium text-foreground">Escrow verification</p>
+          <button
+            type="button"
+            onClick={() => refreshEscrowState()}
+            disabled={isVerifyingEscrow}
+            className="rounded-full border border-hairline px-3 py-1 text-[11px] font-medium text-muted transition-colors hover:border-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {isVerifyingEscrow ? 'Verifying…' : 'Refresh'}
+          </button>
+        </div>
+        {escrowError ? (
+          <p className="rounded bg-red-500/10 px-3 py-2 text-[11px] text-red-200">{escrowError}</p>
+        ) : (
+          <div className="space-y-2 text-muted">
+            <div className="flex items-center justify-between gap-2 text-[11px]">
+              <span>Storage account</span>
+              <span className="font-mono text-foreground">{shorten(selectedOrder.storageAccount ?? selectedOrder.unsignedBlock)}</span>
+            </div>
+            <div className="flex items-center justify-between gap-2 text-[11px]">
+              <span>Locked funds</span>
+              <span className="text-foreground">
+                {escrowInsights.lockedAmount != null
+                  ? `${formatToken(escrowInsights.lockedAmount)} ${selectedOrder.side === 'sell' ? quoteAsset : baseAsset}`
+                  : 'Pending verification'}
+              </span>
+            </div>
+            <div className="flex items-center justify-between gap-2 text-[11px]">
+              <span>Last checked</span>
+              <span className="text-foreground">
+                {lastEscrowVerification
+                  ? new Date(lastEscrowVerification).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+                  : 'Not yet verified'}
+              </span>
+            </div>
+          </div>
+        )}
       </div>
 
       <label className="space-y-2">

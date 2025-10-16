@@ -63,6 +63,7 @@ const orderSchema = z
     maker: makerSchema,
     unsigned_block: z.string(),
     maker_signature: z.string(),
+    storage_account: z.string().optional(),
     allowlisted: z.boolean().optional().default(false),
     status: rfqStatusSchema,
     taker_fill_amount: z.union([z.string(), z.number(), z.null()]).optional(),
@@ -86,6 +87,7 @@ const orderSchema = z
     maker: value.maker,
     unsignedBlock: value.unsigned_block,
     makerSignature: value.maker_signature,
+    storageAccount: value.storage_account ?? value.unsigned_block,
     allowlisted: value.allowlisted ?? false,
     status: value.status,
     takerFillAmount:
@@ -249,6 +251,7 @@ export async function createRfqOrder(order: RFQOrder): Promise<RFQOrder> {
     },
     unsigned_block: order.unsignedBlock,
     maker_signature: order.makerSignature,
+    storage_account: order.storageAccount ?? order.unsignedBlock,
     allowlisted: order.allowlisted,
     status: order.status,
     taker_fill_amount: order.takerFillAmount,
