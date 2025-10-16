@@ -158,7 +158,7 @@ export function RFQTakerPanel({ mode, onModeChange }: RFQTakerPanelProps): React
       return;
     }
     if (typeof navigator !== 'undefined' && navigator.clipboard) {
-      const reference = selectedOrder.storageAccount ?? selectedOrder.unsignedBlock;
+      const reference = selectedOrder.storageAccount ?? selectedOrder.unsignedBlock ?? 'No reference available';
       void navigator.clipboard.writeText(reference);
       setCopied(true);
       setTimeout(() => setCopied(false), 1200);
@@ -284,11 +284,9 @@ export function RFQTakerPanel({ mode, onModeChange }: RFQTakerPanelProps): React
         throw new Error('Invalid storage account address format - must be a valid Keeta address starting with "keeta_"');
       }
       
-              // Additional validation: check if it's not a placeholder
-              if (storageAccountAddress.includes('blockchain_handled') || 
-                  storageAccountAddress.includes('placeholder') || 
-                  storageAccountAddress.includes('PENDING_VERIFICATION')) {
-                throw new Error('Storage account is not yet created. The Maker must fund their quote first.');
+              // Additional validation: ensure it's a real Keeta address
+              if (storageAccountAddress.length < 10 || !storageAccountAddress.includes('_')) {
+                throw new Error('Invalid storage account address format. The Maker must fund their quote first.');
               }
       
       // 1. Taker receives Token_A from storage account (funded by Maker)
@@ -551,7 +549,7 @@ export function RFQTakerPanel({ mode, onModeChange }: RFQTakerPanelProps): React
           <div className="space-y-2 text-muted">
             <div className="flex items-center justify-between gap-2 text-[11px]">
               <span>Storage account</span>
-              <span className="font-mono text-foreground">{shorten(selectedOrder.storageAccount ?? selectedOrder.unsignedBlock)}</span>
+              <span className="font-mono text-foreground">{shorten(selectedOrder.storageAccount ?? selectedOrder.unsignedBlock ?? 'No address available')}</span>
             </div>
             <div className="flex items-center justify-between gap-2 text-[11px]">
               <span>Locked funds</span>

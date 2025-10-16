@@ -33,8 +33,9 @@ pub struct RFQOrder {
     pub min_fill: Option<f64>,
     pub expiry: String,
     pub maker: RFQMakerMeta,
-    pub unsigned_block: String,
-    pub maker_signature: String,
+    pub unsigned_block: Option<String>,
+    pub maker_signature: Option<String>,
+    pub storage_account: Option<String>,
     pub allowlisted: bool,
     pub status: String, // "open", "pending_fill", "filled", "expired"
     pub taker_fill_amount: Option<f64>,
@@ -160,8 +161,9 @@ pub fn init_rfq_data() {
         min_fill: Some(0.05),
         expiry: "2024-12-31T23:59:59Z".to_string(),
         maker: makers.get("maker-1").unwrap().clone(),
-        unsigned_block: "sample_unsigned_block_1".to_string(),
-        maker_signature: "sample_maker_signature_1".to_string(),
+        unsigned_block: None,
+        maker_signature: None,
+        storage_account: None,
         allowlisted: true,
         status: "open".to_string(),
         taker_fill_amount: None,
@@ -180,8 +182,9 @@ pub fn init_rfq_data() {
         min_fill: Some(0.01),
         expiry: "2024-12-31T23:59:59Z".to_string(),
         maker: makers.get("maker-2").unwrap().clone(),
-        unsigned_block: "sample_unsigned_block_2".to_string(),
-        maker_signature: "sample_maker_signature_2".to_string(),
+        unsigned_block: None,
+        maker_signature: None,
+        storage_account: None,
         allowlisted: false,
         status: "open".to_string(),
         taker_fill_amount: None,
@@ -200,8 +203,9 @@ pub fn init_rfq_data() {
         min_fill: Some(0.5),
         expiry: "2024-12-31T23:59:59Z".to_string(),
         maker: makers.get("maker-1").unwrap().clone(),
-        unsigned_block: "sample_unsigned_block_3".to_string(),
-        maker_signature: "sample_maker_signature_3".to_string(),
+        unsigned_block: None,
+        maker_signature: None,
+        storage_account: None,
         allowlisted: true,
         status: "open".to_string(),
         taker_fill_amount: None,
@@ -436,54 +440,6 @@ pub async fn get_declarations(path: web::Path<String>) -> impl Responder {
         .collect();
     
     HttpResponse::Ok().json(order_declarations)
-}
-
-// Update order storage account address
-pub async fn update_order_storage_account(
-    path: web::Path<String>,
-    payload: web::Json<serde_json::Value>,
-) -> impl Responder {
-    let order_id = path.into_inner();
-    
-    // Extract storage account address from payload
-    let storage_account = match payload.get("storage_account") {
-        Some(addr) => match addr.as_str() {
-            Some(addr_str) => addr_str.to_string(),
-            None => {
-                return HttpResponse::BadRequest().json(serde_json::json!({
-                    "error": "Invalid storage account address format"
-                }));
-            }
-        },
-        None => {
-            return HttpResponse::BadRequest().json(serde_json::json!({
-                "error": "Missing storage_account field"
-            }));
-        }
-    };
-    
-    // Validate storage account format
-    if !storage_account.starts_with("keeta_") {
-        return HttpResponse::BadRequest().json(serde_json::json!({
-            "error": "Invalid storage account address format - must start with 'keeta_'"
-        }));
-    }
-    
-    // Update the order in the orders map
-    let mut orders = RFQ_ORDERS.lock().unwrap();
-    if let Some(order) = orders.get_mut(&order_id) {
-        order.storage_account = storage_account.clone();
-        order.updated_at = chrono::Utc::now().to_rfc3339();
-        
-        log::info!("[RFQ] Updated order {} with storage account: {}", order_id, storage_account);
-        
-        HttpResponse::Ok().json(order.clone())
-    } else {
-        drop(orders);
-        HttpResponse::NotFound().json(serde_json::json!({
-            "error": "Order not found"
-        }))
-    }
 }
 
 // Maker approves or rejects a declaration

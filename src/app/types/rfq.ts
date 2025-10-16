@@ -22,8 +22,8 @@ export interface RFQOrder {
   minFill?: number;
   expiry: string;
   maker: RFQMakerMeta;
-  unsignedBlock: string;
-  makerSignature: string;
+  unsignedBlock?: string | null;
+  makerSignature?: string | null;
   storageAccount?: string;
   allowlisted: boolean;
   status: RFQOrderStatus;
