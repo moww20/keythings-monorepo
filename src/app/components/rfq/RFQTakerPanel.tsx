@@ -254,18 +254,22 @@ export function RFQTakerPanel({ mode, onModeChange }: RFQTakerPanelProps): React
       // Taker declares: "I receive Y Token_A from storage and send X Token_B to Maker"
       
       // Get storage account address from the order
-      if (!selectedOrder.storageAccount) {
-        throw new Error('Storage account address not found in order');
-      }
       if (!selectedOrder.maker?.id) {
         throw new Error('Maker address not found in order');
       }
       
+      console.log('[RFQTakerPanel] Debug - selectedOrder:', selectedOrder);
       console.log('[RFQTakerPanel] Debug - storageAccount:', selectedOrder.storageAccount);
+      console.log('[RFQTakerPanel] Debug - unsignedBlock:', selectedOrder.unsignedBlock);
       console.log('[RFQTakerPanel] Debug - maker.id:', selectedOrder.maker.id);
       
-      // 1. Taker receives Token_A from storage account
-      const storageAccount = { publicKeyString: selectedOrder.storageAccount };
+      // For atomic swaps, the Taker receives from the storage account (if available) or directly from the Maker
+      // The storage account is created when the Maker funds their quote
+      const storageAccountAddress = selectedOrder.storageAccount || selectedOrder.maker.id;
+      console.log('[RFQTakerPanel] Debug - using storageAccountAddress:', storageAccountAddress);
+      
+      // 1. Taker receives Token_A from storage account (or Maker directly)
+      const storageAccount = { publicKeyString: storageAccountAddress };
       const makerAccount = { publicKeyString: selectedOrder.maker.id };
       
       // Ensure token addresses are strings
