@@ -262,13 +262,9 @@ export function RFQMakerPanel({ mode, onModeChange }: RFQMakerPanelProps): React
   }, [draft.minFill]);
 
   const goToPreviousStep = useCallback(() => {
-    if (step === 'controls') {
-      setStep('details');
-      return;
-    }
     if (step === 'review') {
       setCurrentSubmission(null);
-      setStep('controls');
+      setStep('details');
     }
   }, [setCurrentSubmission, step]);
 
@@ -821,16 +817,14 @@ export function RFQMakerPanel({ mode, onModeChange }: RFQMakerPanelProps): React
 
       {/* Progress Indicator */}
       <div className="flex flex-col gap-3">
-        <div className="grid grid-cols-4 gap-2">
-          {(['details', 'controls', 'review', 'funding'] as const).map((wizardStep, index) => {
+        <div className="grid grid-cols-3 gap-2">
+          {(['details', 'review', 'funding'] as const).map((wizardStep, index) => {
             const isActive =
               (wizardStep === 'details' && step === 'details') ||
-              (wizardStep === 'controls' && step === 'controls') ||
               (wizardStep === 'review' && ['review', 'creating'].includes(step)) ||
               (wizardStep === 'funding' && step === 'funding');
             const isComplete =
-              (wizardStep === 'details' && ['controls', 'review', 'creating', 'funding'].includes(step)) ||
-              (wizardStep === 'controls' && ['review', 'creating', 'funding'].includes(step)) ||
+              (wizardStep === 'details' && ['review', 'creating', 'funding'].includes(step)) ||
               (wizardStep === 'review' && ['creating', 'funding'].includes(step));
 
             return (
@@ -848,7 +842,6 @@ export function RFQMakerPanel({ mode, onModeChange }: RFQMakerPanelProps): React
                 </div>
                 <span className="text-[11px] font-medium leading-tight">
                   {wizardStep === 'details' && 'Quote Details'}
-                  {wizardStep === 'controls' && 'Fill Controls'}
                   {wizardStep === 'review' && 'Create Storage'}
                   {wizardStep === 'funding' && 'Publish Quote'}
                 </span>
@@ -1172,42 +1165,6 @@ export function RFQMakerPanel({ mode, onModeChange }: RFQMakerPanelProps): React
         </div>
       )}
 
-      {/* Step 2: Controls */}
-      {step === 'controls' && (
-        <div className="space-y-4">
-          <div className="rounded-lg border border-hairline bg-surface-strong p-4">
-            <h4 className="mb-3 text-sm font-semibold text-foreground">Fill Controls</h4>
-            <div className="space-y-3 text-sm">
-              <div>
-                <label className="mb-1 block text-xs font-medium text-muted">Minimum Fill Size (optional)</label>
-                <input
-                  type="number"
-                  step="0.000001"
-                  value={draft.minFill}
-                  onChange={(e) => setDraft(prev => ({ ...prev, minFill: e.target.value }))}
-                  placeholder="No minimum"
-                  className="w-full rounded-lg border border-hairline bg-surface px-3 py-2 text-sm text-foreground focus:border-accent focus:outline-none"
-                />
-                <p className="mt-1 text-xs text-muted">Takers must meet this size to auto-settle the RFQ.</p>
-              </div>
-              <div>
-                <label className="mb-1 block text-xs font-medium text-muted">Allowlist Label (optional)</label>
-                <input
-                  type="text"
-                  value={draft.allowlistLabel}
-                  onChange={(e) => setDraft(prev => ({ ...prev, allowlistLabel: e.target.value }))}
-                  placeholder="VIP, Institutional, etc."
-                  className="w-full rounded-lg border border-hairline bg-surface px-3 py-2 text-sm text-foreground focus:border-accent focus:outline-none"
-                />
-                <p className="mt-1 text-xs text-muted">Only takers in this segment will see the quote in their RFQ stream.</p>
-              </div>
-            </div>
-          </div>
-          <div className="rounded-lg border border-hairline bg-surface p-4 text-xs text-muted">
-            Use maker preferences to tune settlement automation. Auto-sign SLA stays controlled by your wallet integration ({makerProfile.autoSignSlaMs} ms).
-          </div>
-        </div>
-      )}
 
       {/* Step 3: Review */}
       {step === 'review' && reviewSubmission && (
@@ -1298,7 +1255,7 @@ export function RFQMakerPanel({ mode, onModeChange }: RFQMakerPanelProps): React
 
       {/* Action Buttons */}
       <div className="flex flex-col gap-3">
-        {['details', 'controls', 'review'].includes(step) && (
+        {['details', 'review'].includes(step) && (
           <div className="flex gap-3">
             {step !== 'details' && (
               <button
@@ -1315,7 +1272,7 @@ export function RFQMakerPanel({ mode, onModeChange }: RFQMakerPanelProps): React
                 onClick={() => {
                   if (validateDetailsStep()) {
                     setCurrentSubmission(null);
-                    setStep('controls');
+                    setStep('review');
                   }
                 }}
                 className={`flex flex-1 items-center justify-center gap-2 rounded-lg px-4 py-3 text-sm font-semibold text-white transition-colors ${

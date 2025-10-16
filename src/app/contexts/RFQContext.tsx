@@ -314,8 +314,9 @@ export function RFQProvider({ pair, children }: { pair: string; children: ReactN
 
       // Create order in backend (blockchain operations handled in RFQMakerPanel)
       const nowIso = new Date().toISOString();
+      const orderId = `order-${Date.now()}`;
       const newOrder: RFQOrder = {
-        id: '',
+        id: orderId,
         pair: submission.pair,
         side: submission.side,
         price,

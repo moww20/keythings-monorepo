@@ -251,10 +251,10 @@ export async function createRfqOrder(order: RFQOrder): Promise<RFQOrder> {
       auto_sign_sla_ms: order.maker.autoSignSlaMs,
       fills_completed: order.maker.fillsCompleted,
       failure_rate: order.maker.failureRate,
-      ...(order.maker.allowlistLabel && { allowlist_label: order.maker.allowlistLabel }),
+      allowlist_label: order.maker.allowlistLabel || null, // Always send, even if null
     },
-    ...(order.unsignedBlock && { unsigned_block: order.unsignedBlock }),
-    ...(order.makerSignature && { maker_signature: order.makerSignature }),
+    unsigned_block: order.unsignedBlock || null,
+    maker_signature: order.makerSignature || null,
     ...(order.storageAccount && { storage_account: order.storageAccount }),
     allowlisted: order.allowlisted,
     status: order.status,
@@ -267,6 +267,11 @@ export async function createRfqOrder(order: RFQOrder): Promise<RFQOrder> {
 
 
 
+
+  // Debug: Log the exact payload being sent
+  console.log('[rfq-api] createRfqOrder payload:', JSON.stringify(backendOrder, null, 2));
+  console.log('[rfq-api] createRfqOrder payload length:', JSON.stringify(backendOrder).length);
+  console.log('[rfq-api] createRfqOrder payload at column 380:', JSON.stringify(backendOrder).substring(375, 385));
 
   const response = await apiRequest<unknown>('/api/rfq/orders', {
     method: 'POST',
