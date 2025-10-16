@@ -241,7 +241,11 @@ export async function createRfqOrder(order: RFQOrder): Promise<RFQOrder> {
     side: order.side,
     price: order.price,
     size: order.size,
+<<<<<<< HEAD
     ...(order.minFill !== null && order.minFill !== undefined && { min_fill: order.minFill }),
+=======
+    ...(order.minFill !== undefined ? { min_fill: order.minFill } : {}),
+>>>>>>> 2dae798f2f23f2cc0852c9b50a38541e9e1b41d1
     expiry: order.expiry,
     maker: {
       id: order.maker.id,
