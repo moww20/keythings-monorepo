@@ -6,6 +6,7 @@ import { AlertTriangle, CheckCircle2, ClipboardCopy, Loader2, Zap } from 'lucide
 import { useMakerProfiles, useRFQContext } from '@/app/contexts/RFQContext';
 import type { RFQMakerMeta, RFQQuoteDraft, RFQQuoteSubmission, RFQDeclaration } from '@/app/types/rfq';
 import { useWallet } from '@/app/contexts/WalletContext';
+import { useTokenBalances } from '@/app/hooks/useWalletData';
 import { StorageAccountManager } from '@/app/lib/storage-account-manager';
 import { createPermissionPayload } from '@/app/lib/storage-account-manager';
 import { getMakerTokenAddress, getMakerTokenDecimals, getTakerTokenAddress, getTakerTokenDecimals, toBaseUnits } from '@/app/lib/token-utils';
@@ -71,6 +72,7 @@ export function RFQMakerPanel({ mode, onModeChange }: RFQMakerPanelProps): React
   const { pair, createQuote, cancelQuote, selectedOrder } = useRFQContext();
   const makerProfiles = useMakerProfiles();
   const { publicKey, isConnected, userClient } = useWallet();
+  const { balances, isLoading: isLoadingBalances, error: balancesError } = useTokenBalances(isConnected);
   const [draft, setDraft] = useState<MakerDraftState>(DEFAULT_DRAFT);
   const [isPublishing, setIsPublishing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -87,6 +89,46 @@ export function RFQMakerPanel({ mode, onModeChange }: RFQMakerPanelProps): React
   const [declarations, setDeclarations] = useState<RFQDeclaration[]>([]);
   const [isLoadingDeclarations, setIsLoadingDeclarations] = useState(false);
   const [isApprovingDeclaration, setIsApprovingDeclaration] = useState<string | null>(null);
+  
+  // Token selection state
+  const [selectedToken, setSelectedToken] = useState<string | null>(null);
+
+  // Get available tokens from wallet balances
+  const availableTokens = useMemo(() => {
+    if (!Array.isArray(balances) || balances.length === 0) {
+      return [];
+    }
+    
+    return balances
+      .filter((balance: any) => {
+        // Filter out tokens with zero balance and ensure we have required fields
+        return balance && 
+               typeof balance === 'object' && 
+               'balance' in balance && 
+               'token' in balance &&
+               parseFloat(balance.balance || '0') > 0;
+      })
+      .map((balance: any) => ({
+        address: balance.token,
+        symbol: balance.symbol || 'Unknown',
+        name: balance.name || 'Unknown Token',
+        balance: balance.balance || '0',
+        decimals: balance.decimals || 0,
+      }))
+      .sort((a, b) => {
+        // Sort by balance (highest first)
+        const balanceA = parseFloat(a.balance);
+        const balanceB = parseFloat(b.balance);
+        return balanceB - balanceA;
+      });
+  }, [balances]);
+
+  // Auto-select first token when available
+  useEffect(() => {
+    if (availableTokens.length > 0 && !selectedToken) {
+      setSelectedToken(availableTokens[0].address);
+    }
+  }, [availableTokens, selectedToken]);
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -271,24 +313,30 @@ export function RFQMakerPanel({ mode, onModeChange }: RFQMakerPanelProps): React
       // Fund the storage account with the maker's tokens
       console.log('[RFQMakerPanel] Funding storage account with maker tokens...');
       
-      // Get maker token address and decimals
-      const makerTokenAddress = getMakerTokenAddress(currentSubmission.pair, currentSubmission.side);
-      if (!makerTokenAddress) {
-        throw new Error(`Token address not found for ${currentSubmission.side} side of pair ${currentSubmission.pair}`);
+      // Get selected token information
+      if (!selectedToken) {
+        throw new Error('Please select a token to trade');
       }
       
-      const makerTokenDecimals = getMakerTokenDecimals(currentSubmission.pair, currentSubmission.side);
+      const selectedTokenInfo = availableTokens.find(t => t.address === selectedToken);
+      if (!selectedTokenInfo) {
+        throw new Error('Selected token not found in available tokens');
+      }
+      
+      // For RFQ, the maker provides the selected token, taker provides KTA (base token)
+      const makerTokenAddress = selectedTokenInfo.address;
+      const makerTokenDecimals = selectedTokenInfo.decimals;
       const makerAmount = toBaseUnits(parseFloat(currentSubmission.size), makerTokenDecimals);
       
-      // Get taker token information for atomic swap terms
-      const takerTokenAddress = getTakerTokenAddress(currentSubmission.pair, currentSubmission.side);
-      const takerTokenDecimals = getTakerTokenDecimals(currentSubmission.pair, currentSubmission.side);
+      // Taker always provides KTA (base token)
+      const takerTokenAddress = (userClient?.baseToken as any)?.publicKeyString || 'keeta_base_token_placeholder';
+      const takerTokenDecimals = 6; // KTA has 6 decimals
       const takerAmount = toBaseUnits(parseFloat(currentSubmission.size) * parseFloat(currentSubmission.price), takerTokenDecimals);
       
       // Set metadata with RFQ order details and atomic swap terms
       const metadataJson = JSON.stringify({
         // Existing fields
-        pair: currentSubmission.pair,
+        pair: `${selectedTokenInfo.symbol}/KTA`,
         side: currentSubmission.side,
         price: currentSubmission.price,
         size: currentSubmission.size,
@@ -386,7 +434,7 @@ export function RFQMakerPanel({ mode, onModeChange }: RFQMakerPanelProps): React
     } finally {
       setIsPublishing(false);
     }
-  }, [userClient, publicKey, storageAccountAddress, currentSubmission, createQuote, makerProfile]);
+  }, [userClient, publicKey, storageAccountAddress, currentSubmission, createQuote, makerProfile, availableTokens, selectedToken]);
 
   const handleCreateStorage = useCallback(async () => {
     if (!isConnected || !publicKey || !userClient) {
@@ -799,8 +847,46 @@ export function RFQMakerPanel({ mode, onModeChange }: RFQMakerPanelProps): React
           <div className="rounded-lg border border-hairline bg-surface-strong p-4">
             <div className="mb-3 flex items-center justify-between text-xs text-muted">
               <span>Trading Pair</span>
-              <span className="text-foreground font-medium">{pair}</span>
+              <span className="text-foreground font-medium">
+                {selectedToken && availableTokens.find(t => t.address === selectedToken) 
+                  ? `${availableTokens.find(t => t.address === selectedToken)?.symbol}/KTA`
+                  : 'Select Token'
+                }
+              </span>
             </div>
+            
+            {/* Token Selector */}
+            <div className="mb-4">
+              <label className="mb-2 block text-xs font-medium text-muted">Select Token to Trade</label>
+              {isLoadingBalances ? (
+                <div className="flex items-center gap-2 text-sm text-muted">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Loading your tokens...
+                </div>
+              ) : balancesError ? (
+                <div className="text-sm text-red-500">
+                  Error loading tokens: {balancesError}
+                </div>
+              ) : availableTokens.length === 0 ? (
+                <div className="text-sm text-muted">
+                  No tokens found in your wallet. Please add some tokens to create a quote.
+                </div>
+              ) : (
+                <select
+                  value={selectedToken || ''}
+                  onChange={(e) => setSelectedToken(e.target.value)}
+                  className="w-full rounded-lg border border-hairline bg-surface px-3 py-2 text-sm text-foreground focus:border-accent focus:outline-none"
+                  aria-label="Select token to trade"
+                >
+                  {availableTokens.map((token) => (
+                    <option key={token.address} value={token.address}>
+                      {token.symbol} - {parseFloat(token.balance).toFixed(6)} {token.symbol}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
+            
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="mb-1 block text-xs font-medium text-muted">Side</label>
@@ -1018,7 +1104,9 @@ export function RFQMakerPanel({ mode, onModeChange }: RFQMakerPanelProps): React
                 onClick={() => {
                   if (validateControlsStep()) {
                     setCurrentSubmission({
-                      pair,
+                      pair: selectedToken && availableTokens.find(t => t.address === selectedToken) 
+                        ? `${availableTokens.find(t => t.address === selectedToken)?.symbol}/KTA`
+                        : pair,
                       side: draft.side,
                       price: draft.price,
                       size: draft.size,
