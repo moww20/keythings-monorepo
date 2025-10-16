@@ -438,6 +438,54 @@ pub async fn get_declarations(path: web::Path<String>) -> impl Responder {
     HttpResponse::Ok().json(order_declarations)
 }
 
+// Update order storage account address
+pub async fn update_order_storage_account(
+    path: web::Path<String>,
+    payload: web::Json<serde_json::Value>,
+) -> impl Responder {
+    let order_id = path.into_inner();
+    
+    // Extract storage account address from payload
+    let storage_account = match payload.get("storage_account") {
+        Some(addr) => match addr.as_str() {
+            Some(addr_str) => addr_str.to_string(),
+            None => {
+                return HttpResponse::BadRequest().json(serde_json::json!({
+                    "error": "Invalid storage account address format"
+                }));
+            }
+        },
+        None => {
+            return HttpResponse::BadRequest().json(serde_json::json!({
+                "error": "Missing storage_account field"
+            }));
+        }
+    };
+    
+    // Validate storage account format
+    if !storage_account.starts_with("keeta_") {
+        return HttpResponse::BadRequest().json(serde_json::json!({
+            "error": "Invalid storage account address format - must start with 'keeta_'"
+        }));
+    }
+    
+    // Update the order in the orders map
+    let mut orders = RFQ_ORDERS.lock().unwrap();
+    if let Some(order) = orders.get_mut(&order_id) {
+        order.storage_account = storage_account.clone();
+        order.updated_at = chrono::Utc::now().to_rfc3339();
+        
+        log::info!("[RFQ] Updated order {} with storage account: {}", order_id, storage_account);
+        
+        HttpResponse::Ok().json(order.clone())
+    } else {
+        drop(orders);
+        HttpResponse::NotFound().json(serde_json::json!({
+            "error": "Order not found"
+        }))
+    }
+}
+
 // Maker approves or rejects a declaration
 pub async fn approve_declaration(
     path: web::Path<String>,

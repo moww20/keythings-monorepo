@@ -233,6 +233,25 @@ export async function submitRfqFill(
   return parsed.data;
 }
 
+export async function updateRfqOrderStorageAccount(orderId: string, storageAccountAddress: string): Promise<RFQOrder> {
+  const response = await apiRequest<unknown>(
+    `/api/rfq/orders/${encodeURIComponent(orderId)}/storage-account`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify({
+        storage_account: storageAccountAddress,
+      }),
+    },
+  );
+
+  const parsed = orderSchema.safeParse(response);
+  if (!parsed.success) {
+    throw new Error('Failed to parse RFQ order update response');
+  }
+
+  return parsed.data;
+}
+
 export async function createRfqOrder(order: RFQOrder): Promise<RFQOrder> {
   // Transform frontend camelCase to backend snake_case
   const backendOrder = {

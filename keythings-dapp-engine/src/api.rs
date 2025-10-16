@@ -113,7 +113,8 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
             // RFQ Declaration routes
             .route("/rfq/orders/{order_id}/declare", web::post().to(crate::rfq_api::declare_intention))
             .route("/rfq/orders/{order_id}/declarations", web::get().to(crate::rfq_api::get_declarations))
-            .route("/rfq/orders/{order_id}/approve-declaration", web::post().to(crate::rfq_api::approve_declaration)),
+            .route("/rfq/orders/{order_id}/approve-declaration", web::post().to(crate::rfq_api::approve_declaration))
+            .route("/rfq/orders/{order_id}/storage-account", web::patch().to(crate::rfq_api::update_order_storage_account)),
     );
 }
 
