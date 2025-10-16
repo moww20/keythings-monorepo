@@ -92,6 +92,7 @@ export function RFQMakerPanel({ mode, onModeChange }: RFQMakerPanelProps): React
   
   // Token selection state
   const [selectedToken, setSelectedToken] = useState<string | null>(null);
+  const [isSelectingToken, setIsSelectingToken] = useState(false);
 
   // Get available tokens from processed tokens (same as Dashboard)
   const availableTokens = useMemo(() => {
@@ -911,7 +912,7 @@ export function RFQMakerPanel({ mode, onModeChange }: RFQMakerPanelProps): React
               ) : (
                 <div className="space-y-2">
                   {/* Selected Token Display */}
-                  {selectedToken && (
+                  {selectedToken && !isSelectingToken && (
                     <div className="flex items-center gap-3 p-3 rounded-lg border border-hairline bg-surface">
                       {(() => {
                         const token = availableTokens.find(t => t.address === selectedToken);
@@ -961,7 +962,7 @@ export function RFQMakerPanel({ mode, onModeChange }: RFQMakerPanelProps): React
                             {/* Change Button */}
                             <button
                               type="button"
-                              onClick={() => setSelectedToken(null)}
+                              onClick={() => setIsSelectingToken(true)}
                               className="text-xs text-accent hover:text-accent/80 transition-colors"
                             >
                               Change
@@ -973,8 +974,24 @@ export function RFQMakerPanel({ mode, onModeChange }: RFQMakerPanelProps): React
                   )}
                   
                   {/* Token Selection Dropdown */}
-                  {!selectedToken && (
-                    <div className="space-y-2 max-h-48 overflow-y-auto">
+                  {(!selectedToken || isSelectingToken) && (
+                    <div className="space-y-2">
+                      {/* Cancel Button (only show when changing selection) */}
+                      {isSelectingToken && selectedToken && (
+                        <button
+                          type="button"
+                          onClick={() => setIsSelectingToken(false)}
+                          className="w-full flex items-center justify-center gap-2 p-2 rounded-lg border border-hairline bg-surface hover:bg-surface-strong transition-colors text-sm text-muted"
+                        >
+                          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                          Cancel
+                        </button>
+                      )}
+                      
+                      {/* Token List */}
+                      <div className="max-h-48 overflow-y-auto space-y-2">
                       {availableTokens.map((token) => {
                         const fullToken = tokens.find(t => t.address === token.address);
                         
@@ -982,7 +999,10 @@ export function RFQMakerPanel({ mode, onModeChange }: RFQMakerPanelProps): React
                           <button
                             key={token.address}
                             type="button"
-                            onClick={() => setSelectedToken(token.address)}
+                            onClick={() => {
+                              setSelectedToken(token.address);
+                              setIsSelectingToken(false);
+                            }}
                             className="w-full flex items-center gap-3 p-3 rounded-lg border border-hairline bg-surface hover:bg-surface-strong transition-colors text-left"
                           >
                             {/* Token Icon */}
@@ -1028,6 +1048,7 @@ export function RFQMakerPanel({ mode, onModeChange }: RFQMakerPanelProps): React
                           </button>
                         );
                       })}
+                      </div>
                     </div>
                   )}
                 </div>
