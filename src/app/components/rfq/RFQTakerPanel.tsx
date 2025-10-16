@@ -284,10 +284,12 @@ export function RFQTakerPanel({ mode, onModeChange }: RFQTakerPanelProps): React
         throw new Error('Invalid storage account address format - must be a valid Keeta address starting with "keeta_"');
       }
       
-      // Additional validation: check if it's not a placeholder
-      if (storageAccountAddress.includes('blockchain_handled') || storageAccountAddress.includes('placeholder')) {
-        throw new Error('Storage account is not yet created. The Maker must fund their quote first.');
-      }
+              // Additional validation: check if it's not a placeholder
+              if (storageAccountAddress.includes('blockchain_handled') || 
+                  storageAccountAddress.includes('placeholder') || 
+                  storageAccountAddress.includes('PENDING_VERIFICATION')) {
+                throw new Error('Storage account is not yet created. The Maker must fund their quote first.');
+              }
       
       // 1. Taker receives Token_A from storage account (funded by Maker)
       const storageAccount = { publicKeyString: storageAccountAddress };

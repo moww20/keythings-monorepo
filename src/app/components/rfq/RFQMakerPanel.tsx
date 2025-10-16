@@ -495,6 +495,11 @@ export function RFQMakerPanel({ mode, onModeChange }: RFQMakerPanelProps): React
         
         rfqStorageAddress = await Promise.race([createPromise, timeoutPromise]);
         console.log('[RFQMakerPanel] ✅ Storage account created:', rfqStorageAddress);
+        
+        // Validate that we got a real Keeta address, not a placeholder
+        if (!rfqStorageAddress || !rfqStorageAddress.startsWith('keeta_')) {
+          throw new Error(`Invalid storage account address received: ${rfqStorageAddress}`);
+        }
       } catch (error) {
         if (error instanceof Error && error.message === 'TIMEOUT') {
           // Timeout - but transaction might have succeeded
@@ -512,9 +517,20 @@ export function RFQMakerPanel({ mode, onModeChange }: RFQMakerPanelProps): React
             throw new Error('RFQ order creation cancelled by user');
           }
           
-          // User confirmed - proceed with a placeholder, they can deposit manually later
-          rfqStorageAddress = 'PENDING_VERIFICATION';
-          console.log('[RFQMakerPanel] User confirmed approval, proceeding...');
+          // User confirmed - but we still need a real address
+          // Ask them to manually enter the storage account address
+          const manualAddress = prompt(
+            'Please enter the storage account address from your wallet:\n\n' +
+            'Look for a new storage account in your wallet that starts with "keeta_"\n\n' +
+            'Enter the full address:'
+          );
+          
+          if (!manualAddress || !manualAddress.startsWith('keeta_')) {
+            throw new Error('Invalid storage account address provided. Must start with "keeta_"');
+          }
+          
+          rfqStorageAddress = manualAddress;
+          console.log('[RFQMakerPanel] User provided manual address:', rfqStorageAddress);
         } else {
           throw error;
         }
