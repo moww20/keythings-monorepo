@@ -270,6 +270,8 @@ export function RFQProvider({ pair, children }: { pair: string; children: ReactN
   const createQuote = useCallback(
     async (submission: RFQQuoteSubmission, storageAccountAddress?: string) => {
       console.log('[RFQContext] createQuote called with storageAccountAddress:', storageAccountAddress);
+      console.log('[RFQContext] storageAccountAddress type:', typeof storageAccountAddress);
+      console.log('[RFQContext] storageAccountAddress starts with keeta_:', storageAccountAddress?.startsWith('keeta_'));
       console.log('[RFQContext] submission:', submission);
       
       if (!walletIdentity) {
@@ -333,7 +335,11 @@ export function RFQProvider({ pair, children }: { pair: string; children: ReactN
         updatedAt: nowIso,
       };
 
+      console.log('[RFQContext] newOrder.storageAccount:', newOrder.storageAccount);
+
       const createdOrder = await createRfqOrder(newOrder);
+      console.log('[RFQContext] createdOrder.storageAccount:', createdOrder.storageAccount);
+
       setOrders((prev) => [createdOrder, ...prev]);
       setSelectedOrderId(createdOrder.id);
       setFillAmountState(createdOrder.minFill ?? createdOrder.size);

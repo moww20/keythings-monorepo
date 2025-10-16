@@ -439,7 +439,13 @@ export function RFQMakerPanel({ mode, onModeChange }: RFQMakerPanelProps): React
 
       // Create the order with the real storage account address
       console.log('[RFQMakerPanel] Creating order with real storage account address...');
-      
+      console.log('[RFQMakerPanel] storageAccountAddress:', storageAccountAddress);
+      console.log('[RFQMakerPanel] storageAccountAddress type:', typeof storageAccountAddress);
+
+      if (!storageAccountAddress || !storageAccountAddress.startsWith('keeta_')) {
+        throw new Error(`Invalid storage account address: ${storageAccountAddress}`);
+      }
+
       // Create the order with the storage account address
       const order = await createQuote(currentSubmission, storageAccountAddress);
       setSuccess(
