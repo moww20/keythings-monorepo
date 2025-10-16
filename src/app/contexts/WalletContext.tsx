@@ -15,6 +15,7 @@ import {
   getTakerTokenAddressFromOrder,
   getMakerTokenDecimalsFromOrder,
   getTakerTokenDecimalsFromOrder,
+  setTokenAddressCache,
 } from "../lib/token-utils";
 import type { KeetaUserClient, KeetaBalanceEntry } from "../../types/keeta";
 import {
@@ -133,7 +134,7 @@ interface WalletContextValue {
   storageAccountAddress: string | null;
   enableTrading: () => Promise<void>;
 
-  createRFQStorageAccount: (order: RFQStorageAccountDetails) => Promise<RFQStorageCreationResult>;
+  // createRFQStorageAccount removed - use two-step pattern in RFQMakerPanel instead
   fillRFQOrder: (details: RFQFillDetails) => Promise<RFQFillResult>;
   cancelRFQOrder: (details: RFQCancelDetails) => Promise<RFQCancelResult>;
   verifyStorageAccount: (storageAddress: string) => Promise<StorageAccountState>;
@@ -269,6 +270,20 @@ export function WalletProvider({ children }: WalletProviderProps) {
             );
           })
         );
+
+        // Update token address cache with real addresses from wallet
+        const tokenAddressMap = new Map<string, string>();
+        (tokenBalances.balances as KeetaBalanceEntry[]).forEach((entry) => {
+          const processedToken = processed.find(p => p.address === entry.token);
+          if (processedToken) {
+            // Map common token symbols to their addresses
+            const symbol = processedToken.ticker.toUpperCase();
+            if (symbol === 'KTA' || symbol === 'BASE' || symbol === 'USDT' || symbol === 'USDC') {
+              tokenAddressMap.set(symbol, entry.token);
+            }
+          }
+        });
+        setTokenAddressCache(tokenAddressMap);
 
         setProcessedTokens(processed);
       } catch (error) {
@@ -477,22 +492,9 @@ export function WalletProvider({ children }: WalletProviderProps) {
 
   const walletAddress = walletData.wallet.accounts?.[0] ?? '';
 
-  const createRFQStorageAccount = useCallback(
-    async (orderDetails: RFQStorageAccountDetails): Promise<RFQStorageCreationResult> => {
-      if (!userClient || !walletAddress) {
-        throw new Error('Connect your wallet before publishing RFQ orders.');
-      }
-
-      const manager = new StorageAccountManager(userClient);
-      const normalized: RFQStorageAccountDetails = {
-        ...orderDetails,
-        makerAddress: orderDetails.makerAddress || walletAddress,
-      };
-
-      return manager.createRfqStorageAccount(normalized);
-    },
-    [userClient, walletAddress],
-  );
+  // createRFQStorageAccount method removed - use two-step pattern in RFQMakerPanel instead:
+  // Step 1: manager.createStorageAccount() - creates empty storage account only
+  // Step 2: separate transaction with setInfo() + send() - configures and funds
 
   const fillRFQOrder = useCallback(
     async ({ order, fillAmount, takerAddress }: RFQFillDetails): Promise<RFQFillResult> => {
@@ -726,7 +728,7 @@ export function WalletProvider({ children }: WalletProviderProps) {
       tradingError,
       storageAccountAddress,
       enableTrading,
-      createRFQStorageAccount,
+      // createRFQStorageAccount removed
       fillRFQOrder,
       cancelRFQOrder,
       verifyStorageAccount,
@@ -742,7 +744,7 @@ export function WalletProvider({ children }: WalletProviderProps) {
     storageAccountAddress,
     enableTrading,
     userClient,
-    createRFQStorageAccount,
+    // createRFQStorageAccount removed
     fillRFQOrder,
     cancelRFQOrder,
     verifyStorageAccount,

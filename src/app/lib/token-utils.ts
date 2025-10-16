@@ -44,11 +44,26 @@ function splitPair(pair: string): { base: string; quote: string } {
   return { base, quote };
 }
 
+// Global token address cache from wallet balances
+let tokenAddressCache: Map<string, string> = new Map();
+
+export function setTokenAddressCache(addresses: Map<string, string>) {
+  tokenAddressCache = addresses;
+}
+
 export function getTokenAddressForSymbol(symbol: string): string {
   const normalized = normalizeSymbol(symbol);
   if (!normalized) {
     return '';
   }
+  
+  // First try to get from wallet cache
+  const cachedAddress = tokenAddressCache.get(normalized);
+  if (cachedAddress) {
+    return cachedAddress;
+  }
+  
+  // Fallback to environment variables
   const directKey = `NEXT_PUBLIC_${normalized}_TOKEN_ADDRESS`;
   const pubkeyKey = `NEXT_PUBLIC_${normalized}_TOKEN_PUBKEY`;
   return getEnvString(directKey, getEnvString(pubkeyKey, `PLACEHOLDER_${normalized}`));

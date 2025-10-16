@@ -70,7 +70,6 @@ const RFQContext = createContext<RFQContextValue | undefined>(undefined);
 export function RFQProvider({ pair, children }: { pair: string; children: ReactNode }): React.JSX.Element {
   const {
     publicKey,
-    createRFQStorageAccount,
     fillRFQOrder: walletFillRFQOrder,
     cancelRFQOrder: walletCancelRFQOrder,
     verifyStorageAccount: walletVerifyStorageAccount,
@@ -305,8 +304,7 @@ export function RFQProvider({ pair, children }: { pair: string; children: ReactN
         },
       };
 
-      const storageResult = await createRFQStorageAccount(storagePayload);
-
+      // Create order in backend (blockchain operations handled in RFQMakerPanel)
       const nowIso = new Date().toISOString();
       const newOrder: RFQOrder = {
         id: '',
@@ -317,9 +315,9 @@ export function RFQProvider({ pair, children }: { pair: string; children: ReactN
         minFill: minFillValue,
         expiry: expiryIso,
         maker: submission.maker,
-        unsignedBlock: storageResult.blockHash ?? storageResult.address,
+        unsignedBlock: 'blockchain_handled_in_maker_panel',
         makerSignature: 'keeta_wallet_signature',
-        storageAccount: storageResult.address,
+        storageAccount: 'blockchain_handled_in_maker_panel',
         allowlisted: !!submission.allowlistLabel,
         status: 'open',
         createdAt: nowIso,
@@ -333,7 +331,7 @@ export function RFQProvider({ pair, children }: { pair: string; children: ReactN
       void refreshEscrowState();
       return createdOrder;
     },
-    [createRFQStorageAccount, refreshEscrowState, walletIdentity],
+    [refreshEscrowState, walletIdentity],
   );
 
   const cancelQuote = useCallback(

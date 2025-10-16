@@ -1925,6 +1925,117 @@ try {
 
 ---
 
+#### Entry #8: Keeta SDK Browser Compatibility Limitations (2025-10-16)
+**Category:** Architecture Constraint  
+**Discovery:** The Keeta SDK (`@keetanetwork/keetanet-client`) includes native Node.js modules (`.node` files) that **cannot be bundled or run in the browser**, making direct SDK usage in frontend applications impossible.
+
+**The Problem:**
+- Keeta SDK depends on `@keetanetwork/asn1-napi-rs` which contains platform-specific native binaries (.node files)
+- These are compiled C/C++ modules that require Node.js runtime
+- Webpack/Next.js cannot bundle these for browser execution
+- Even with dynamic imports, loaders, or externalization configs, the native modules fail to load
+
+**What We Tried (All Failed):**
+1. ❌ Dynamic imports: `const KeetaNet = await import('@keetanetwork/keetanet-client')`
+2. ❌ Webpack null-loader for .node files
+3. ❌ Webpack NormalModuleReplacementPlugin
+4. ❌ Externalizing the asn1-napi-rs package
+5. ❌ Setting resolve.fallback for Node.js built-ins
+6. ❌ Alias replacement with empty modules
+
+**Error Messages Encountered:**
+```
+Module parse failed: Unexpected character '�' (1:0)
+You may need an appropriate loader to handle this file type
+./node_modules/@keetanetwork/asn1-napi-rs/asn1-napi-rs.darwin-arm64.node
+```
+
+**The Architecture Reality:**
+
+```
+┌─────────────────────────────────────────────────────────┐
+│ Keeta SDK Architecture                                  │
+├─────────────────────────────────────────────────────────┤
+│                                                          │
+│  Frontend (Browser)          Backend (Node.js)          │
+│  ─────────────────          ──────────────────          │
+│                                                          │
+│  ❌ SDK Direct Usage        ✅ SDK Direct Usage         │
+│     - Native modules         - Full SDK access          │
+│       can't run              - Native modules work      │
+│     - Bundling fails         - All features available   │
+│                                                          │
+│  ✅ Wallet Provider          ✅ Wallet Provider         │
+│     - window.keeta           - Extension injects        │
+│     - Extension bridge       - UserClient wrapper       │
+│     - Limited API            - Signs via extension      │
+│                                                          │
+└─────────────────────────────────────────────────────────┘
+```
+
+**The Correct Approach:**
+
+**Frontend (dApp):**
+- ✅ Use `window.keeta` wallet provider (injected by extension)
+- ✅ Call `window.keeta.getUserClient()` for builder API
+- ✅ All signing happens in wallet extension (user control)
+- ❌ DO NOT import `@keetanetwork/keetanet-client` directly
+
+**Backend (Rust/Node.js):**
+- ✅ Use Keeta SDK directly for server-side operations
+- ✅ Full access to all SDK features
+- ✅ Can run native modules in Node.js/system environment
+
+**Code Pattern for Frontend:**
+```typescript
+// ✅ CORRECT: Use wallet provider
+const provider = window.keeta;
+if (!provider) {
+  throw new Error('Keeta wallet not installed');
+}
+
+const userClient = await provider.getUserClient();
+const builder = userClient.initBuilder();
+
+// Build transaction
+builder.send(toAccount, amount, token);
+
+// Wallet prompts user to sign
+await userClient.publishBuilder(builder);
+```
+
+```typescript
+// ❌ WRONG: Direct SDK import in browser
+import * as KeetaNet from '@keetanetwork/keetanet-client'; // Build fails!
+const client = KeetaNet.UserClient.fromNetwork('test', signer);
+```
+
+**Why Wallet Provider Works:**
+1. Wallet extension runs in privileged context (can use native modules)
+2. Extension injects `window.keeta` bridge into web pages
+3. dApp calls bridge methods → Extension executes SDK → Returns results
+4. User sees wallet popup for signing (security + UX)
+
+**When to Use Each:**
+
+| Use Case | Solution |
+|----------|----------|
+| Frontend RFQ publishing | Wallet provider (`window.keeta`) |
+| Backend order indexing | Keeta SDK (Rust/Node.js) |
+| Transaction signing | Wallet extension (user control) |
+| Storage account creation | Wallet provider builder API |
+| Server-side operations | Keeta SDK directly |
+
+**Critical Rules:**
+- ❌ **NEVER** import Keeta SDK directly in frontend code
+- ✅ **ALWAYS** use `window.keeta` wallet provider for browser
+- ✅ **ALWAYS** use Keeta SDK for backend/server operations
+- ⚠️ **VERIFY** wallet extension is installed before using provider
+
+**Impact:** This is a fundamental architectural constraint. All frontend Keeta interactions must go through the wallet provider. Direct SDK usage is only possible in Node.js/backend environments.
+
+---
+
 ### 💡 Future Improvements to Consider
 
 #### Potential Enhancement #1: Automated Browser Testing

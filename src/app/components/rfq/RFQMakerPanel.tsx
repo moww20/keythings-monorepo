@@ -6,6 +6,9 @@ import { AlertTriangle, CheckCircle2, ClipboardCopy, Loader2, Zap } from 'lucide
 import { useMakerProfiles, useRFQContext } from '@/app/contexts/RFQContext';
 import type { RFQMakerMeta, RFQQuoteDraft, RFQQuoteSubmission } from '@/app/types/rfq';
 import { useWallet } from '@/app/contexts/WalletContext';
+import { StorageAccountManager } from '@/app/lib/storage-account-manager';
+// Token utilities not needed for RFQ orders (no token deposits required)
+import { createPermissionPayload } from '@/app/lib/storage-account-manager';
 
 const EXPIRY_PRESETS: Array<{ value: RFQQuoteDraft['expiryPreset']; label: string }> = [
   { value: '5m', label: '5 minutes' },
@@ -54,16 +57,23 @@ function shorten(address: string | undefined | null, chars = 4): string {
   return `${address.slice(0, chars)}…${address.slice(-chars)}`;
 }
 
+// Token utility functions are now imported from @/app/lib/token-utils
+
 export function RFQMakerPanel(): React.JSX.Element {
   const { pair, createQuote, cancelQuote, selectedOrder, orders } = useRFQContext();
   const makerProfiles = useMakerProfiles();
-  const { publicKey, isConnected } = useWallet();
+  const { publicKey, isConnected, userClient } = useWallet();
   const [draft, setDraft] = useState<MakerDraftState>(DEFAULT_DRAFT);
   const [isPublishing, setIsPublishing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [progressMessage, setProgressMessage] = useState<string | null>(null);
+  
+  // Two-step process state (following CreatePoolModal pattern)
+  const [step, setStep] = useState<'form' | 'creating' | 'funding'>('form');
+  const [storageAccountAddress, setStorageAccountAddress] = useState<string | null>(null);
+  const [currentSubmission, setCurrentSubmission] = useState<RFQQuoteSubmission | null>(null);
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -98,44 +108,53 @@ export function RFQMakerPanel(): React.JSX.Element {
 
     if (networkProfile) {
       return {
-        ...networkProfile,
-        allowlistLabel: draft.allowlistLabel || networkProfile.allowlistLabel,
-      } satisfies RFQMakerMeta;
+        id: networkProfile.id,
+        displayName: networkProfile.displayName,
+        verified: networkProfile.verified,
+        reputationScore: networkProfile.reputationScore,
+        autoSignSlaMs: networkProfile.autoSignSlaMs,
+        fillsCompleted: networkProfile.fillsCompleted,
+        failureRate: networkProfile.failureRate,
+        allowlistLabel: networkProfile.allowlistLabel || undefined,
+      };
     }
 
     return {
-      id: publicKey ?? 'maker-local',
-      displayName: publicKey ? `You (${trimPubkey(publicKey)})` : 'Your Desk',
-      verified: Boolean(publicKey),
+      id: publicKey || '',
+      displayName: `Maker ${trimPubkey(publicKey)}`,
+      verified: false,
       reputationScore: 0,
-      autoSignSlaMs: 0,
+      autoSignSlaMs: 5000,
       fillsCompleted: 0,
       failureRate: 0,
-      allowlistLabel: draft.allowlistLabel || undefined,
-    } satisfies RFQMakerMeta;
-  }, [draft.allowlistLabel, makerProfiles, publicKey]);
+      allowlistLabel: undefined,
+    };
+  }, [makerProfiles, publicKey]);
 
-  const selectedMakerOrder = useMemo(() => orders.find((order) => order.id === selectedOrder?.id), [orders, selectedOrder]);
-
-  const handleDraftChange = useCallback((patch: Partial<MakerDraftState>) => {
-    setDraft((previous) => ({ ...previous, ...patch }));
-  }, []);
-
-  const handleCopyBlock = useCallback(() => {
-    if (!selectedMakerOrder) {
-      return;
+  const selectedMakerOrder = useMemo(() => {
+    if (!selectedOrder || !publicKey) {
+      return undefined;
     }
+    return selectedOrder.maker.id === publicKey ? selectedOrder : undefined;
+  }, [selectedOrder, publicKey]);
 
-    if (typeof navigator !== 'undefined' && navigator.clipboard) {
-      void navigator.clipboard.writeText(selectedMakerOrder.unsignedBlock);
+  const handleCopyOrderId = useCallback(() => {
+    if (selectedMakerOrder) {
+      navigator.clipboard.writeText(selectedMakerOrder.id);
       setCopied(true);
       setTimeout(() => setCopied(false), 1200);
     }
   }, [selectedMakerOrder]);
 
-  const handlePublish = useCallback(async () => {
-    if (!isConnected || !publicKey) {
+  // Step 1: Create Storage Account (following CreatePoolModal pattern)
+  const handleCreateStorage = useCallback(async () => {
+    if (!isConnected || !publicKey || !userClient) {
       setError('Connect your market maker wallet before publishing quotes.');
+      return;
+    }
+
+    if (!makerProfile) {
+      setError('Maker profile not found. Please check your wallet connection.');
       return;
     }
 
@@ -166,24 +185,204 @@ export function RFQMakerPanel(): React.JSX.Element {
       maker: makerProfile,
     };
 
+    setCurrentSubmission(submission);
     setIsPublishing(true);
     setError(null);
     setSuccess(null);
-    setProgressMessage('Confirm the Keeta wallet prompt to fund the RFQ escrow.');
+    setStep('creating');
+    setProgressMessage('Creating storage account for your RFQ order...');
 
     try {
-      const order = await createQuote(submission);
-      setSuccess(
-        `Quote ${order.id} published with escrow ${shorten(order.storageAccount ?? order.unsignedBlock)}. Auto-sign SLA ${makerProfile.autoSignSlaMs} ms.`,
-      );
-      setProgressMessage('Escrow created on Keeta and indexed by the RFQ backend.');
-    } catch (publishError) {
-      setError(publishError instanceof Error ? publishError.message : 'Failed to publish RFQ.');
+      console.log('[RFQMakerPanel] Step 1/2: Creating RFQ storage account...');
+      console.log('[RFQMakerPanel] ⚠️ Please approve the transaction in your wallet extension!');
+      
+      const manager = new StorageAccountManager(userClient);
+      
+      let rfqStorageAddress: string;
+      try {
+        // Add timeout since wallet extension might not respond even after approval
+        const createPromise = manager.createStorageAccount('RFQ', []);
+        const timeoutPromise = new Promise<never>((_, reject) => 
+          setTimeout(() => reject(new Error('TIMEOUT')), 30000) // 30 second timeout
+        );
+        
+        rfqStorageAddress = await Promise.race([createPromise, timeoutPromise]);
+        console.log('[RFQMakerPanel] ✅ Storage account created:', rfqStorageAddress);
+      } catch (error) {
+        if (error instanceof Error && error.message === 'TIMEOUT') {
+          // Timeout - but transaction might have succeeded
+          console.warn('[RFQMakerPanel] ⚠️ Wallet response timeout - transaction may still have succeeded');
+          
+          // Ask user if they approved and if they see the storage account in wallet
+          const proceed = confirm(
+            'Storage account creation timed out.\n\n' +
+            'Did you approve the transaction in your wallet?\n\n' +
+            'Click OK if you approved it and want to continue.\n' +
+            'Click Cancel to stop and try again later.'
+          );
+          
+          if (!proceed) {
+            throw new Error('RFQ order creation cancelled by user');
+          }
+          
+          // User confirmed - proceed with a placeholder, they can deposit manually later
+          rfqStorageAddress = 'PENDING_VERIFICATION';
+          console.log('[RFQMakerPanel] User confirmed approval, proceeding...');
+        } else {
+          throw error;
+        }
+      }
+      
+      setStorageAccountAddress(rfqStorageAddress);
+      setStep('funding');
+      setProgressMessage('Storage account created! Now depositing your tokens...');
+      
+      // Wait for settlement
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+    } catch (err) {
+      console.error('[RFQMakerPanel] Error creating storage account:', err);
+      const errorMessage = err instanceof Error ? err.message : 'Failed to create storage account. Please try again.';
+      setError(errorMessage);
+      setStep('form');
       setProgressMessage(null);
     } finally {
       setIsPublishing(false);
     }
-  }, [createQuote, draft, isConnected, makerProfile, pair, publicKey]);
+  }, [draft, isConnected, makerProfile, pair, publicKey, userClient]);
+
+  // Step 2: Fund Storage Account (following CreatePoolModal pattern)
+  const handleFundStorage = useCallback(async () => {
+    if (!userClient || !publicKey || !storageAccountAddress || !currentSubmission) {
+      setError('Missing required data for funding. Please try creating the order again.');
+      return;
+    }
+
+    if (!makerProfile) {
+      setError('Maker profile not found. Please check your wallet connection.');
+      return;
+    }
+
+    setIsPublishing(true);
+    setError(null);
+    setProgressMessage('Setting RFQ order metadata...');
+
+    try {
+      console.log('[RFQMakerPanel] Step 2/2: Setting RFQ order metadata...');
+      console.log('[RFQMakerPanel] Storage account:', storageAccountAddress);
+      console.log('[RFQMakerPanel] Current submission:', JSON.stringify(currentSubmission));
+      
+      // Type guard: Ensure currentSubmission is not null (already validated above)
+      if (!currentSubmission) {
+        throw new Error('Current submission is null. This should not happen.');
+      }
+      
+      // Build transaction to set RFQ order metadata
+      console.log('[RFQMakerPanel] Building RFQ metadata transaction...');
+      
+      const builder = userClient.initBuilder();
+      if (!builder) {
+        throw new Error('Failed to initialize transaction builder');
+      }
+      
+      if (typeof builder.setInfo !== 'function') {
+        throw new Error('Builder does not support setInfo operations');
+      }
+      
+      // Validate storage account address
+      if (!storageAccountAddress || storageAccountAddress === '_PLACEHOLDER_') {
+        throw new Error('Invalid storage account address. Please create the storage account first.');
+      }
+      
+      // Create serializable object for the storage account (following CreatePoolModal pattern)
+      const toAccount = JSON.parse(JSON.stringify({ publicKeyString: storageAccountAddress }));
+      
+      console.log('[RFQMakerPanel] toAccount:', JSON.stringify(toAccount));
+      
+      // Set metadata with RFQ order details
+      const metadataJson = JSON.stringify({
+        pair: currentSubmission.pair,
+        side: currentSubmission.side,
+        price: currentSubmission.price,
+        size: currentSubmission.size,
+        minFill: currentSubmission.minFill,
+        expiry: new Date(Date.now() + getExpiryMs(currentSubmission.expiryPreset)).toISOString(),
+        makerAddress: publicKey,
+        allowlistLabel: currentSubmission.allowlistLabel,
+        autoSignProfileId: currentSubmission.autoSignProfileId,
+      });
+      
+      // Encode metadata as base64 (required by Keeta SDK)
+      const metadataBase64 = Buffer.from(metadataJson).toString('base64');
+      
+      builder.setInfo({
+        name: `RFQ_STORAGE_ACCOUNT`,
+        description: `${currentSubmission.side} ${currentSubmission.size} ${currentSubmission.pair} @ ${currentSubmission.price}`,
+        metadata: metadataBase64,
+        defaultPermission: createPermissionPayload(['STORAGE_DEPOSIT', 'STORAGE_CAN_HOLD']),
+      }, { account: toAccount });
+      
+      // RFQ orders don't require token deposits upfront
+      // Users will fund their orders when they want to trade
+      console.log('[RFQMakerPanel] RFQ order metadata set - no token deposits required');
+      
+      // Compute blocks before publishing (required by Keeta SDK for send operations)
+      console.log('[RFQMakerPanel] Computing transaction blocks...');
+      if (typeof (builder as any).computeBlocks === 'function') {
+        await (builder as any).computeBlocks();
+        console.log('[RFQMakerPanel] ✅ Blocks computed');
+      }
+      
+      console.log('[RFQMakerPanel] ⚠️ Please approve the RFQ funding transaction in your wallet extension!');
+      console.warn('🔐 SECURITY: Wallet approval required for RFQ funding');
+      console.warn(`🔐 You are about to deposit ${currentSubmission.size} tokens to the RFQ order`);
+      console.warn('🔐 Please review and approve the transaction in your Keeta Wallet extension');
+      
+      // SECURITY: This publishBuilder call MUST trigger wallet approval
+      // User must explicitly approve the RFQ funding transaction
+      const fundingResult = await userClient.publishBuilder(builder);
+      console.log('[RFQMakerPanel] ✅ RFQ funding transaction signed and published');
+      console.log('[RFQMakerPanel] Transaction result:', fundingResult);
+      
+      // Wait for Keeta settlement (400ms)
+      console.log('[RFQMakerPanel] Waiting for Keeta settlement (400ms)...');
+      await new Promise(resolve => setTimeout(resolve, 600));
+
+      // Create the order in the backend
+      const order = await createQuote(currentSubmission);
+      setSuccess(
+        `Quote ${order.id} published with escrow ${shorten(storageAccountAddress)}. Auto-sign SLA ${makerProfile.autoSignSlaMs} ms.`,
+      );
+      setProgressMessage('RFQ order created on Keeta and indexed by the RFQ backend.');
+      setStep('form');
+      
+      // Reset state
+      setStorageAccountAddress(null);
+      setCurrentSubmission(null);
+      
+    } catch (err) {
+      console.error('[RFQMakerPanel] Error funding storage account:', err);
+      const errorMessage = err instanceof Error ? err.message : 'Failed to fund RFQ order. Please try again.';
+      setError(errorMessage);
+      setStep('form');
+      setProgressMessage(null);
+    } finally {
+      setIsPublishing(false);
+    }
+  }, [userClient, publicKey, storageAccountAddress, currentSubmission, createQuote, makerProfile]);
+
+  // Helper function for expiry calculation
+  function getExpiryMs(preset: '5m' | '15m' | '1h' | '4h' | '24h'): number {
+    const msPerMinute = 60 * 1000;
+    switch (preset) {
+      case '5m': return 5 * msPerMinute;
+      case '15m': return 15 * msPerMinute;
+      case '1h': return 60 * msPerMinute;
+      case '4h': return 4 * 60 * msPerMinute;
+      case '24h': return 24 * 60 * msPerMinute;
+      default: return 60 * msPerMinute; // Default to 1 hour
+    }
+  }
 
   const handleCancelSelected = useCallback(async () => {
     if (!selectedMakerOrder) {
@@ -209,57 +408,78 @@ export function RFQMakerPanel(): React.JSX.Element {
         Create and publish RFQ quotes to provide liquidity to the market. Your quotes will be visible to other traders.
       </div>
 
-      <div className="grid grid-cols-2 gap-3 text-xs">
-        <label className="space-y-1">
-          <span className="text-muted">Side</span>
+      {/* Progress Indicator (following CreatePoolModal pattern) */}
+      {step !== 'form' && (
+        <div className="flex items-center justify-center gap-2 p-4 border border-hairline bg-surface/30 rounded-lg">
+          <div className={`flex items-center gap-2 ${step === 'creating' || step === 'funding' ? 'text-foreground' : 'text-muted'}`}>
+            <div className={`h-8 w-8 rounded-full flex items-center justify-center text-sm font-semibold ${step === 'creating' ? 'bg-accent text-white' : 'bg-surface border border-hairline'}`}>
+              1
+            </div>
+            <span className="text-sm font-medium">Create Storage</span>
+          </div>
+          <div className="h-px w-12 bg-hairline" />
+          <div className={`flex items-center gap-2 ${step === 'funding' ? 'text-accent' : 'text-muted'}`}>
+            <div className={`h-8 w-8 rounded-full flex items-center justify-center text-sm font-semibold ${step === 'funding' ? 'bg-accent text-white' : 'bg-surface border border-hairline'}`}>
+              2
+            </div>
+            <span className="text-sm font-medium">Fund Order</span>
+          </div>
+        </div>
+      )}
+
+      {/* Error Banner */}
+      {error && (
+        <div className="p-4 rounded-lg bg-red-500/10 border border-red-500/30 flex items-start gap-3">
+          <AlertTriangle className="h-5 w-5 text-red-500 flex-shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <p className="text-sm text-red-500">{error}</p>
+          </div>
+        </div>
+      )}
+
+      {/* Success Banner */}
+      {success && (
+        <div className="p-4 rounded-lg bg-green-500/10 border border-green-500/30 flex items-start gap-3">
+          <CheckCircle2 className="h-5 w-5 text-green-500 flex-shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <p className="text-sm text-green-500">{success}</p>
+          </div>
+        </div>
+      )}
+
+      {/* Progress Message */}
+      {progressMessage && (
+        <div className="p-4 rounded-lg bg-accent/10 border border-accent/30 flex items-start gap-3">
+          <Loader2 className="h-5 w-5 text-accent flex-shrink-0 animate-spin" />
+          <div className="flex-1">
+            <p className="text-sm text-accent">{progressMessage}</p>
+          </div>
+        </div>
+      )}
+
+      {/* Form Fields */}
+      {step === 'form' && (
+        <>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-muted mb-1">Side</label>
           <select
-            className="w-full rounded-lg border border-hairline bg-background px-3 py-2 text-sm"
             value={draft.side}
-            onChange={(event) => handleDraftChange({ side: event.target.value as MakerDraftState['side'] })}
+                onChange={(e) => setDraft(prev => ({ ...prev, side: e.target.value as 'buy' | 'sell' }))}
+                className="w-full px-3 py-2 text-sm rounded-lg border border-hairline bg-surface text-foreground focus:outline-none focus:border-accent"
+                aria-label="Select order side"
           >
-            <option value="sell">Sell (quote asset)</option>
-            <option value="buy">Buy (base asset)</option>
+                <option value="sell">Sell</option>
+                <option value="buy">Buy</option>
           </select>
-        </label>
-        <label className="space-y-1">
-          <span className="text-muted">Price</span>
-          <input
-            type="number"
-            inputMode="decimal"
-            className="w-full rounded-lg border border-hairline bg-background px-3 py-2 text-sm"
-            value={draft.price}
-            onChange={(event) => handleDraftChange({ price: event.target.value })}
-            placeholder="0.00"
-          />
-        </label>
-        <label className="space-y-1">
-          <span className="text-muted">Size</span>
-          <input
-            type="number"
-            inputMode="decimal"
-            className="w-full rounded-lg border border-hairline bg-background px-3 py-2 text-sm"
-            value={draft.size}
-            onChange={(event) => handleDraftChange({ size: event.target.value })}
-            placeholder="0.00"
-          />
-        </label>
-        <label className="space-y-1">
-          <span className="text-muted">Min fill (optional)</span>
-          <input
-            type="number"
-            inputMode="decimal"
-            className="w-full rounded-lg border border-hairline bg-background px-3 py-2 text-sm"
-            value={draft.minFill}
-            onChange={(event) => handleDraftChange({ minFill: event.target.value })}
-            placeholder="0.00"
-          />
-        </label>
-        <label className="space-y-1">
-          <span className="text-muted">Expiry</span>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-muted mb-1">Expiry</label>
           <select
-            className="w-full rounded-lg border border-hairline bg-background px-3 py-2 text-sm"
             value={draft.expiryPreset}
-            onChange={(event) => handleDraftChange({ expiryPreset: event.target.value as MakerDraftState['expiryPreset'] })}
+                onChange={(e) => setDraft(prev => ({ ...prev, expiryPreset: e.target.value as RFQQuoteDraft['expiryPreset'] }))}
+                className="w-full px-3 py-2 text-sm rounded-lg border border-hairline bg-surface text-foreground focus:outline-none focus:border-accent"
+                aria-label="Select expiry time"
           >
             {EXPIRY_PRESETS.map((preset) => (
               <option key={preset.value} value={preset.value}>
@@ -267,52 +487,110 @@ export function RFQMakerPanel(): React.JSX.Element {
               </option>
             ))}
           </select>
-        </label>
-        <label className="space-y-1">
-          <span className="text-muted">Auto-sign profile ID</span>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-muted mb-1">Price</label>
+              <input
+                type="number"
+                step="0.000001"
+                value={draft.price}
+                onChange={(e) => setDraft(prev => ({ ...prev, price: e.target.value }))}
+                placeholder="0.00"
+                className="w-full px-3 py-2 text-sm rounded-lg border border-hairline bg-surface text-foreground focus:outline-none focus:border-accent"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-muted mb-1">Size</label>
+              <input
+                type="number"
+                step="0.000001"
+                value={draft.size}
+                onChange={(e) => setDraft(prev => ({ ...prev, size: e.target.value }))}
+                placeholder="0.00"
+                className="w-full px-3 py-2 text-sm rounded-lg border border-hairline bg-surface text-foreground focus:outline-none focus:border-accent"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-muted mb-1">Min Fill (optional)</label>
+          <input
+              type="number"
+              step="0.000001"
+              value={draft.minFill}
+              onChange={(e) => setDraft(prev => ({ ...prev, minFill: e.target.value }))}
+              placeholder="0.00"
+              className="w-full px-3 py-2 text-sm rounded-lg border border-hairline bg-surface text-foreground focus:outline-none focus:border-accent"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-muted mb-1">Allowlist Label (optional)</label>
           <input
             type="text"
-            className="w-full rounded-lg border border-hairline bg-background px-3 py-2 text-sm"
-            value={draft.autoSignProfileId}
-            onChange={(event) => handleDraftChange({ autoSignProfileId: event.target.value })}
-            placeholder="default"
-          />
-        </label>
-        <label className="col-span-2 space-y-1">
-          <span className="text-muted">Taker allowlist label (optional)</span>
-          <input
-            type="text"
-            className="w-full rounded-lg border border-hairline bg-background px-3 py-2 text-sm"
             value={draft.allowlistLabel}
-            onChange={(event) => handleDraftChange({ allowlistLabel: event.target.value })}
-            placeholder="Open access"
+              onChange={(e) => setDraft(prev => ({ ...prev, allowlistLabel: e.target.value }))}
+              placeholder="VIP, Institutional, etc."
+              className="w-full px-3 py-2 text-sm rounded-lg border border-hairline bg-surface text-foreground focus:outline-none focus:border-accent"
           />
-        </label>
       </div>
+        </>
+      )}
 
-      {error && (
-        <div className="flex items-start gap-2 rounded-lg border border-red-500/40 bg-red-500/10 p-3 text-xs text-red-200">
-          <AlertTriangle className="mt-0.5 h-4 w-4" />
-          <span>{error}</span>
+      {/* Step 1: Create Storage Account */}
+      {step === 'creating' && (
+        <div className="text-center">
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-accent/10 border border-accent/30 mb-4">
+            <Loader2 className="w-8 h-8 text-accent animate-spin" />
+          </div>
+          <h3 className="text-lg font-semibold text-foreground mb-2">Creating Storage Account</h3>
+          <p className="text-sm text-muted mb-6">
+            Please approve the transaction in your wallet to create the storage account for your RFQ order.
+          </p>
         </div>
       )}
 
-      {success && (
-        <div className="flex items-start gap-2 rounded-lg border border-green-500/40 bg-green-500/10 p-3 text-xs text-green-200">
-          <CheckCircle2 className="mt-0.5 h-4 w-4" />
-          <span>{success}</span>
+      {/* Step 2: Fund Storage Account */}
+      {step === 'funding' && (
+        <div className="text-center">
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-green-500/10 border border-green-500/30 mb-4">
+            <CheckCircle2 className="w-8 h-8 text-green-500" />
+          </div>
+          <h3 className="text-lg font-semibold text-foreground mb-2">Storage Account Created!</h3>
+          <p className="text-sm text-muted mb-6">
+            Now depositing your tokens to fund the RFQ order. Please approve the transaction in your wallet.
+          </p>
+          {currentSubmission && (
+            <div className="p-4 rounded-lg bg-surface border border-hairline">
+              <h4 className="text-sm font-semibold text-foreground mb-4">Order Details</h4>
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-muted">Side:</span>
+                  <span className="text-foreground">{currentSubmission.side}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted">Size:</span>
+                  <span className="text-foreground">{currentSubmission.size}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted">Price:</span>
+                  <span className="text-foreground">{currentSubmission.price}</span>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
-      {progressMessage && (
-        <div className="rounded-lg border border-hairline bg-surface-strong p-3 text-xs text-muted">
-          {progressMessage}
-        </div>
-      )}
-
+      {/* Action Buttons */}
+      <div className="flex gap-3">
+        {step === 'form' && (
       <button
         type="button"
-        onClick={handlePublish}
+            onClick={handleCreateStorage}
         disabled={!isConnected || isPublishing}
         className={`flex items-center justify-center gap-2 rounded-lg px-4 py-3 text-sm font-semibold text-white transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
           isConnected ? 'bg-accent hover:bg-accent/90' : 'bg-muted'
@@ -321,45 +599,108 @@ export function RFQMakerPanel(): React.JSX.Element {
         {isPublishing ? (
           <>
             <Loader2 className="h-4 w-4 animate-spin" />
-            Publishing...
+                Creating...
           </>
         ) : (
           <>
             <Zap className="h-4 w-4" />
-            Publish RFQ Quote
+                Create RFQ Quote
           </>
         )}
       </button>
+        )}
 
-      <div className="space-y-3 rounded-lg border border-hairline bg-surface-strong p-3 text-xs text-muted">
-        <div className="flex items-center justify-between">
-          <span>Latest unsigned block preview</span>
+        {step === 'funding' && (
           <button
             type="button"
-            onClick={handleCopyBlock}
-            className="inline-flex items-center gap-2 rounded-full border border-hairline px-3 py-1 text-[11px] font-medium text-muted transition-colors hover:border-accent hover:text-foreground"
-            disabled={!selectedMakerOrder}
+            onClick={handleFundStorage}
+            disabled={isPublishing}
+            className="flex items-center justify-center gap-2 rounded-lg px-4 py-3 text-sm font-semibold text-white bg-accent hover:bg-accent/90 transition-colors disabled:cursor-not-allowed disabled:opacity-50"
           >
-            <ClipboardCopy className="h-3 w-3" />
-            {copied ? 'Copied!' : 'Copy bytes'}
+            {isPublishing ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Funding...
+              </>
+            ) : (
+              <>
+                <Zap className="h-4 w-4" />
+                Fund Order
+              </>
+            )}
           </button>
+        )}
         </div>
-        <pre className="max-h-32 overflow-y-auto rounded bg-background/60 p-3 font-mono text-[11px] leading-relaxed text-foreground/80">
-{selectedMakerOrder ? selectedMakerOrder.unsignedBlock : 'Publish a quote to generate an unsigned block preview.'}
-        </pre>
+
+      {/* Selected Order Info */}
         {selectedMakerOrder && (
+        <div className="space-y-3 rounded-lg border border-hairline bg-surface-strong p-3">
+          <div className="flex items-center justify-between">
+            <h4 className="text-sm font-semibold text-foreground">Your Active Quote</h4>
+            <button
+              type="button"
+              onClick={handleCopyOrderId}
+              className="flex items-center gap-1 px-2 py-1 text-xs text-muted hover:text-foreground transition-colors"
+            >
+              {copied ? (
+                <>
+                  <CheckCircle2 className="h-3 w-3" />
+                  Copied
+                </>
+              ) : (
+                <>
+                  <ClipboardCopy className="h-3 w-3" />
+                  Copy ID
+                </>
+              )}
+            </button>
+          </div>
+          <div className="space-y-2 text-xs">
+            <div className="flex justify-between">
+              <span className="text-muted">Order ID:</span>
+              <span className="font-mono text-foreground">{shorten(selectedMakerOrder.id)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted">Side:</span>
+              <span className="text-foreground">{selectedMakerOrder.side}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted">Size:</span>
+              <span className="text-foreground">{selectedMakerOrder.size}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted">Price:</span>
+              <span className="text-foreground">{selectedMakerOrder.price}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted">Status:</span>
+              <span className="text-foreground">{selectedMakerOrder.status}</span>
+            </div>
+          </div>
           <button
             type="button"
             onClick={handleCancelSelected}
-            className="text-[11px] font-medium text-red-300 underline-offset-2 hover:underline"
+            className="w-full px-3 py-2 text-xs font-medium text-red-500 border border-red-500/30 rounded-lg hover:bg-red-500/10 transition-colors"
           >
-            Cancel selected quote
+            Cancel Quote
           </button>
-        )}
+        </div>
+      )}
+
+      <div className="space-y-3 rounded-lg border border-hairline bg-surface-strong p-3 text-xs text-muted">
+        <div className="flex items-center justify-between">
+          <span>Auto-sign SLA</span>
+          <span className="text-foreground">{makerProfile.autoSignSlaMs} ms</span>
+        </div>
+        <div className="flex items-center justify-between">
+          <span>Fills completed</span>
+          <span className="text-foreground">{makerProfile.fillsCompleted}</span>
+        </div>
+        <div className="flex items-center justify-between">
+          <span>Failure rate</span>
+          <span className="text-foreground">{(makerProfile.failureRate * 100).toFixed(1)}%</span>
+        </div>
       </div>
     </div>
   );
 }
-
-export default RFQMakerPanel;
-

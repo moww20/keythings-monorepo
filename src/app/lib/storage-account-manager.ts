@@ -66,7 +66,7 @@ export function normalizePublicKeyString(value: unknown): string | null {
   return null;
 }
 
-function createPermissionPayload(flags: string[]): KeetaPermissionDescriptor {
+export function createPermissionPayload(flags: string[]): KeetaPermissionDescriptor {
   const uniqueFlags = Array.from(
     new Set(
       flags
@@ -247,64 +247,9 @@ export class StorageAccountManager {
     return publicKey;
   }
 
-  async createRfqStorageAccount(order: RFQStorageAccountDetails): Promise<RFQStorageCreationResult> {
-    const builder = this.userClient.initBuilder();
-    if (!builder) {
-      throw new Error('User client did not return a builder instance');
-    }
-
-    const storageAccount = await this.generateStorageAccount(builder);
-    await this.invokeIfAvailable(builder, ['computeBlocks']);
-
-    const metadataBase64 = this.encodeMetadata({
-      kind: 'rfq_order',
-      pair: order.pair,
-      side: order.side,
-      price: order.price,
-      size: order.size,
-      minFill: order.minFill ?? null,
-      expiry: order.expiry,
-      maker: order.makerAddress,
-      allowlistLabel: order.allowlistLabel ?? null,
-      createdAt: new Date().toISOString(),
-    });
-
-    const setInfo = this.getMethod(builder, ['setInfo', 'info']);
-    if (setInfo) {
-      await Promise.resolve(
-        setInfo(
-          {
-            name: `RFQ-${Date.now()}`,
-            description: `${order.side.toUpperCase()} ${order.size} ${order.pair} @ ${order.price}`,
-            metadata: metadataBase64,
-            defaultPermission: createPermissionPayload(['STORAGE_DEPOSIT', 'STORAGE_CAN_HOLD']),
-          },
-          { account: storageAccount },
-        ),
-      );
-    }
-
-    const sendFn = this.getMethod(builder, ['send']);
-    if (!sendFn) {
-      throw new Error('Builder does not support send operations');
-    }
-
-    const tokenAccount = normalizeAccountRef(order.tokenAddress);
-    const depositAmount = toBaseUnits(order.size, order.tokenDecimals);
-    await Promise.resolve(sendFn(storageAccount, depositAmount, tokenAccount));
-
-    const publishReceipt = await this.userClient.publishBuilder(builder);
-    const address = normalizePublicKeyString(storageAccount);
-    if (!address) {
-      throw new Error('Failed to resolve storage account public key after publishing');
-    }
-
-    return {
-      address,
-      blockHash: extractBlockHash(publishReceipt),
-      metadataBase64,
-    } satisfies RFQStorageCreationResult;
-  }
+  // createRfqStorageAccount method removed - use two-step pattern instead:
+  // Step 1: createStorageAccount() - creates empty storage account only
+  // Step 2: separate transaction with setInfo() + send() - configures and funds
 
   async grantTokenPermission(storageAccountPubkey: string, operatorPubkey: string, tokenPubkey: string): Promise<void> {
     const builder = this.userClient.initBuilder();
