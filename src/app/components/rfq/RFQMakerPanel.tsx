@@ -101,21 +101,21 @@ export function RFQMakerPanel({ mode, onModeChange }: RFQMakerPanelProps): React
     
     return tokens
       .filter((token) => {
-        // Filter out tokens with zero balance
-        const balance = parseFloat(token.formattedAmount.replace(/,/g, ''));
+        // Filter out tokens with zero balance - use the raw balance string, not formattedAmount
+        const balance = parseFloat(token.balance);
         return balance > 0;
       })
       .map((token) => ({
         address: token.address,
         symbol: token.ticker,
-        balance: token.formattedAmount,
+        balance: token.formattedAmount, // Use the already formatted amount from Dashboard
         decimals: token.decimals,
         name: token.name
       }))
       .sort((a, b) => {
-        // Sort by balance (highest first)
-        const balanceA = parseFloat(a.balance.replace(/,/g, ''));
-        const balanceB = parseFloat(b.balance.replace(/,/g, ''));
+        // Sort by balance (highest first) - use the raw balance for sorting
+        const balanceA = parseFloat(tokens.find(t => t.address === a.address)?.balance || '0');
+        const balanceB = parseFloat(tokens.find(t => t.address === b.address)?.balance || '0');
         return balanceB - balanceA;
       });
   }, [tokens]);
@@ -917,7 +917,7 @@ export function RFQMakerPanel({ mode, onModeChange }: RFQMakerPanelProps): React
                 >
                   {availableTokens.map((token) => (
                     <option key={token.address} value={token.address}>
-                      {token.symbol} - {parseFloat(token.balance).toFixed(6)} {token.symbol}
+                      {token.symbol} - {token.balance} {token.symbol}
                     </option>
                   ))}
                 </select>
