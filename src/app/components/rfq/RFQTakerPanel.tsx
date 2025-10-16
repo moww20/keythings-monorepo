@@ -267,6 +267,19 @@ export function RFQTakerPanel({ mode, onModeChange }: RFQTakerPanelProps): React
       // The storage account is created when the Maker funds their quote
       const storageAccountAddress = selectedOrder.storageAccount || selectedOrder.maker.id;
       console.log('[RFQTakerPanel] Debug - using storageAccountAddress:', storageAccountAddress);
+      console.log('[RFQTakerPanel] Debug - storageAccountAddress type:', typeof storageAccountAddress);
+      console.log('[RFQTakerPanel] Debug - storageAccountAddress length:', storageAccountAddress?.length);
+      console.log('[RFQTakerPanel] Debug - storageAccountAddress starts with:', storageAccountAddress?.substring(0, 10));
+      
+      // Validate the storage account address
+      if (!storageAccountAddress || typeof storageAccountAddress !== 'string' || storageAccountAddress.length === 0) {
+        throw new Error('Invalid storage account address - must be a non-empty string');
+      }
+      
+      // Check if the address looks like a valid Keeta address
+      if (!storageAccountAddress.startsWith('keeta_')) {
+        console.warn('[RFQTakerPanel] Warning: storageAccountAddress does not start with "keeta_":', storageAccountAddress);
+      }
       
       // 1. Taker receives Token_A from storage account (or Maker directly)
       const storageAccount = { publicKeyString: storageAccountAddress };
