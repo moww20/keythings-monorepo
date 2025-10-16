@@ -265,20 +265,27 @@ export function RFQTakerPanel({ mode, onModeChange }: RFQTakerPanelProps): React
       
       // For atomic swaps, the Taker receives from the storage account (if available) or directly from the Maker
       // The storage account is created when the Maker funds their quote
-      const storageAccountAddress = selectedOrder.storageAccount || selectedOrder.maker.id;
+      let storageAccountAddress = selectedOrder.storageAccount || selectedOrder.maker.id;
       console.log('[RFQTakerPanel] Debug - using storageAccountAddress:', storageAccountAddress);
       console.log('[RFQTakerPanel] Debug - storageAccountAddress type:', typeof storageAccountAddress);
       console.log('[RFQTakerPanel] Debug - storageAccountAddress length:', storageAccountAddress?.length);
       console.log('[RFQTakerPanel] Debug - storageAccountAddress starts with:', storageAccountAddress?.substring(0, 10));
       
-      // Validate the storage account address
+      // Check if the storage account address is valid (starts with 'keeta_')
+      // If not, use the Maker's address directly for the atomic swap
+      if (!storageAccountAddress || !storageAccountAddress.startsWith('keeta_')) {
+        console.warn('[RFQTakerPanel] Storage account not yet created or invalid, using Maker address directly');
+        storageAccountAddress = selectedOrder.maker.id;
+        console.log('[RFQTakerPanel] Debug - fallback to Maker address:', storageAccountAddress);
+      }
+      
+      // Validate the final address
       if (!storageAccountAddress || typeof storageAccountAddress !== 'string' || storageAccountAddress.length === 0) {
         throw new Error('Invalid storage account address - must be a non-empty string');
       }
       
-      // Check if the address looks like a valid Keeta address
       if (!storageAccountAddress.startsWith('keeta_')) {
-        console.warn('[RFQTakerPanel] Warning: storageAccountAddress does not start with "keeta_":', storageAccountAddress);
+        throw new Error('Invalid Keeta address format - must start with "keeta_"');
       }
       
       // 1. Taker receives Token_A from storage account (or Maker directly)
