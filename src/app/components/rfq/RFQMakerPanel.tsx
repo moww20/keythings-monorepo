@@ -6,7 +6,7 @@ import { AlertTriangle, CheckCircle2, ClipboardCopy, Loader2, Zap } from 'lucide
 import { useMakerProfiles, useRFQContext } from '@/app/contexts/RFQContext';
 import type { RFQMakerMeta, RFQQuoteDraft, RFQQuoteSubmission, RFQDeclaration } from '@/app/types/rfq';
 import { useWallet } from '@/app/contexts/WalletContext';
-import { useTokenBalances } from '@/app/hooks/useWalletData';
+import { useProcessedTokens } from '@/app/hooks/useProcessedTokens';
 import { StorageAccountManager } from '@/app/lib/storage-account-manager';
 import { createPermissionPayload } from '@/app/lib/storage-account-manager';
 import { getMakerTokenAddress, getMakerTokenDecimals, getTakerTokenAddress, getTakerTokenDecimals, toBaseUnits } from '@/app/lib/token-utils';
@@ -72,7 +72,7 @@ export function RFQMakerPanel({ mode, onModeChange }: RFQMakerPanelProps): React
   const { pair, createQuote, cancelQuote, selectedOrder } = useRFQContext();
   const makerProfiles = useMakerProfiles();
   const { publicKey, isConnected, userClient } = useWallet();
-  const { balances, isLoading: isLoadingBalances, error: balancesError, fetchTokenBalances } = useTokenBalances(isConnected);
+  const { tokens, isLoading: isLoadingTokens, error: tokensError, refreshTokens } = useProcessedTokens();
   const [draft, setDraft] = useState<MakerDraftState>(DEFAULT_DRAFT);
   const [isPublishing, setIsPublishing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -93,35 +93,32 @@ export function RFQMakerPanel({ mode, onModeChange }: RFQMakerPanelProps): React
   // Token selection state
   const [selectedToken, setSelectedToken] = useState<string | null>(null);
 
-  // Get available tokens from wallet balances
+  // Get available tokens from processed tokens (same as Dashboard)
   const availableTokens = useMemo(() => {
-    if (!Array.isArray(balances) || balances.length === 0) {
+    if (!Array.isArray(tokens) || tokens.length === 0) {
       return [];
     }
     
-    return balances
-      .filter((balance: any) => {
-        // Filter out tokens with zero balance and ensure we have required fields
-        return balance && 
-               typeof balance === 'object' && 
-               'balance' in balance && 
-               'token' in balance &&
-               parseFloat(balance.balance || '0') > 0;
+    return tokens
+      .filter((token) => {
+        // Filter out tokens with zero balance
+        const balance = parseFloat(token.formattedAmount.replace(/,/g, ''));
+        return balance > 0;
       })
-      .map((balance: any) => ({
-        address: balance.token,
-        symbol: balance.symbol || 'Unknown',
-        name: balance.name || 'Unknown Token',
-        balance: balance.balance || '0',
-        decimals: balance.decimals || 0,
+      .map((token) => ({
+        address: token.address,
+        symbol: token.ticker,
+        balance: token.formattedAmount,
+        decimals: token.decimals,
+        name: token.name
       }))
       .sort((a, b) => {
         // Sort by balance (highest first)
-        const balanceA = parseFloat(a.balance);
-        const balanceB = parseFloat(b.balance);
+        const balanceA = parseFloat(a.balance.replace(/,/g, ''));
+        const balanceB = parseFloat(b.balance.replace(/,/g, ''));
         return balanceB - balanceA;
       });
-  }, [balances]);
+  }, [tokens]);
 
   // Auto-select first token when available
   useEffect(() => {
@@ -134,12 +131,12 @@ export function RFQMakerPanel({ mode, onModeChange }: RFQMakerPanelProps): React
   useEffect(() => {
     console.log('[RFQMakerPanel] Token balances debug:', {
       isConnected,
-      isLoadingBalances,
-      balancesError,
-      balancesCount: Array.isArray(balances) ? balances.length : 'not array',
-      balances: balances
+      isLoadingTokens,
+      tokensError,
+      tokensCount: Array.isArray(tokens) ? tokens.length : 'not array',
+      tokens: tokens
     });
-  }, [isConnected, isLoadingBalances, balancesError, balances]);
+  }, [isConnected, isLoadingTokens, tokensError, tokens]);
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -870,29 +867,29 @@ export function RFQMakerPanel({ mode, onModeChange }: RFQMakerPanelProps): React
             <div className="mb-4">
               <div className="mb-2 flex items-center justify-between">
                 <label className="text-xs font-medium text-muted">Select Token to Trade</label>
-                {!isLoadingBalances && (
+                {!isLoadingTokens && (
                   <button
                     type="button"
-                    onClick={() => fetchTokenBalances()}
+                    onClick={() => refreshTokens()}
                     className="text-xs text-accent hover:text-accent/80 transition-colors"
                   >
                     Refresh
                   </button>
                 )}
               </div>
-              {isLoadingBalances ? (
+              {isLoadingTokens ? (
                 <div className="flex items-center gap-2 text-sm text-muted">
                   <Loader2 className="h-4 w-4 animate-spin" />
                   Loading your tokens...
                 </div>
-              ) : balancesError ? (
+              ) : tokensError ? (
                 <div className="space-y-2">
                   <div className="text-sm text-red-500">
-                    Error loading tokens: {balancesError}
+                    Error loading tokens: {tokensError}
                   </div>
                   <button
                     type="button"
-                    onClick={() => fetchTokenBalances()}
+                    onClick={() => refreshTokens()}
                     className="text-xs text-accent hover:text-accent/80 transition-colors"
                   >
                     Try again
@@ -905,7 +902,7 @@ export function RFQMakerPanel({ mode, onModeChange }: RFQMakerPanelProps): React
                   </div>
                   <button
                     type="button"
-                    onClick={() => fetchTokenBalances()}
+                    onClick={() => refreshTokens()}
                     className="text-xs text-accent hover:text-accent/80 transition-colors"
                   >
                     Refresh tokens
