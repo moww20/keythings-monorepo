@@ -238,9 +238,9 @@ export function RFQTakerPanel({ mode, onModeChange }: RFQTakerPanelProps): React
       const makerAmount = String(fillAmount); // Amount maker is offering
       const takerAmount = String(fillAmount * selectedOrder.price); // Amount taker must send
 
-      console.log('[RFQTakerPanel] Swap terms:');
-      console.log('[RFQTakerPanel] Storage → Taker:', makerAmount, makerTokenAddress);
-      console.log('[RFQTakerPanel] Taker → Maker:', takerAmount, takerTokenAddress);
+      console.log('[RFQTakerPanel] Atomic swap terms:');
+      console.log('[RFQTakerPanel] 1. Taker receives:', makerAmount, 'from storage account');
+      console.log('[RFQTakerPanel] 2. Taker sends:', takerAmount, 'to Maker');
       console.log('[RFQTakerPanel] Debug - makerAmount type:', typeof makerAmount);
       console.log('[RFQTakerPanel] Debug - takerAmount type:', typeof takerAmount);
       console.log('[RFQTakerPanel] Debug - makerAmount value:', makerAmount);
@@ -251,42 +251,66 @@ export function RFQTakerPanel({ mode, onModeChange }: RFQTakerPanelProps): React
       console.log('[RFQTakerPanel] Builder prototype methods:', Object.getOwnPropertyNames(Object.getPrototypeOf(builder)));
       
       // Build the atomic swap transaction following Keeta's pattern
-      // Taker declares: "I send X Token_B and expect to receive Y Token_A"
+      // Taker declares: "I receive Y Token_A from storage and send X Token_B to Maker"
       
-      // 1. Taker sends Token_B to Maker
+      // Get storage account address from the order
+      if (!selectedOrder.storageAccount) {
+        throw new Error('Storage account address not found in order');
+      }
       if (!selectedOrder.maker?.id) {
         throw new Error('Maker address not found in order');
       }
-      if (!takerTokenAddress) {
-        throw new Error('Taker token address not found');
-      }
       
-      console.log('[RFQTakerPanel] Debug - selectedOrder.maker.id:', selectedOrder.maker.id);
-      console.log('[RFQTakerPanel] Debug - selectedOrder.maker.id type:', typeof selectedOrder.maker.id);
-      console.log('[RFQTakerPanel] Debug - selectedOrder.maker.id length:', selectedOrder.maker.id?.length);
+      console.log('[RFQTakerPanel] Debug - storageAccount:', selectedOrder.storageAccount);
+      console.log('[RFQTakerPanel] Debug - maker.id:', selectedOrder.maker.id);
       
+      // 1. Taker receives Token_A from storage account
+      const storageAccount = { publicKeyString: selectedOrder.storageAccount };
       const makerAccount = { publicKeyString: selectedOrder.maker.id };
-      // Ensure takerTokenAddress is a string, not an object
+      
+      // Ensure token addresses are strings
+      const makerTokenAddressString = typeof makerTokenAddress === 'string' 
+        ? makerTokenAddress 
+        : (makerTokenAddress && typeof makerTokenAddress === 'object' && 'publicKeyString' in makerTokenAddress)
+          ? (makerTokenAddress as { publicKeyString: string }).publicKeyString
+          : String(makerTokenAddress);
       const takerTokenAddressString = typeof takerTokenAddress === 'string' 
         ? takerTokenAddress 
         : (takerTokenAddress && typeof takerTokenAddress === 'object' && 'publicKeyString' in takerTokenAddress)
           ? (takerTokenAddress as { publicKeyString: string }).publicKeyString
           : String(takerTokenAddress);
+      
+      const makerTokenRef = { publicKeyString: makerTokenAddressString };
       const takerTokenRef = { publicKeyString: takerTokenAddressString };
 
+      console.log('[RFQTakerPanel] Debug - storageAccount:', storageAccount);
       console.log('[RFQTakerPanel] Debug - makerAccount:', makerAccount);
+      console.log('[RFQTakerPanel] Debug - makerTokenRef:', makerTokenRef);
       console.log('[RFQTakerPanel] Debug - takerTokenRef:', takerTokenRef);
+      console.log('[RFQTakerPanel] Debug - makerAmount:', makerAmount);
       console.log('[RFQTakerPanel] Debug - takerAmount:', takerAmount);
-      console.log('[RFQTakerPanel] Debug - takerAmount type:', typeof takerAmount);
 
-      console.log('[RFQTakerPanel] Attempting to call builder.send...');
+      // Check if builder methods are available
+      if (typeof builder.receive !== 'function') {
+        console.error('[RFQTakerPanel] builder.receive is not a function:', typeof builder.receive);
+        throw new Error('Builder does not support receive operations');
+      }
       if (typeof builder.send !== 'function') {
         console.error('[RFQTakerPanel] builder.send is not a function:', typeof builder.send);
         throw new Error('Builder does not support send operations');
       }
       
-      // Debug: Log the exact parameters being passed
-      console.log('[RFQTakerPanel] Sending to builder.send:');
+      // 1. Taker receives Token_A from storage account
+      console.log('[RFQTakerPanel] Building receive operation:');
+      console.log('[RFQTakerPanel] - from (storageAccount):', JSON.stringify(storageAccount));
+      console.log('[RFQTakerPanel] - amount (makerAmount):', JSON.stringify(makerAmount));
+      console.log('[RFQTakerPanel] - token (makerTokenRef):', JSON.stringify(makerTokenRef));
+      
+      builder.receive(storageAccount, makerAmount, makerTokenRef);
+      console.log('[RFQTakerPanel] builder.receive completed successfully');
+      
+      // 2. Taker sends Token_B to Maker
+      console.log('[RFQTakerPanel] Building send operation:');
       console.log('[RFQTakerPanel] - to (makerAccount):', JSON.stringify(makerAccount));
       console.log('[RFQTakerPanel] - amount (takerAmount):', JSON.stringify(takerAmount));
       console.log('[RFQTakerPanel] - token (takerTokenRef):', JSON.stringify(takerTokenRef));
@@ -294,10 +318,8 @@ export function RFQTakerPanel({ mode, onModeChange }: RFQTakerPanelProps): React
       builder.send(makerAccount, takerAmount, takerTokenRef);
       console.log('[RFQTakerPanel] builder.send completed successfully');
 
-      // For atomic swaps, the Taker only sends their part
-      // The Maker will handle sending their part when they approve the declaration
-      console.log('[RFQTakerPanel] Atomic swap: Taker sends Token_B to Maker');
-      console.log('[RFQTakerPanel] Maker will send Token_A to Taker when they approve');
+      console.log('[RFQTakerPanel] Atomic swap: Taker receives Token_A from storage and sends Token_B to Maker');
+      console.log('[RFQTakerPanel] Both operations will execute atomically');
       
       // Build the atomic swap operations
       console.log('[RFQTakerPanel] Atomic swap transaction built successfully');
@@ -321,18 +343,23 @@ export function RFQTakerPanel({ mode, onModeChange }: RFQTakerPanelProps): React
           terms: {
             taker: {
               address: publicKey,
+              receives: {
+                amount: makerAmount,
+                token: makerTokenAddressString,
+                from: selectedOrder.storageAccount
+              },
               sends: {
                 amount: takerAmount,
-                token: takerTokenAddress,
+                token: takerTokenAddressString,
                 to: selectedOrder.maker.id
               }
             },
-            maker: {
-              address: selectedOrder.maker.id,
+            storage: {
+              address: selectedOrder.storageAccount,
               sends: {
                 amount: makerAmount,
-                token: makerTokenAddress,
-                from: selectedOrder.storageAccount || selectedOrder.unsignedBlock
+                token: makerTokenAddressString,
+                to: publicKey
               }
             }
           },
