@@ -239,7 +239,7 @@ export function RFQTakerPanel({ mode, onModeChange }: RFQTakerPanelProps): React
       const takerAmount = String(fillAmount * selectedOrder.price); // Amount taker must send
 
       console.log('[RFQTakerPanel] Atomic swap terms:');
-      console.log('[RFQTakerPanel] 1. Taker receives:', makerAmount, 'from storage account');
+      console.log('[RFQTakerPanel] 1. Taker receives:', makerAmount, 'from storage account (funded by Maker)');
       console.log('[RFQTakerPanel] 2. Taker sends:', takerAmount, 'to Maker');
       console.log('[RFQTakerPanel] Debug - makerAmount type:', typeof makerAmount);
       console.log('[RFQTakerPanel] Debug - takerAmount type:', typeof takerAmount);
@@ -263,32 +263,33 @@ export function RFQTakerPanel({ mode, onModeChange }: RFQTakerPanelProps): React
       console.log('[RFQTakerPanel] Debug - unsignedBlock:', selectedOrder.unsignedBlock);
       console.log('[RFQTakerPanel] Debug - maker.id:', selectedOrder.maker.id);
       
-      // For atomic swaps, the Taker receives from the storage account (if available) or directly from the Maker
-      // The storage account is created when the Maker funds their quote
-      let storageAccountAddress = selectedOrder.storageAccount || selectedOrder.maker.id;
+      // For atomic swaps, the Taker receives from the storage account
+      // The storage account is created and funded by the Maker when they fund their quote
+      const storageAccountAddress = selectedOrder.storageAccount;
       console.log('[RFQTakerPanel] Debug - using storageAccountAddress:', storageAccountAddress);
       console.log('[RFQTakerPanel] Debug - storageAccountAddress type:', typeof storageAccountAddress);
       console.log('[RFQTakerPanel] Debug - storageAccountAddress length:', storageAccountAddress?.length);
       console.log('[RFQTakerPanel] Debug - storageAccountAddress starts with:', storageAccountAddress?.substring(0, 10));
       
-      // Check if the storage account address is valid (starts with 'keeta_')
-      // If not, use the Maker's address directly for the atomic swap
-      if (!storageAccountAddress || !storageAccountAddress.startsWith('keeta_')) {
-        console.warn('[RFQTakerPanel] Storage account not yet created or invalid, using Maker address directly');
-        storageAccountAddress = selectedOrder.maker.id;
-        console.log('[RFQTakerPanel] Debug - fallback to Maker address:', storageAccountAddress);
+      // Validate that the storage account exists and is valid
+      if (!storageAccountAddress) {
+        throw new Error('Storage account not found. The Maker must fund their quote first before you can take it.');
       }
       
-      // Validate the final address
-      if (!storageAccountAddress || typeof storageAccountAddress !== 'string' || storageAccountAddress.length === 0) {
+      if (typeof storageAccountAddress !== 'string' || storageAccountAddress.length === 0) {
         throw new Error('Invalid storage account address - must be a non-empty string');
       }
       
       if (!storageAccountAddress.startsWith('keeta_')) {
-        throw new Error('Invalid Keeta address format - must start with "keeta_"');
+        throw new Error('Invalid storage account address format - must be a valid Keeta address starting with "keeta_"');
       }
       
-      // 1. Taker receives Token_A from storage account (or Maker directly)
+      // Additional validation: check if it's not a placeholder
+      if (storageAccountAddress.includes('blockchain_handled') || storageAccountAddress.includes('placeholder')) {
+        throw new Error('Storage account is not yet created. The Maker must fund their quote first.');
+      }
+      
+      // 1. Taker receives Token_A from storage account (funded by Maker)
       const storageAccount = { publicKeyString: storageAccountAddress };
       const makerAccount = { publicKeyString: selectedOrder.maker.id };
       
