@@ -53,7 +53,7 @@ interface RFQContextValue {
   fillAmount?: number;
   setFillAmount: (value?: number) => void;
   requestFill: (orderId: string, amount: number, takerAddress?: string) => Promise<RFQFillRequestResult>;
-  createQuote: (submission: RFQQuoteSubmission) => Promise<RFQOrder>;
+  createQuote: (submission: RFQQuoteSubmission, storageAccountAddress?: string) => Promise<RFQOrder>;
   cancelQuote: (orderId: string) => Promise<void>;
   refreshOrders: () => Promise<void>;
   isFilling: boolean;
@@ -268,7 +268,7 @@ export function RFQProvider({ pair, children }: { pair: string; children: ReactN
   );
 
   const createQuote = useCallback(
-    async (submission: RFQQuoteSubmission) => {
+    async (submission: RFQQuoteSubmission, storageAccountAddress?: string) => {
       if (!walletIdentity) {
         throw new Error('Connect your wallet before publishing RFQ orders.');
       }
@@ -317,7 +317,7 @@ export function RFQProvider({ pair, children }: { pair: string; children: ReactN
         maker: submission.maker,
         unsignedBlock: 'blockchain_handled_in_maker_panel',
         makerSignature: 'keeta_wallet_signature',
-        storageAccount: 'blockchain_handled_in_maker_panel',
+        storageAccount: storageAccountAddress || 'blockchain_handled_in_maker_panel',
         allowlisted: !!submission.allowlistLabel,
         status: 'open',
         createdAt: nowIso,

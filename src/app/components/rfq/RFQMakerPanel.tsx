@@ -422,8 +422,8 @@ export function RFQMakerPanel({ mode, onModeChange }: RFQMakerPanelProps): React
       console.log('[RFQMakerPanel] Waiting for Keeta settlement (400ms)...');
       await new Promise(resolve => setTimeout(resolve, 600));
 
-      // Create the order in the backend
-      const order = await createQuote(currentSubmission);
+      // Create the order in the backend with the storage account address
+      const order = await createQuote(currentSubmission, storageAccountAddress);
       setSuccess(
         `Quote ${order.id} funded with escrow ${shorten(storageAccountAddress)}. Auto-sign SLA ${makerProfile.autoSignSlaMs} ms.`,
       );
