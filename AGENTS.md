@@ -2036,6 +2036,46 @@ const client = KeetaNet.UserClient.fromNetwork('test', signer);
 
 ---
 
+#### Entry #9: Keeta SDK updatePermissions Account Object Serialization (2025-10-16)
+**Category:** Issue Resolution  
+**Discovery:** The `updatePermissions` method in the Keeta SDK expects string addresses directly, not wrapped JavaScript objects with `publicKeyString` properties.
+
+**The Problem:**
+- Using `JSON.parse(JSON.stringify({ publicKeyString: address }))` for account objects in `updatePermissions` calls
+- Keeta SDK's `updatePermissions` method expects string addresses directly
+- Error: `this.toAccount(...).publicKeyString.get is not a function`
+
+**The Solution Pattern:**
+```typescript
+// ❌ WRONG: Wrapped account objects
+const takerAccount = JSON.parse(JSON.stringify({ publicKeyString: declaration.takerAddress }));
+const makerTokenRef = JSON.parse(JSON.stringify({ publicKeyString: makerTokenAddress }));
+const storageAccount = JSON.parse(JSON.stringify({ publicKeyString: storageAccountAddress }));
+
+builder.updatePermissions(
+  takerAccount,           // Object with publicKeyString property
+  createPermissionPayload(['SEND_ON_BEHALF']),
+  makerTokenRef,          // Object with publicKeyString property
+  undefined,
+  { account: storageAccount }  // Object with publicKeyString property
+);
+
+// ✅ CORRECT: String addresses directly
+builder.updatePermissions(
+  declaration.takerAddress,    // String address
+  createPermissionPayload(['SEND_ON_BEHALF']),
+  makerTokenAddress,           // String address
+  undefined,
+  { account: storageAccountAddress }  // String address
+);
+```
+
+**Key Insight:** The wallet extension handles the conversion from string addresses to proper Account objects internally. The frontend should pass string addresses directly to SDK methods, not pre-wrapped objects.
+
+**Impact:** This pattern must be followed for ALL Keeta SDK methods that accept account references. The wallet extension will properly convert string addresses to Account objects during Chrome messaging serialization.
+
+---
+
 ### 💡 Future Improvements to Consider
 
 #### Potential Enhancement #1: Automated Browser Testing

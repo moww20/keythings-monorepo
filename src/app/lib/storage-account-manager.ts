@@ -184,7 +184,7 @@ export class StorageAccountManager {
     }
 
     const storageAccount = await this.generateStorageAccount(builder);
-    await this.invokeIfAvailable(builder, ["computeBlocks"]);
+    await this.invokeIfAvailable(builder, ["computeBuilderBlocks", "computeBlocks"]);
     await this.setStorageAccountDefaults(builder, storageAccount);
 
     // Filter out placeholder values before processing

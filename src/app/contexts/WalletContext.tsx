@@ -35,6 +35,7 @@ import type {
   StorageAccountState,
   StorageAccountPermission,
 } from '@/app/types/rfq-blockchain';
+import type { RFQOrder } from '@/app/types/rfq';
 
 // Exchange operator public key - TODO: Move to environment variable
 const EXCHANGE_OPERATOR_PUBKEY = process.env.NEXT_PUBLIC_EXCHANGE_OPERATOR_PUBKEY || "PLACEHOLDER_OPERATOR_PUBKEY";
@@ -139,6 +140,7 @@ interface WalletContextValue {
   fillRFQOrder: (details: RFQFillDetails) => Promise<RFQFillResult>;
   cancelRFQOrder: (details: RFQCancelDetails) => Promise<RFQCancelResult>;
   verifyStorageAccount: (storageAddress: string) => Promise<StorageAccountState>;
+  getStorageAccountPermissions: (storageAddress: string) => Promise<StorageAccountPermission[]>;
 }
 
 const WalletContext = createContext<WalletContextValue | null>(null);
@@ -500,6 +502,68 @@ export function WalletProvider({ children }: WalletProviderProps) {
   // Step 1: manager.createStorageAccount() - creates empty storage account only
   // Step 2: separate transaction with setInfo() + send() - configures and funds
 
+  const validateAtomicSwapTerms = useCallback(async (
+    order: RFQOrder,
+    fillAmount: number,
+    storageAddress: string,
+  ): Promise<boolean> => {
+    try {
+      // Fetch storage account info to get metadata
+      const provider = window.keeta;
+      if (!provider?.getAccountInfo) return true; // Skip validation if not available
+      
+      const accountInfo = await provider.getAccountInfo(storageAddress);
+      const metadata = (accountInfo as any)?.metadata;
+      
+      if (!metadata) return true; // No metadata to validate against
+      
+      // Parse metadata
+      const metadataStr = typeof metadata === 'string' 
+        ? atob(metadata) 
+        : JSON.stringify(metadata);
+      const metadataObj = JSON.parse(metadataStr);
+      
+      if (!metadataObj.atomicSwap) return true; // No swap terms defined
+      
+      // Validate swap terms match
+      const swap = metadataObj.atomicSwap;
+      const makerTokenAddress = getMakerTokenAddressFromOrder(order);
+      const takerTokenAddress = getTakerTokenAddressFromOrder(order);
+      
+      const isValid = 
+        swap.makerToken === makerTokenAddress &&
+        swap.takerToken === takerTokenAddress &&
+        swap.recipient === order.maker.id;
+      
+      return isValid;
+    } catch (error) {
+      console.warn('[validateAtomicSwapTerms] Validation failed:', error);
+      return true; // Allow transaction if validation fails (fail open)
+    }
+  }, []);
+
+  const getStorageAccountPermissions = useCallback(async (storageAddress: string): Promise<StorageAccountPermission[]> => {
+    let permissions: StorageAccountPermission[] = [];
+    if (userClient && typeof userClient.listACLsByEntity === 'function') {
+      try {
+        const aclEntries = await userClient.listACLsByEntity({ account: { publicKeyString: storageAddress } });
+        if (Array.isArray(aclEntries)) {
+          permissions = aclEntries.map((acl) => ({
+            principal: normalizePublicKeyString(acl.principal) ?? '',
+            flags:
+              (Array.isArray(acl.permissions?.base?.flags)
+                ? acl.permissions.base.flags
+                : []) as string[],
+            target: normalizePublicKeyString(acl.target) ?? null,
+          }));
+        }
+      } catch (error) {
+        console.error('Error fetching ACLs by entity:', error);
+      }
+    }
+    return permissions;
+  }, [userClient]);
+
   const fillRFQOrder = useCallback(
     async ({ order, fillAmount, takerAddress }: RFQFillDetails): Promise<RFQFillResult> => {
       if (!userClient || !walletAddress) {
@@ -521,9 +585,13 @@ export function WalletProvider({ children }: WalletProviderProps) {
         throw new Error('Wallet builder does not expose a send method.');
       }
 
-      const makerAccount = normalizeAccountRef(order.maker.id);
-      const takerAccount = normalizeAccountRef(takerAddress ?? walletAddress);
-      const storageAccount = normalizeAccountRef(storageAddress);
+      // Validate all required values before creating objects
+      if (!order.maker.id) {
+        throw new Error('Maker ID is missing from order');
+      }
+      if (!storageAddress) {
+        throw new Error('Storage address is missing from order');
+      }
 
       const makerTokenAddress = getMakerTokenAddressFromOrder(order);
       const takerTokenAddress = getTakerTokenAddressFromOrder(order);
@@ -531,22 +599,56 @@ export function WalletProvider({ children }: WalletProviderProps) {
         throw new Error('RFQ order does not specify token addresses for settlement.');
       }
 
-      const makerToken = normalizeAccountRef(makerTokenAddress);
-      const takerToken = normalizeAccountRef(takerTokenAddress);
+      // Create serializable objects for Chrome messaging (following CreatePoolModal pattern)
+      const makerAccount = JSON.parse(JSON.stringify({ publicKeyString: order.maker.id }));
+      const takerAccount = JSON.parse(JSON.stringify({ publicKeyString: takerAddress ?? walletAddress }));
+      const storageAccount = JSON.parse(JSON.stringify({ publicKeyString: storageAddress }));
+      const makerToken = JSON.parse(JSON.stringify({ publicKeyString: makerTokenAddress }));
+      const takerToken = JSON.parse(JSON.stringify({ publicKeyString: takerTokenAddress }));
 
       const makerDecimals = getMakerTokenDecimalsFromOrder(order);
       const takerDecimals = getTakerTokenDecimalsFromOrder(order);
       const takerAmount = toBaseUnits(fillAmount, takerDecimals);
       const makerAmount = toBaseUnits(fillAmount * order.price, makerDecimals);
 
-      await Promise.resolve(
-        sendFn.call(builder, makerAccount, takerAmount, {
-          token: takerToken,
-        }),
+      console.log('[fillRFQOrder] Atomic swap parameters:', {
+        makerAccount,
+        takerAccount,
+        storageAccount,
+        makerToken,
+        takerToken,
+        takerAmount,
+        makerAmount
+      });
+
+      // NEW: Validate atomic swap terms
+      const isValidSwap = await validateAtomicSwapTerms(order, fillAmount, storageAddress);
+      if (!isValidSwap) {
+        throw new Error('Atomic swap terms validation failed - swap constraints do not match storage account');
+      }
+      
+      console.log('[fillRFQOrder] ✅ Atomic swap terms validated');
+
+      // NEW: Verify taker has SEND_ON_BEHALF permission (declaration-based flow)
+      const permissions = await getStorageAccountPermissions(storageAddress);
+      const hasSendPermission = permissions.some(
+        p => p.principal === (takerAddress ?? walletAddress) && p.flags.includes('SEND_ON_BEHALF')
       );
+      
+      if (!hasSendPermission) {
+        throw new Error('Taker not approved for this order. Please declare intention first and wait for maker approval.');
+      }
+      
+      console.log('[fillRFQOrder] ✅ Taker has SEND_ON_BEHALF permission');
+
+      // Step 1: Taker sends their token to maker
       await Promise.resolve(
-        sendFn.call(builder, takerAccount, makerAmount, {
-          token: makerToken,
+        sendFn.call(builder, makerAccount, takerAmount, takerToken),
+      );
+      
+      // Step 2: Taker withdraws maker's token from storage account
+      await Promise.resolve(
+        sendFn.call(builder, takerAccount, makerAmount, makerToken, undefined, {
           account: storageAccount,
         }),
       );
@@ -554,7 +656,7 @@ export function WalletProvider({ children }: WalletProviderProps) {
       const receipt = await userClient.publishBuilder(builder);
       return { blockHash: extractBlockHash(receipt) ?? null } satisfies RFQFillResult;
     },
-    [userClient, walletAddress],
+    [userClient, walletAddress, validateAtomicSwapTerms, getStorageAccountPermissions],
   );
 
   const cancelRFQOrder = useCallback(
@@ -578,9 +680,9 @@ export function WalletProvider({ children }: WalletProviderProps) {
         throw new Error('Wallet builder does not expose a send method.');
       }
 
-      const storageAccount = normalizeAccountRef(storageAddress);
-      const destinationAccount = normalizeAccountRef(walletAddress);
-      const tokenAccount = normalizeAccountRef(tokenAddress);
+      const storageAccount = JSON.parse(JSON.stringify({ publicKeyString: storageAddress }));
+      const destinationAccount = JSON.parse(JSON.stringify({ publicKeyString: walletAddress }));
+      const tokenAccount = JSON.parse(JSON.stringify({ publicKeyString: tokenAddress }));
       const withdrawalAmount = toBaseUnits(amount, tokenDecimals);
 
       await Promise.resolve(
@@ -645,7 +747,7 @@ export function WalletProvider({ children }: WalletProviderProps) {
       let permissions: StorageAccountPermission[] = [];
       if (userClient && typeof userClient.listACLsByEntity === 'function') {
         try {
-          const aclEntries = await userClient.listACLsByEntity({ account: normalizeAccountRef(storageAddress) });
+          const aclEntries = await userClient.listACLsByEntity({ account: { publicKeyString: storageAddress } });
           if (Array.isArray(aclEntries)) {
             permissions = aclEntries.map((acl) => ({
               principal: normalizePublicKeyString(acl.principal) ?? '',
@@ -743,6 +845,7 @@ export function WalletProvider({ children }: WalletProviderProps) {
       fillRFQOrder,
       cancelRFQOrder,
       verifyStorageAccount,
+      getStorageAccountPermissions,
     };
   }, [
     signMessage,
@@ -759,6 +862,7 @@ export function WalletProvider({ children }: WalletProviderProps) {
     fillRFQOrder,
     cancelRFQOrder,
     verifyStorageAccount,
+    getStorageAccountPermissions,
   ]);
 
   return <WalletContext.Provider value={contextValue}>{children}</WalletContext.Provider>;

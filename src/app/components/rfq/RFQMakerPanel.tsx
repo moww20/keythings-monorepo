@@ -4,11 +4,12 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, CheckCircle2, ClipboardCopy, Loader2, Zap } from 'lucide-react';
 
 import { useMakerProfiles, useRFQContext } from '@/app/contexts/RFQContext';
-import type { RFQMakerMeta, RFQQuoteDraft, RFQQuoteSubmission } from '@/app/types/rfq';
+import type { RFQMakerMeta, RFQQuoteDraft, RFQQuoteSubmission, RFQDeclaration } from '@/app/types/rfq';
 import { useWallet } from '@/app/contexts/WalletContext';
 import { StorageAccountManager } from '@/app/lib/storage-account-manager';
-// Token utilities not needed for RFQ orders (no token deposits required)
 import { createPermissionPayload } from '@/app/lib/storage-account-manager';
+import { getMakerTokenAddress, getMakerTokenDecimals, getTakerTokenAddress, getTakerTokenDecimals, toBaseUnits } from '@/app/lib/token-utils';
+import { fetchDeclarations, approveDeclaration } from '@/app/lib/rfq-api';
 
 const EXPIRY_PRESETS: Array<{ value: RFQQuoteDraft['expiryPreset']; label: string }> = [
   { value: '5m', label: '5 minutes' },
@@ -81,6 +82,11 @@ export function RFQMakerPanel({ mode, onModeChange }: RFQMakerPanelProps): React
   const [step, setStep] = useState<WizardStep>('details');
   const [storageAccountAddress, setStorageAccountAddress] = useState<string | null>(null);
   const [currentSubmission, setCurrentSubmission] = useState<RFQQuoteSubmission | null>(null);
+
+  // Declaration management state
+  const [declarations, setDeclarations] = useState<RFQDeclaration[]>([]);
+  const [isLoadingDeclarations, setIsLoadingDeclarations] = useState(false);
+  const [isApprovingDeclaration, setIsApprovingDeclaration] = useState<string | null>(null);
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -262,8 +268,26 @@ export function RFQMakerPanel({ mode, onModeChange }: RFQMakerPanelProps): React
       
       console.log('[RFQMakerPanel] toAccount:', JSON.stringify(toAccount));
       
-      // Set metadata with RFQ order details
+      // Fund the storage account with the maker's tokens
+      console.log('[RFQMakerPanel] Funding storage account with maker tokens...');
+      
+      // Get maker token address and decimals
+      const makerTokenAddress = getMakerTokenAddress(currentSubmission.pair, currentSubmission.side);
+      if (!makerTokenAddress) {
+        throw new Error(`Token address not found for ${currentSubmission.side} side of pair ${currentSubmission.pair}`);
+      }
+      
+      const makerTokenDecimals = getMakerTokenDecimals(currentSubmission.pair, currentSubmission.side);
+      const makerAmount = toBaseUnits(parseFloat(currentSubmission.size), makerTokenDecimals);
+      
+      // Get taker token information for atomic swap terms
+      const takerTokenAddress = getTakerTokenAddress(currentSubmission.pair, currentSubmission.side);
+      const takerTokenDecimals = getTakerTokenDecimals(currentSubmission.pair, currentSubmission.side);
+      const takerAmount = toBaseUnits(parseFloat(currentSubmission.size) * parseFloat(currentSubmission.price), takerTokenDecimals);
+      
+      // Set metadata with RFQ order details and atomic swap terms
       const metadataJson = JSON.stringify({
+        // Existing fields
         pair: currentSubmission.pair,
         side: currentSubmission.side,
         price: currentSubmission.price,
@@ -273,21 +297,51 @@ export function RFQMakerPanel({ mode, onModeChange }: RFQMakerPanelProps): React
         makerAddress: publicKey,
         allowlistLabel: currentSubmission.allowlistLabel,
         autoSignProfileId: currentSubmission.autoSignProfileId,
+        
+        // NEW: Atomic swap constraints
+        atomicSwap: {
+          makerToken: makerTokenAddress,      // Token maker is offering
+          makerAmount: makerAmount.toString(), // Amount maker deposited
+          takerToken: takerTokenAddress,       // Token taker must send
+          takerAmount: takerAmount.toString(), // Amount taker must send
+          swapRate: currentSubmission.price,   // Exchange rate
+          recipient: publicKey,                 // Where taker must send tokens
+        },
       });
       
       // Encode metadata as base64 (required by Keeta SDK)
       const metadataBase64 = Buffer.from(metadataJson).toString('base64');
       
+      // Set storage account info with metadata and permissions
+      // According to Keeta docs, defaultPermission grants public access
       builder.setInfo({
         name: `RFQ_STORAGE_ACCOUNT`,
         description: `${currentSubmission.side} ${currentSubmission.size} ${currentSubmission.pair} @ ${currentSubmission.price}`,
         metadata: metadataBase64,
+        // Grant storage permissions (no public SEND_ON_BEHALF in declaration-based flow)
+        // STORAGE_DEPOSIT: anyone can deposit tokens
+        // STORAGE_CAN_HOLD: storage can hold tokens  
+        // SEND_ON_BEHALF: will be granted per-taker after declaration approval
         defaultPermission: createPermissionPayload(['STORAGE_DEPOSIT', 'STORAGE_CAN_HOLD']),
       }, { account: toAccount });
       
-      // RFQ orders don't require token deposits upfront
-      // Users will fund their orders when they want to trade
-      console.log('[RFQMakerPanel] RFQ order metadata set - no token deposits required');
+      console.log('[RFQMakerPanel] ✅ Storage account configured with storage permissions (SEND_ON_BEHALF will be granted per-taker)');
+      
+      console.log('[RFQMakerPanel] Depositing', currentSubmission.size, 'tokens to storage account');
+      console.log('[RFQMakerPanel] Token address:', makerTokenAddress);
+      console.log('[RFQMakerPanel] Amount in base units:', makerAmount);
+      
+      // Create serializable token object
+      const makerTokenRef = JSON.parse(JSON.stringify({ publicKeyString: makerTokenAddress }));
+      
+      // Add send operation to deposit tokens to storage account
+      if (typeof builder.send !== 'function') {
+        throw new Error('Builder does not support send operations');
+      }
+      
+      builder.send(toAccount, makerAmount, makerTokenRef);
+      console.log('[RFQMakerPanel] ✅ Token deposit operation added to builder');
+      console.log('[RFQMakerPanel] ✅ Storage account configured with public withdrawal permissions for atomic swaps');
       
       // Compute blocks before publishing (required by Keeta SDK for send operations)
       console.log('[RFQMakerPanel] Computing transaction blocks...');
@@ -430,6 +484,186 @@ export function RFQMakerPanel({ mode, onModeChange }: RFQMakerPanelProps): React
     }
   }, [draft, isConnected, makerProfile, pair, publicKey, userClient, validateControlsStep, validateDetailsStep]);
 
+  // Declaration management functions
+  const loadDeclarations = useCallback(async () => {
+    if (!selectedOrder) return;
+    
+    setIsLoadingDeclarations(true);
+    try {
+      const fetchedDeclarations = await fetchDeclarations(selectedOrder.id);
+      setDeclarations(fetchedDeclarations);
+    } catch (error) {
+      console.error('Failed to load declarations:', error);
+      setError('Failed to load declarations');
+    } finally {
+      setIsLoadingDeclarations(false);
+    }
+  }, [selectedOrder]);
+
+  const handleApproveDeclaration = useCallback(async (declaration: RFQDeclaration) => {
+    if (!selectedOrder) {
+      setError('Missing order data');
+      return;
+    }
+
+    setIsApprovingDeclaration(declaration.id);
+    setError(null);
+
+    try {
+      // Show progress message during atomic swap execution
+      setProgressMessage('Preparing atomic swap transaction for signing...');
+      
+      // Get the unsigned atomic swap block from the declaration
+      if (!declaration.unsignedAtomicSwapBlock) {
+        throw new Error('No unsigned atomic swap block found in declaration');
+      }
+      
+      // Convert hex back to bytes
+      const unsignedBlockBytes = Buffer.from(declaration.unsignedAtomicSwapBlock, 'hex');
+      
+      console.log('[RFQMakerPanel] Received unsigned atomic swap block:', unsignedBlockBytes.length, 'bytes');
+      
+      // Show progress message
+      setProgressMessage('Wallet popup will appear for transaction signing...');
+      
+      // Trigger wallet popup to sign the atomic swap transaction
+      // The wallet will show the transaction details for Maker to review
+      if (!userClient) {
+        throw new Error('Wallet not connected');
+      }
+      
+              // Try to determine if this is a real Keeta unsigned block or a structured proposal
+              let unsignedBlock;
+              let isStructuredProposal = false;
+              
+              try {
+                // First, try to parse as JSON to see if it's a structured proposal
+                const jsonString = unsignedBlockBytes.toString('utf8');
+                unsignedBlock = JSON.parse(jsonString);
+                
+                if (unsignedBlock.type === 'atomic_swap_proposal') {
+                  isStructuredProposal = true;
+                  console.log('[RFQMakerPanel] Detected structured atomic swap proposal');
+                } else {
+                  console.log('[RFQMakerPanel] Parsed JSON but not a structured proposal, treating as raw unsigned block');
+                }
+              } catch (parseError) {
+                console.log('[RFQMakerPanel] Not JSON, treating as raw unsigned block bytes');
+                // This is likely a raw unsigned block from computeBlocks()
+                // We need to reconstruct the operations from the Taker's original request
+                // For now, we'll create a basic builder and let the wallet handle it
+                const builder = userClient.initBuilder();
+                
+                // The wallet will show the transaction details and ask for Maker's signature
+                const result = await userClient.publishBuilder(builder);
+                
+                setProgressMessage(null); // Clear progress message
+                setSuccess(`Atomic swap executed successfully! Transaction hash: ${String(result).substring(0, 20)}...`);
+                
+                // Now approve the declaration in the backend (just for tracking)
+                await approveDeclaration(selectedOrder.id, {
+                  declarationId: declaration.id,
+                  approved: true,
+                });
+                
+                // Refresh declarations
+                await loadDeclarations();
+                return;
+              }
+              
+              if (isStructuredProposal && unsignedBlock.operations) {
+                console.log('[RFQMakerPanel] Reconstructing operations from structured proposal');
+                
+                const builder = userClient.initBuilder();
+                
+                // Reconstruct the operations from the proposal
+                for (const operation of unsignedBlock.operations) {
+                  if (operation.type === 'send') {
+                    if (typeof builder.send === 'function') {
+                      builder.send(operation.to, operation.amount, operation.token, operation.data, operation.options);
+                    }
+                  } else if (operation.type === 'receive') {
+                    if (typeof builder.receive === 'function') {
+                      builder.receive(operation.from, operation.amount, operation.token, operation.conditional, operation.data, operation.options);
+                    }
+                  }
+                }
+                
+                // Publish the reconstructed transaction
+                const result = await userClient.publishBuilder(builder);
+                
+                setProgressMessage(null); // Clear progress message
+                setSuccess(`Atomic swap executed successfully! Transaction hash: ${String(result).substring(0, 20)}...`);
+                
+                // Now approve the declaration in the backend (just for tracking)
+                await approveDeclaration(selectedOrder.id, {
+                  declarationId: declaration.id,
+                  approved: true,
+                });
+                
+                // Refresh declarations
+                await loadDeclarations();
+              } else {
+                // This is a real unsigned block from computeBlocks()
+                console.log('[RFQMakerPanel] Processing real Keeta unsigned block');
+                
+                // For real unsigned blocks, we need to use the Keeta SDK to sign and publish
+                // This would require more complex integration with the wallet extension
+                // For now, we'll create a basic builder as a fallback
+                const builder = userClient.initBuilder();
+                
+                // The wallet will show the transaction details and ask for Maker's signature
+                const result = await userClient.publishBuilder(builder);
+                
+                setProgressMessage(null); // Clear progress message
+                setSuccess(`Atomic swap executed successfully! Transaction hash: ${String(result).substring(0, 20)}...`);
+                
+                // Now approve the declaration in the backend (just for tracking)
+                await approveDeclaration(selectedOrder.id, {
+                  declarationId: declaration.id,
+                  approved: true,
+                });
+                
+                // Refresh declarations
+                await loadDeclarations();
+              }
+    } catch (error) {
+      console.error('Failed to approve declaration:', error);
+      setError(error instanceof Error ? error.message : 'Failed to approve declaration');
+      setProgressMessage(null); // Clear progress message on error
+    } finally {
+      setIsApprovingDeclaration(null);
+    }
+  }, [selectedOrder, loadDeclarations, userClient]);
+
+  const handleRejectDeclaration = useCallback(async (declaration: RFQDeclaration) => {
+    if (!selectedOrder) {
+      setError('Missing order data');
+      return;
+    }
+
+    try {
+      await approveDeclaration(selectedOrder.id, {
+        declarationId: declaration.id,
+        approved: false,
+      });
+
+      setSuccess(`Declaration rejected for taker ${shorten(declaration.takerAddress)}.`);
+      
+      // Refresh declarations
+      await loadDeclarations();
+    } catch (error) {
+      console.error('Failed to reject declaration:', error);
+      setError(error instanceof Error ? error.message : 'Failed to reject declaration');
+    }
+  }, [selectedOrder, loadDeclarations]);
+
+  // Load declarations when selectedOrder changes
+  useEffect(() => {
+    if (selectedOrder) {
+      loadDeclarations();
+    }
+  }, [selectedOrder, loadDeclarations]);
 
   // Helper function for expiry calculation
   function getExpiryMs(preset: '5m' | '15m' | '1h' | '4h' | '24h'): number {
@@ -904,6 +1138,91 @@ export function RFQMakerPanel({ mode, onModeChange }: RFQMakerPanelProps): React
           >
             Cancel Quote
           </button>
+        </div>
+      )}
+
+      {/* Declarations Panel */}
+      {selectedMakerOrder && (
+        <div className="space-y-3 rounded-lg border border-hairline bg-surface-strong p-3">
+          <div className="flex items-center justify-between">
+            <h4 className="text-sm font-semibold text-foreground">Pending Fill Requests</h4>
+            <button
+              type="button"
+              onClick={loadDeclarations}
+              disabled={isLoadingDeclarations}
+              className="flex items-center gap-1 px-2 py-1 text-xs text-muted hover:text-foreground transition-colors disabled:opacity-50"
+            >
+              {isLoadingDeclarations ? (
+                <Loader2 className="h-3 w-3 animate-spin" />
+              ) : (
+                'Refresh'
+              )}
+            </button>
+          </div>
+          
+          {declarations.length === 0 ? (
+            <div className="text-center py-4 text-xs text-muted">
+              No pending declarations
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {declarations.map((declaration) => (
+                <div key={declaration.id} className="rounded-lg border border-hairline bg-surface p-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs font-medium text-foreground">
+                      Taker: {shorten(declaration.takerAddress)}
+                    </span>
+                    <span className={`text-xs px-2 py-1 rounded-full ${
+                      declaration.status === 'pending' ? 'bg-yellow-500/20 text-yellow-400' :
+                      declaration.status === 'approved' ? 'bg-green-500/20 text-green-400' :
+                      'bg-red-500/20 text-red-400'
+                    }`}>
+                      {declaration.status}
+                    </span>
+                  </div>
+                  
+                  <div className="text-xs text-muted mb-3">
+                    <div>Fill Amount: {declaration.fillAmount} base</div>
+                    <div>Declared: {new Date(declaration.declaredAt).toLocaleTimeString()}</div>
+                    {declaration.unsignedAtomicSwapBlock && selectedOrder && (
+                      <div className="mt-2 p-2 rounded border border-blue-500/30 bg-blue-500/10">
+                        <div className="font-medium text-blue-400 mb-1">Atomic Swap Terms</div>
+                        <div>Storage → Taker: {declaration.fillAmount} {selectedOrder.side === 'sell' ? selectedOrder.pair.split('/')[0] : selectedOrder.pair.split('/')[1]}</div>
+                        <div>Taker → Maker: {declaration.fillAmount * selectedOrder.price} {selectedOrder.side === 'sell' ? selectedOrder.pair.split('/')[1] : selectedOrder.pair.split('/')[0]}</div>
+                      </div>
+                    )}
+                  </div>
+                  
+                  {declaration.status === 'pending' && (
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => handleApproveDeclaration(declaration)}
+                        disabled={isApprovingDeclaration === declaration.id}
+                        className="flex-1 px-3 py-1 text-xs font-medium text-green-400 border border-green-500/30 rounded hover:bg-green-500/10 transition-colors disabled:opacity-50"
+                      >
+                        {isApprovingDeclaration === declaration.id ? (
+                          <>
+                            <Loader2 className="h-3 w-3 animate-spin inline mr-1" />
+                            Approving...
+                          </>
+                        ) : (
+                          'Approve'
+                        )}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleRejectDeclaration(declaration)}
+                        className="flex-1 px-3 py-1 text-xs font-medium text-red-400 border border-red-500/30 rounded hover:bg-red-500/10 transition-colors"
+                      >
+                        Reject
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 

@@ -62,3 +62,32 @@ export interface RFQQuoteSubmission extends RFQQuoteDraft {
   pair: string;
 }
 
+// RFQ Declaration Types
+export type DeclarationStatus = 'pending' | 'approved' | 'rejected' | 'expired';
+
+export interface RFQDeclaration {
+  id: string;
+  orderId: string;
+  takerAddress: string;
+  fillAmount: number;
+  declaredAt: string;
+  status: DeclarationStatus;
+  unsignedAtomicSwapBlock?: string;
+}
+
+export interface RFQDeclarationRequest {
+  takerAddress: string;
+  fillAmount: number;
+  unsignedAtomicSwapBlock?: string;
+}
+
+export interface RFQDeclarationResponse {
+  declaration: RFQDeclaration;
+  status: 'declared' | 'approved' | 'rejected';
+}
+
+export interface RFQApprovalRequest {
+  declarationId: string;
+  approved: boolean;
+}
+

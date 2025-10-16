@@ -1,6 +1,10 @@
 import { z } from 'zod';
 
 import type {
+  RFQDeclaration,
+  RFQDeclarationRequest,
+  RFQDeclarationResponse,
+  RFQApprovalRequest,
   RFQFillRequestResult,
   RFQMakerMeta,
   RFQOrder,
@@ -277,4 +281,99 @@ export async function cancelRfqOrder(orderId: string): Promise<void> {
   await apiRequest<void>(`/api/rfq/orders/${encodeURIComponent(orderId)}`, {
     method: 'DELETE',
   });
+}
+
+// Declaration API functions
+
+const declarationSchema = z
+  .object({
+    id: z.string(),
+    order_id: z.string(),
+    taker_address: z.string(),
+    fill_amount: z.number(),
+    declared_at: z.string(),
+    status: z.enum(['pending', 'approved', 'rejected', 'expired']),
+    unsigned_atomic_swap_block: z.string().optional(),
+  })
+  .transform<RFQDeclaration>((value) => ({
+    id: value.id,
+    orderId: value.order_id,
+    takerAddress: value.taker_address,
+    fillAmount: value.fill_amount,
+    declaredAt: value.declared_at,
+    status: value.status,
+    unsignedAtomicSwapBlock: value.unsigned_atomic_swap_block,
+  }));
+
+const declarationResponseSchema = z
+  .object({
+    declaration: declarationSchema,
+    status: z.enum(['declared', 'approved', 'rejected']),
+  })
+  .transform<RFQDeclarationResponse>((value) => ({
+    declaration: value.declaration,
+    status: value.status,
+  }));
+
+export async function declareIntention(
+  orderId: string,
+  payload: RFQDeclarationRequest,
+): Promise<RFQDeclarationResponse> {
+  const response = await apiRequest<unknown>(
+    `/api/rfq/orders/${encodeURIComponent(orderId)}/declare`,
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        taker_address: payload.takerAddress,
+        fill_amount: payload.fillAmount,
+        unsigned_atomic_swap_block: payload.unsignedAtomicSwapBlock,
+      }),
+    },
+  );
+
+  const parsed = declarationResponseSchema.safeParse(response);
+  if (!parsed.success) {
+    throw new Error('Failed to parse declaration response');
+  }
+
+  return parsed.data;
+}
+
+export async function fetchDeclarations(orderId: string): Promise<RFQDeclaration[]> {
+  try {
+    const payload = await apiRequest<unknown>(`/api/rfq/orders/${encodeURIComponent(orderId)}/declarations`);
+    const listSchema = z.array(declarationSchema);
+    const result = listSchema.safeParse(payload);
+    if (!result.success) {
+      console.warn('[rfq-api] Failed to parse declarations list', result.error.flatten());
+      return [];
+    }
+    return result.data;
+  } catch (error) {
+    console.error('[rfq-api] Failed to fetch declarations', error);
+    return [];
+  }
+}
+
+export async function approveDeclaration(
+  orderId: string,
+  payload: RFQApprovalRequest,
+): Promise<RFQDeclarationResponse> {
+  const response = await apiRequest<unknown>(
+    `/api/rfq/orders/${encodeURIComponent(orderId)}/approve-declaration`,
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        declaration_id: payload.declarationId,
+        approved: payload.approved,
+      }),
+    },
+  );
+
+  const parsed = declarationResponseSchema.safeParse(response);
+  if (!parsed.success) {
+    throw new Error('Failed to parse approval response');
+  }
+
+  return parsed.data;
 }

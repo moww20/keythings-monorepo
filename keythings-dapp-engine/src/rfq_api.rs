@@ -5,6 +5,23 @@ use std::sync::{Arc, Mutex};
 
 use crate::keeta_rfq::KeetaRFQManager;
 
+// Helper function to decode hex string to bytes
+fn decode_hex(hex: &str) -> Result<Vec<u8>, String> {
+    if hex.len() % 2 != 0 {
+        return Err("Invalid hex string length".to_string());
+    }
+    
+    let mut bytes = Vec::new();
+    for i in (0..hex.len()).step_by(2) {
+        let byte_str = &hex[i..i + 2];
+        match u8::from_str_radix(byte_str, 16) {
+            Ok(byte) => bytes.push(byte),
+            Err(_) => return Err(format!("Invalid hex character: {}", byte_str)),
+        }
+    }
+    Ok(bytes)
+}
+
 // RFQ Order Types
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RFQOrder {
@@ -52,14 +69,56 @@ pub struct RFQFillResponse {
     pub latency_ms: u64,
 }
 
-// In-memory storage for RFQ orders and makers
+// RFQ Declaration Types
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RFQDeclaration {
+    pub id: String,
+    pub order_id: String,
+    pub taker_address: String,
+    pub fill_amount: f64,
+    pub declared_at: String,
+    pub status: DeclarationStatus,
+    pub unsigned_atomic_swap_block: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum DeclarationStatus {
+    Pending,
+    Approved,
+    Rejected,
+    Expired,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RFQDeclarationRequest {
+    pub taker_address: String,
+    pub fill_amount: f64,
+    pub unsigned_atomic_swap_block: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RFQDeclarationResponse {
+    pub declaration: RFQDeclaration,
+    pub status: String, // "declared", "approved", "rejected"
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RFQApprovalRequest {
+    pub declaration_id: String,
+    pub approved: bool,
+}
+
+// In-memory storage for RFQ orders, makers, and declarations
 type RFQStorage = Arc<Mutex<HashMap<String, RFQOrder>>>;
 type MakerStorage = Arc<Mutex<HashMap<String, RFQMakerMeta>>>;
+type DeclarationStorage = Arc<Mutex<HashMap<String, RFQDeclaration>>>;
 
 // Global storage instances
 lazy_static::lazy_static! {
     static ref RFQ_ORDERS: RFQStorage = Arc::new(Mutex::new(HashMap::new()));
     static ref MAKERS: MakerStorage = Arc::new(Mutex::new(HashMap::new()));
+    static ref DECLARATIONS: DeclarationStorage = Arc::new(Mutex::new(HashMap::new()));
     static ref KEETA_RFQ_MANAGER: Arc<Mutex<KeetaRFQManager>> = Arc::new(Mutex::new(KeetaRFQManager::new()));
 }
 
@@ -290,5 +349,182 @@ pub async fn cancel_order(path: web::Path<String>) -> impl Responder {
                 "error": format!("Failed to cancel order on Keeta testnet: {}", e)
             }))
         }
+    }
+}
+
+// Declaration endpoints
+
+// Taker declares intention to fill an order
+pub async fn declare_intention(
+    path: web::Path<String>,
+    payload: web::Json<RFQDeclarationRequest>,
+) -> impl Responder {
+    let order_id = path.into_inner();
+    
+    // Check if order exists
+    let orders = RFQ_ORDERS.lock().unwrap();
+    let order = match orders.get(&order_id) {
+        Some(order) => order.clone(),
+        None => {
+            return HttpResponse::NotFound().json(serde_json::json!({
+                "error": "Order not found"
+            }));
+        }
+    };
+    drop(orders); // Release the lock
+    
+    // Validate taker balance using Keeta RFQ manager
+    let mut keeta_manager = KEETA_RFQ_MANAGER.lock().unwrap();
+    match keeta_manager.validate_taker_balance(
+        &payload.taker_address,
+        &order,
+        payload.fill_amount,
+    ).await {
+        Ok(_) => {
+            log::info!("[RFQ] Taker balance validation passed for order {}", order_id);
+        }
+        Err(e) => {
+            log::warn!("[RFQ] Taker balance validation failed for order {}: {}", order_id, e);
+            return HttpResponse::BadRequest().json(serde_json::json!({
+                "error": format!("Balance validation failed: {}", e)
+            }));
+        }
+    }
+    drop(keeta_manager); // Release the lock
+    
+    // Frontend builds the atomic swap transaction, we just store it
+    let unsigned_block_hex = payload.unsigned_atomic_swap_block.clone();
+    log::info!("[RFQ] Received unsigned atomic swap block from frontend for order {} ({} chars)", 
+               order_id, unsigned_block_hex.as_ref().map(|s| s.len()).unwrap_or(0));
+    
+    // Create declaration with unsigned block
+    let declaration_id = format!("decl-{}", chrono::Utc::now().timestamp_millis());
+    let declaration = RFQDeclaration {
+        id: declaration_id.clone(),
+        order_id: order_id.clone(),
+        taker_address: payload.taker_address.clone(),
+        fill_amount: payload.fill_amount,
+        declared_at: chrono::Utc::now().to_rfc3339(),
+        status: DeclarationStatus::Pending,
+        unsigned_atomic_swap_block: unsigned_block_hex,
+    };
+    
+    // Store declaration
+    let mut declarations = DECLARATIONS.lock().unwrap();
+    declarations.insert(declaration_id.clone(), declaration.clone());
+    
+    log::info!("[RFQ] Declaration {} created for order {} by taker {} with atomic swap block", 
+               declaration_id, order_id, payload.taker_address);
+    
+    let response = RFQDeclarationResponse {
+        declaration,
+        status: "declared".to_string(),
+    };
+    
+    HttpResponse::Created().json(response)
+}
+
+// Get all declarations for an order
+pub async fn get_declarations(path: web::Path<String>) -> impl Responder {
+    let order_id = path.into_inner();
+    
+    let declarations = DECLARATIONS.lock().unwrap();
+    let order_declarations: Vec<RFQDeclaration> = declarations
+        .values()
+        .filter(|decl| decl.order_id == order_id)
+        .cloned()
+        .collect();
+    
+    HttpResponse::Ok().json(order_declarations)
+}
+
+// Maker approves or rejects a declaration
+pub async fn approve_declaration(
+    path: web::Path<String>,
+    payload: web::Json<RFQApprovalRequest>,
+) -> impl Responder {
+    let order_id = path.into_inner();
+    
+    // Find the declaration
+    let mut declarations = DECLARATIONS.lock().unwrap();
+    if let Some(declaration) = declarations.get_mut(&payload.declaration_id) {
+        // Verify this declaration belongs to the order
+        if declaration.order_id != order_id {
+            return HttpResponse::BadRequest().json(serde_json::json!({
+                "error": "Declaration does not belong to this order"
+            }));
+        }
+        
+        // Update declaration status
+        declaration.status = if payload.approved {
+            DeclarationStatus::Approved
+        } else {
+            DeclarationStatus::Rejected
+        };
+        
+        // If approved, execute the atomic swap
+        if payload.approved {
+            if let Some(unsigned_block_hex) = &declaration.unsigned_atomic_swap_block {
+                // Convert hex string back to bytes
+                let unsigned_block_bytes = match decode_hex(unsigned_block_hex) {
+                    Ok(bytes) => bytes,
+                    Err(e) => {
+                        log::error!("[RFQ] Failed to decode unsigned block for declaration {}: {}", 
+                                   payload.declaration_id, e);
+                        return HttpResponse::InternalServerError().json(serde_json::json!({
+                            "error": "Failed to decode unsigned block"
+                        }));
+                    }
+                };
+                
+                // Execute atomic swap using Keeta RFQ manager
+                let mut keeta_manager = KEETA_RFQ_MANAGER.lock().unwrap();
+                match keeta_manager.execute_atomic_swap(
+                    &order_id,
+                    &unsigned_block_bytes,
+                    "maker_signature_placeholder", // In real implementation, this would be the actual maker signature
+                ).await {
+                    Ok(transaction_hash) => {
+                        log::info!("[RFQ] Atomic swap executed for declaration {} with tx: {}", 
+                                   payload.declaration_id, transaction_hash);
+                        
+                        // Update order status to filled
+                        let mut orders = RFQ_ORDERS.lock().unwrap();
+                        if let Some(order) = orders.get_mut(&order_id) {
+                            order.status = "filled".to_string();
+                            order.updated_at = chrono::Utc::now().to_rfc3339();
+                        }
+                    }
+                    Err(e) => {
+                        log::error!("[RFQ] Failed to execute atomic swap for declaration {}: {}", 
+                                   payload.declaration_id, e);
+                        return HttpResponse::InternalServerError().json(serde_json::json!({
+                            "error": format!("Failed to execute atomic swap: {}", e)
+                        }));
+                    }
+                }
+            } else {
+                log::error!("[RFQ] No unsigned block found for approved declaration {}", payload.declaration_id);
+                return HttpResponse::InternalServerError().json(serde_json::json!({
+                    "error": "No unsigned block found for declaration"
+                }));
+            }
+        }
+        
+        log::info!("[RFQ] Declaration {} {} for order {}", 
+                   payload.declaration_id,
+                   if payload.approved { "approved" } else { "rejected" },
+                   order_id);
+        
+        let response = RFQDeclarationResponse {
+            declaration: declaration.clone(),
+            status: if payload.approved { "approved" } else { "rejected" }.to_string(),
+        };
+        
+        HttpResponse::Ok().json(response)
+    } else {
+        HttpResponse::NotFound().json(serde_json::json!({
+            "error": "Declaration not found"
+        }))
     }
 }
