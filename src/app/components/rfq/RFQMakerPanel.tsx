@@ -72,7 +72,7 @@ export function RFQMakerPanel({ mode, onModeChange }: RFQMakerPanelProps): React
   const { pair, createQuote, cancelQuote, selectedOrder } = useRFQContext();
   const makerProfiles = useMakerProfiles();
   const { publicKey, isConnected, userClient } = useWallet();
-  const { balances, isLoading: isLoadingBalances, error: balancesError } = useTokenBalances(isConnected);
+  const { balances, isLoading: isLoadingBalances, error: balancesError, fetchTokenBalances } = useTokenBalances(isConnected);
   const [draft, setDraft] = useState<MakerDraftState>(DEFAULT_DRAFT);
   const [isPublishing, setIsPublishing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -129,6 +129,17 @@ export function RFQMakerPanel({ mode, onModeChange }: RFQMakerPanelProps): React
       setSelectedToken(availableTokens[0].address);
     }
   }, [availableTokens, selectedToken]);
+
+  // Debug token balances loading
+  useEffect(() => {
+    console.log('[RFQMakerPanel] Token balances debug:', {
+      isConnected,
+      isLoadingBalances,
+      balancesError,
+      balancesCount: Array.isArray(balances) ? balances.length : 'not array',
+      balances: balances
+    });
+  }, [isConnected, isLoadingBalances, balancesError, balances]);
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -857,19 +868,48 @@ export function RFQMakerPanel({ mode, onModeChange }: RFQMakerPanelProps): React
             
             {/* Token Selector */}
             <div className="mb-4">
-              <label className="mb-2 block text-xs font-medium text-muted">Select Token to Trade</label>
+              <div className="mb-2 flex items-center justify-between">
+                <label className="text-xs font-medium text-muted">Select Token to Trade</label>
+                {!isLoadingBalances && (
+                  <button
+                    type="button"
+                    onClick={() => fetchTokenBalances()}
+                    className="text-xs text-accent hover:text-accent/80 transition-colors"
+                  >
+                    Refresh
+                  </button>
+                )}
+              </div>
               {isLoadingBalances ? (
                 <div className="flex items-center gap-2 text-sm text-muted">
                   <Loader2 className="h-4 w-4 animate-spin" />
                   Loading your tokens...
                 </div>
               ) : balancesError ? (
-                <div className="text-sm text-red-500">
-                  Error loading tokens: {balancesError}
+                <div className="space-y-2">
+                  <div className="text-sm text-red-500">
+                    Error loading tokens: {balancesError}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => fetchTokenBalances()}
+                    className="text-xs text-accent hover:text-accent/80 transition-colors"
+                  >
+                    Try again
+                  </button>
                 </div>
               ) : availableTokens.length === 0 ? (
-                <div className="text-sm text-muted">
-                  No tokens found in your wallet. Please add some tokens to create a quote.
+                <div className="space-y-2">
+                  <div className="text-sm text-muted">
+                    No tokens found in your wallet. Please add some tokens to create a quote.
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => fetchTokenBalances()}
+                    className="text-xs text-accent hover:text-accent/80 transition-colors"
+                  >
+                    Refresh tokens
+                  </button>
                 </div>
               ) : (
                 <select
