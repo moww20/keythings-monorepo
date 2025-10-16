@@ -269,8 +269,16 @@ export function RFQProvider({ pair, children }: { pair: string; children: ReactN
 
   const createQuote = useCallback(
     async (submission: RFQQuoteSubmission, storageAccountAddress?: string) => {
+      console.log('[RFQContext] createQuote called with storageAccountAddress:', storageAccountAddress);
+      console.log('[RFQContext] submission:', submission);
+      
       if (!walletIdentity) {
         throw new Error('Connect your wallet before publishing RFQ orders.');
+      }
+
+      // CRITICAL: Storage account address is required - no fallback allowed
+      if (!storageAccountAddress || !storageAccountAddress.startsWith('keeta_')) {
+        throw new Error('Storage account address is required and must be a valid Keeta address. The Maker must create a storage account first.');
       }
 
       const price = Number.parseFloat(submission.price);
@@ -317,9 +325,7 @@ export function RFQProvider({ pair, children }: { pair: string; children: ReactN
         maker: submission.maker,
         unsignedBlock: 'blockchain_handled_in_maker_panel',
         makerSignature: 'keeta_wallet_signature',
-        storageAccount: storageAccountAddress && storageAccountAddress.startsWith('keeta_') 
-          ? storageAccountAddress 
-          : 'blockchain_handled_in_maker_panel',
+        storageAccount: storageAccountAddress,
         allowlisted: !!submission.allowlistLabel,
         status: 'open',
         createdAt: nowIso,

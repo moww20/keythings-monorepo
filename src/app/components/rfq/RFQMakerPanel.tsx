@@ -273,16 +273,23 @@ export function RFQMakerPanel({ mode, onModeChange }: RFQMakerPanelProps): React
 
   // Step 4: Fund Quote (following CreatePoolModal pattern)
   const handleFundStorage = useCallback(async () => {
+    console.log('[RFQMakerPanel] handleFundStorage called');
+    console.log('[RFQMakerPanel] storageAccountAddress:', storageAccountAddress);
+    console.log('[RFQMakerPanel] currentSubmission:', currentSubmission);
+    
     if (!userClient || !publicKey) {
       setError('Connect your wallet before funding the RFQ order.');
       return;
     }
     
-    if (!storageAccountAddress) {
+    if (!storageAccountAddress || !storageAccountAddress.startsWith('keeta_')) {
+      console.log('[RFQMakerPanel] Storage account validation failed - redirecting to review step');
       setError('Storage account not created. Please click "Fund Quote" first to create the storage account.');
       setStep('review');
       return;
     }
+    
+    console.log('[RFQMakerPanel] Storage account validation passed:', storageAccountAddress);
     
     if (!currentSubmission) {
       setError('Missing order submission data. Please try creating the order again.');
