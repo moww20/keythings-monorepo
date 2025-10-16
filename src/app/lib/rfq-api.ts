@@ -251,7 +251,7 @@ export async function createRfqOrder(order: RFQOrder): Promise<RFQOrder> {
       auto_sign_sla_ms: order.maker.autoSignSlaMs,
       fills_completed: order.maker.fillsCompleted,
       failure_rate: order.maker.failureRate,
-      allowlist_label: order.maker.allowlistLabel,
+      allowlist_label: order.maker.allowlistLabel || null,
     },
     unsigned_block: order.unsignedBlock || null,
     maker_signature: order.makerSignature || null,
