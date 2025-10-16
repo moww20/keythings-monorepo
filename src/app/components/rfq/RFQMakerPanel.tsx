@@ -1058,15 +1058,23 @@ export function RFQMakerPanel({ mode, onModeChange }: RFQMakerPanelProps): React
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="mb-1 block text-xs font-medium text-muted">Side</label>
-                <select
-                  value={draft.side}
-                  onChange={(e) => setDraft(prev => ({ ...prev, side: e.target.value as 'buy' | 'sell' }))}
-                  className="w-full rounded-lg border border-hairline bg-surface px-3 py-2 text-sm text-foreground focus:border-accent focus:outline-none"
-                  aria-label="Select order side"
-                >
-                  <option value="sell">Sell (maker provides base)</option>
-                  <option value="buy">Buy (maker provides quote)</option>
-                </select>
+                <div className="relative">
+                  <select
+                    value={draft.side}
+                    onChange={(e) => setDraft(prev => ({ ...prev, side: e.target.value as 'buy' | 'sell' }))}
+                    className="w-full rounded-lg border border-hairline bg-surface-strong px-3 py-2 pr-8 text-sm text-foreground focus:border-accent focus:outline-none appearance-none cursor-pointer"
+                    aria-label="Select order side"
+                  >
+                    <option value="sell" className="bg-surface-strong text-foreground">Sell (maker provides base)</option>
+                    <option value="buy" className="bg-surface-strong text-foreground">Buy (maker provides quote)</option>
+                  </select>
+                  {/* Custom dropdown arrow */}
+                  <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+                    <svg className="h-4 w-4 text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </div>
+                </div>
               </div>
               <div>
                 <label className="mb-1 block text-xs font-medium text-muted">Size</label>
@@ -1094,18 +1102,26 @@ export function RFQMakerPanel({ mode, onModeChange }: RFQMakerPanelProps): React
               </div>
               <div>
                 <label className="mb-1 block text-xs font-medium text-muted">Expires In</label>
-                <select
-                  value={draft.expiryPreset}
-                  onChange={(e) => setDraft(prev => ({ ...prev, expiryPreset: e.target.value as RFQQuoteDraft['expiryPreset'] }))}
-                  className="w-full rounded-lg border border-hairline bg-surface px-3 py-2 text-sm text-foreground focus:border-accent focus:outline-none"
-                  aria-label="Select expiry time"
-                >
-                  {EXPIRY_PRESETS.map((preset) => (
-                    <option key={preset.value} value={preset.value}>
-                      {preset.label}
-                    </option>
-                  ))}
-                </select>
+                <div className="relative">
+                  <select
+                    value={draft.expiryPreset}
+                    onChange={(e) => setDraft(prev => ({ ...prev, expiryPreset: e.target.value as RFQQuoteDraft['expiryPreset'] }))}
+                    className="w-full rounded-lg border border-hairline bg-surface-strong px-3 py-2 pr-8 text-sm text-foreground focus:border-accent focus:outline-none appearance-none cursor-pointer"
+                    aria-label="Select expiry time"
+                  >
+                    {EXPIRY_PRESETS.map((preset) => (
+                      <option key={preset.value} value={preset.value} className="bg-surface-strong text-foreground">
+                        {preset.label}
+                      </option>
+                    ))}
+                  </select>
+                  {/* Custom dropdown arrow */}
+                  <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+                    <svg className="h-4 w-4 text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
