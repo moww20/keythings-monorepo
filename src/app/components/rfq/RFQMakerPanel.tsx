@@ -909,18 +909,128 @@ export function RFQMakerPanel({ mode, onModeChange }: RFQMakerPanelProps): React
                   </button>
                 </div>
               ) : (
-                <select
-                  value={selectedToken || ''}
-                  onChange={(e) => setSelectedToken(e.target.value)}
-                  className="w-full rounded-lg border border-hairline bg-surface px-3 py-2 text-sm text-foreground focus:border-accent focus:outline-none"
-                  aria-label="Select token to trade"
-                >
-                  {availableTokens.map((token) => (
-                    <option key={token.address} value={token.address}>
-                      {token.symbol} - {token.balance} {token.symbol}
-                    </option>
-                  ))}
-                </select>
+                <div className="space-y-2">
+                  {/* Selected Token Display */}
+                  {selectedToken && (
+                    <div className="flex items-center gap-3 p-3 rounded-lg border border-hairline bg-surface">
+                      {(() => {
+                        const token = availableTokens.find(t => t.address === selectedToken);
+                        if (!token) return null;
+                        
+                        // Get the full token data from processed tokens
+                        const fullToken = tokens.find(t => t.address === selectedToken);
+                        
+                        return (
+                          <>
+                            {/* Token Icon */}
+                            <div className="w-8 h-8 rounded-full bg-accent/20 flex items-center justify-center flex-shrink-0">
+                              {fullToken?.icon ? (
+                                <img 
+                                  src={fullToken.icon} 
+                                  alt={token.symbol}
+                                  className="w-6 h-6 rounded-full object-cover"
+                                />
+                              ) : fullToken?.fallbackIcon ? (
+                                <div 
+                                  className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold"
+                                  style={{ 
+                                    backgroundColor: fullToken.fallbackIcon.bgColor || '#6aa8ff',
+                                    color: fullToken.fallbackIcon.textColor || '#ffffff'
+                                  }}
+                                >
+                                  {fullToken.fallbackIcon.letter}
+                                </div>
+                              ) : (
+                                <span className="text-accent font-bold text-sm">
+                                  {token.symbol.charAt(0)}
+                                </span>
+                              )}
+                            </div>
+                            
+                            {/* Token Info */}
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2">
+                                <span className="font-medium text-foreground">{token.symbol}</span>
+                                <span className="text-xs text-muted">{token.name}</span>
+                              </div>
+                              <div className="text-sm text-muted">
+                                Balance: {token.balance} {token.symbol}
+                              </div>
+                            </div>
+                            
+                            {/* Change Button */}
+                            <button
+                              type="button"
+                              onClick={() => setSelectedToken(null)}
+                              className="text-xs text-accent hover:text-accent/80 transition-colors"
+                            >
+                              Change
+                            </button>
+                          </>
+                        );
+                      })()}
+                    </div>
+                  )}
+                  
+                  {/* Token Selection Dropdown */}
+                  {!selectedToken && (
+                    <div className="space-y-2 max-h-48 overflow-y-auto">
+                      {availableTokens.map((token) => {
+                        const fullToken = tokens.find(t => t.address === token.address);
+                        
+                        return (
+                          <button
+                            key={token.address}
+                            type="button"
+                            onClick={() => setSelectedToken(token.address)}
+                            className="w-full flex items-center gap-3 p-3 rounded-lg border border-hairline bg-surface hover:bg-surface-strong transition-colors text-left"
+                          >
+                            {/* Token Icon */}
+                            <div className="w-8 h-8 rounded-full bg-accent/20 flex items-center justify-center flex-shrink-0">
+                              {fullToken?.icon ? (
+                                <img 
+                                  src={fullToken.icon} 
+                                  alt={token.symbol}
+                                  className="w-6 h-6 rounded-full object-cover"
+                                />
+                              ) : fullToken?.fallbackIcon ? (
+                                <div 
+                                  className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold"
+                                  style={{ 
+                                    backgroundColor: fullToken.fallbackIcon.bgColor || '#6aa8ff',
+                                    color: fullToken.fallbackIcon.textColor || '#ffffff'
+                                  }}
+                                >
+                                  {fullToken.fallbackIcon.letter}
+                                </div>
+                              ) : (
+                                <span className="text-accent font-bold text-sm">
+                                  {token.symbol.charAt(0)}
+                                </span>
+                              )}
+                            </div>
+                            
+                            {/* Token Info */}
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2">
+                                <span className="font-medium text-foreground">{token.symbol}</span>
+                                <span className="text-xs text-muted">{token.name}</span>
+                              </div>
+                              <div className="text-sm text-muted">
+                                Balance: {token.balance} {token.symbol}
+                              </div>
+                            </div>
+                            
+                            {/* Select Arrow */}
+                            <svg className="h-4 w-4 text-muted flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                            </svg>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
               )}
             </div>
             
