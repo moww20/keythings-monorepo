@@ -207,21 +207,35 @@ function parseMetadata(metadata?: string | null): TokenMetadata | null {
 /**
  * Extract decimals and field type from token metadata
  */
-export function extractDecimalsAndFieldType(metadata?: string | null): { decimals: number; fieldType: TokenFieldType } {
+export function extractDecimalsAndFieldType(metadata?: string | null): {
+  decimals: number;
+  fieldType: TokenFieldType;
+  displayDecimals: number | null;
+} {
   const metadataObj = parseMetadata(metadata);
-  if (!metadataObj) return { decimals: 0, fieldType: "decimals" };
-
-  // Check decimalPlaces first (higher priority)
-  if (typeof metadataObj.decimalPlaces === "number") {
-    return { decimals: metadataObj.decimalPlaces, fieldType: "decimalPlaces" };
+  if (!metadataObj) {
+    return { decimals: 0, fieldType: "decimals", displayDecimals: null };
   }
 
-  // Fallback to decimals
-  if (typeof metadataObj.decimals === "number") {
-    return { decimals: metadataObj.decimals, fieldType: "decimals" };
-  }
+  const decimalsValue =
+    typeof metadataObj.decimals === "number" && Number.isFinite(metadataObj.decimals)
+      ? Math.max(0, Math.trunc(metadataObj.decimals))
+      : null;
+  const decimalPlacesValue =
+    typeof metadataObj.decimalPlaces === "number" && Number.isFinite(metadataObj.decimalPlaces)
+      ? Math.max(0, Math.trunc(metadataObj.decimalPlaces))
+      : null;
 
-  return { decimals: 0, fieldType: "decimals" };
+  const decimals = decimalsValue ?? decimalPlacesValue ?? 0;
+  const fieldType: TokenFieldType = decimalsValue !== null ? "decimals" : "decimalPlaces";
+  const displayDecimals =
+    decimalPlacesValue !== null
+      ? decimalPlacesValue
+      : decimalsValue !== null
+        ? decimalsValue
+        : null;
+
+  return { decimals, fieldType, displayDecimals };
 }
 
 /**
@@ -231,14 +245,21 @@ export function formatTokenAmount(
   rawAmount: string | number | bigint,
   decimals = 0,
   fieldType: TokenFieldType = "decimals",
+  displayDecimals?: number | null,
 ): string {
   const amount = BigInt(rawAmount);
 
-  if (decimals <= 0) {
+  const normalizedDecimals = Math.max(decimals, 0);
+  const normalizedDisplayDecimals =
+    typeof displayDecimals === "number" && Number.isFinite(displayDecimals)
+      ? Math.max(0, Math.trunc(displayDecimals))
+      : normalizedDecimals;
+
+  if (normalizedDecimals <= 0) {
     return amount.toString();
   }
 
-  const divisor = BigInt(10) ** BigInt(decimals);
+  const divisor = BigInt(10) ** BigInt(normalizedDecimals);
   const isNegative = amount < BigInt(0);
   const absoluteAmount = isNegative ? -amount : amount;
   const quotient = absoluteAmount / divisor;
@@ -247,15 +268,27 @@ export function formatTokenAmount(
 
   if (remainder === BigInt(0)) {
     if (fieldType === "decimals") {
-      return `${signPrefix}${quotient.toString()}.${"0".repeat(decimals)}`;
+      if (normalizedDisplayDecimals <= 0) {
+        return `${signPrefix}${quotient.toString()}`;
+      }
+      return `${signPrefix}${quotient.toString()}.${"0".repeat(normalizedDisplayDecimals)}`;
     }
 
     return `${signPrefix}${quotient.toString()}`;
   }
 
-  const remainderStr = remainder.toString().padStart(decimals, "0");
+  let remainderStr = remainder.toString().padStart(normalizedDecimals, "0");
+
+  if (normalizedDisplayDecimals < normalizedDecimals) {
+    remainderStr = remainderStr.slice(0, normalizedDisplayDecimals);
+  } else if (normalizedDisplayDecimals > normalizedDecimals) {
+    remainderStr = remainderStr.padEnd(normalizedDisplayDecimals, "0");
+  }
 
   if (fieldType === "decimals") {
+    if (normalizedDisplayDecimals <= 0) {
+      return `${signPrefix}${quotient.toString()}`;
+    }
     return `${signPrefix}${quotient.toString()}.${remainderStr}`;
   }
 
@@ -422,46 +455,56 @@ export async function processTokenForDisplay(
   metadata: string | null | undefined,
   baseTokenAddress: string | null | undefined,
 ): Promise<ProcessedToken> {
-  // Check if this is the base token (KTA)
   const isBaseToken = Boolean(baseTokenAddress && tokenAddress === baseTokenAddress);
 
-  let decimals = 9; // Default for KTA
-  let fieldType: TokenFieldType = "decimalPlaces";
-  let name = "Unknown Token";
-  let ticker = "";
+  const metadataName = metadata ? getTokenDisplayName(metadata) : "";
+  const metadataTicker = metadata ? getTokenTicker(metadata) : "";
+  const decimalInfo = extractDecimalsAndFieldType(metadata);
 
-  if (isBaseToken) {
-    name = "Keeta Token";
-    ticker = "KTA";
-  } else if (metadata) {
-    // Extract metadata
-    const decimalInfo = extractDecimalsAndFieldType(metadata);
-    decimals = decimalInfo.decimals;
-    fieldType = decimalInfo.fieldType;
+  let decimals = decimalInfo.decimals;
+  let fieldType: TokenFieldType = decimalInfo.fieldType;
+  let displayDecimals = decimalInfo.displayDecimals;
 
-    name = getTokenDisplayName(metadata) || `Token ${tokenAddress.slice(-8)}`;
-    ticker = getTokenTicker(metadata) || tokenAddress.slice(-4).toUpperCase();
-  } else {
-    // Fallback for tokens without metadata
-    name = `Token ${tokenAddress.slice(-8)}`;
-    ticker = tokenAddress.slice(-4).toUpperCase();
+  if (decimals <= 0) {
+    if (isBaseToken) {
+      decimals = 9;
+      fieldType = "decimalPlaces";
+      displayDecimals = 9;
+    } else {
+      decimals = 0;
+      fieldType = "decimals";
+      displayDecimals = null;
+    }
   }
 
-  // Format the amount
-  const formattedAmount = formatTokenAmount(balance, decimals, fieldType);
-  const displayAmount = formatAmountWithCommas(formattedAmount);
+  const fallbackName = `Token ${tokenAddress.slice(-8)}`;
+  const fallbackTicker = tokenAddress.slice(-4).toUpperCase();
 
-  // Get icon
-  let iconDataUrl = "";
-  let fallbackIcon: TokenIcon | null = null;
+  let name = metadataName || fallbackName;
+  let ticker = metadataTicker ? metadataTicker.trim().toUpperCase() : fallbackTicker;
 
   if (isBaseToken) {
-    // Use the Keeta logo for KTA base token
-    iconDataUrl = "/icons/TLEOfKos_400x400.jpg";
-  } else {
-    const icon = metadata ? getTokenIconFromMetadata(metadata) : null;
-    iconDataUrl = icon ? getTokenIconDataUrl(icon) : "";
-    fallbackIcon = icon ? null : createFallbackTokenIcon(ticker);
+    name = metadataName || "Keeta Token";
+    ticker = metadataTicker ? metadataTicker.trim().toUpperCase() : "BASE";
+  }
+
+  const formattedAmount = formatTokenAmount(balance, decimals, fieldType, displayDecimals);
+  const displayAmount = formatAmountWithCommas(formattedAmount);
+
+  const iconFromMetadata = metadata ? getTokenIconFromMetadata(metadata) : null;
+  let iconDataUrl = iconFromMetadata ? getTokenIconDataUrl(iconFromMetadata) : "";
+  let fallbackIcon: TokenIcon | null = null;
+
+  if (!iconDataUrl && iconFromMetadata) {
+    fallbackIcon = iconFromMetadata;
+  }
+
+  if (!iconDataUrl && !fallbackIcon) {
+    if (isBaseToken) {
+      iconDataUrl = "/icons/TLEOfKos_400x400.jpg";
+    } else {
+      fallbackIcon = createFallbackTokenIcon(ticker);
+    }
   }
 
   return {
@@ -475,7 +518,7 @@ export async function processTokenForDisplay(
     isBaseToken,
     icon: iconDataUrl,
     fallbackIcon,
-    hasMetadata: Boolean(metadata && ticker && name),
+    hasMetadata: Boolean(metadata && (metadataName || metadataTicker || iconFromMetadata)),
   };
 }
 

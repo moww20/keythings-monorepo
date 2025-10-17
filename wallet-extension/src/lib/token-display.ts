@@ -38,6 +38,7 @@ export interface OperationTokenDisplay {
   fallbackIcon: TokenIcon | null;
   decimals: number;
   fieldType: TokenFieldType;
+  displayDecimals: number | null;
 }
 
 export interface OperationTokenDisplayContext {
@@ -130,35 +131,53 @@ function parseMetadata(metadata?: TokenMetadataInput): TokenMetadata | null {
 export function extractDecimalsAndFieldType(metadata?: TokenMetadataInput): {
   decimals: number;
   fieldType: TokenFieldType;
+  displayDecimals: number | null;
 } {
   const metadataObj = parseMetadata(metadata);
   if (!metadataObj) {
-    return { decimals: 0, fieldType: "decimals" };
+    return { decimals: 0, fieldType: "decimals", displayDecimals: null };
   }
 
-  if (typeof metadataObj.decimalPlaces === "number") {
-    return { decimals: metadataObj.decimalPlaces, fieldType: "decimalPlaces" };
-  }
+  const decimalsValue =
+    typeof metadataObj.decimals === "number" && Number.isFinite(metadataObj.decimals)
+      ? Math.max(0, Math.trunc(metadataObj.decimals))
+      : null;
+  const decimalPlacesValue =
+    typeof metadataObj.decimalPlaces === "number" && Number.isFinite(metadataObj.decimalPlaces)
+      ? Math.max(0, Math.trunc(metadataObj.decimalPlaces))
+      : null;
 
-  if (typeof metadataObj.decimals === "number") {
-    return { decimals: metadataObj.decimals, fieldType: "decimals" };
-  }
+  const decimals = decimalsValue ?? decimalPlacesValue ?? 0;
+  const fieldType: TokenFieldType = decimalsValue !== null ? "decimals" : "decimalPlaces";
+  const displayDecimals =
+    decimalPlacesValue !== null
+      ? decimalPlacesValue
+      : decimalsValue !== null
+        ? decimalsValue
+        : null;
 
-  return { decimals: 0, fieldType: "decimals" };
+  return { decimals, fieldType, displayDecimals };
 }
 
 export function formatTokenAmount(
   rawAmount: string | number | bigint,
   decimals = 0,
   fieldType: TokenFieldType = "decimals",
+  displayDecimals?: number | null,
 ): string {
   const amount = BigInt(rawAmount);
 
-  if (decimals <= 0) {
+  const normalizedDecimals = Math.max(decimals, 0);
+  const normalizedDisplayDecimals =
+    typeof displayDecimals === "number" && Number.isFinite(displayDecimals)
+      ? Math.max(0, Math.trunc(displayDecimals))
+      : normalizedDecimals;
+
+  if (normalizedDecimals <= 0) {
     return amount.toString();
   }
 
-  const divisor = BigInt(10) ** BigInt(decimals);
+  const divisor = BigInt(10) ** BigInt(normalizedDecimals);
   const isNegative = amount < BigInt(0);
   const absoluteAmount = isNegative ? -amount : amount;
   const quotient = absoluteAmount / divisor;
@@ -167,15 +186,27 @@ export function formatTokenAmount(
 
   if (remainder === BigInt(0)) {
     if (fieldType === "decimals") {
-      return `${signPrefix}${quotient.toString()}.${"0".repeat(decimals)}`;
+      if (normalizedDisplayDecimals <= 0) {
+        return `${signPrefix}${quotient.toString()}`;
+      }
+      return `${signPrefix}${quotient.toString()}.${"0".repeat(normalizedDisplayDecimals)}`;
     }
 
     return `${signPrefix}${quotient.toString()}`;
   }
 
-  const remainderStr = remainder.toString().padStart(decimals, "0");
+  let remainderStr = remainder.toString().padStart(normalizedDecimals, "0");
+
+  if (normalizedDisplayDecimals < normalizedDecimals) {
+    remainderStr = remainderStr.slice(0, normalizedDisplayDecimals);
+  } else if (normalizedDisplayDecimals > normalizedDecimals) {
+    remainderStr = remainderStr.padEnd(normalizedDisplayDecimals, "0");
+  }
 
   if (fieldType === "decimals") {
+    if (normalizedDisplayDecimals <= 0) {
+      return `${signPrefix}${quotient.toString()}`;
+    }
     return `${signPrefix}${quotient.toString()}.${remainderStr}`;
   }
 
@@ -711,21 +742,41 @@ export function deriveOperationTokenDisplay(
     }
   }
 
-  const { decimals: metadataDecimals, fieldType: metadataFieldType } = extractDecimalsAndFieldType(metadataCandidate);
+  const {
+    decimals: metadataDecimals,
+    fieldType: metadataFieldType,
+    displayDecimals: metadataDisplayDecimals,
+  } = extractDecimalsAndFieldType(metadataCandidate);
 
   const decimalPlacesOverride = findFirstNumber(candidates, DECIMAL_PLACES_KEYS);
   const decimalsOverride = findFirstNumber(candidates, DECIMALS_KEYS);
 
   let decimals = metadataDecimals;
   let fieldType: TokenFieldType = metadataFieldType;
+  let displayDecimals: number | null = metadataDisplayDecimals;
 
-  if (typeof decimalPlacesOverride === "number") {
-    decimals = decimalPlacesOverride;
-    fieldType = "decimalPlaces";
-  } else if (typeof decimalsOverride === "number") {
-    decimals = decimalsOverride;
+  const hasDecimalsOverride = typeof decimalsOverride === "number" && Number.isFinite(decimalsOverride);
+  if (hasDecimalsOverride) {
+    decimals = Math.max(0, Math.trunc(decimalsOverride));
     fieldType = "decimals";
+    if (displayDecimals === null) {
+      displayDecimals = decimals;
+    }
   }
+
+  if (typeof decimalPlacesOverride === "number" && Number.isFinite(decimalPlacesOverride)) {
+    const normalized = Math.max(0, Math.trunc(decimalPlacesOverride));
+    displayDecimals = normalized;
+    if (!hasDecimalsOverride && fieldType === "decimalPlaces") {
+      decimals = normalized;
+      fieldType = "decimalPlaces";
+    }
+  }
+
+  if (displayDecimals === null && decimals > 0) {
+    displayDecimals = decimals;
+  }
+
 
   const rawAmountResult = (() => {
     for (const candidate of candidates) {
@@ -748,8 +799,16 @@ export function deriveOperationTokenDisplay(
 
   if (rawAmountResult.raw !== null) {
     try {
-      const normalized = formatTokenAmount(rawAmountResult.raw, decimals, fieldType);
+      const normalized = formatTokenAmount(rawAmountResult.raw, decimals, fieldType, displayDecimals);
       formattedAmount = formatAmountWithCommas(normalized);
+      
+      // Debug logging for BASE token result
+      if (operation.tokenSymbol === 'BASE') {
+        console.log('[token-display] BASE token result:', {
+          normalized,
+          formattedAmount
+        });
+      }
     } catch (error) {
       console.warn("[token-display] Failed to format raw amount", error);
     }
@@ -773,6 +832,15 @@ export function deriveOperationTokenDisplay(
     findFirstString(operationCandidates, SYMBOL_KEYS) ?? findFirstString(candidates, SYMBOL_KEYS);
   const metadataTicker = metadataCandidate ? getTokenTicker(metadataCandidate) : "";
   const symbol = symbolCandidate || (metadataTicker ? metadataTicker : operation.tokenSymbol) || null;
+
+  // Special handling for BASE token - ensure it has 1 decimal place
+  if (operation.tokenSymbol === 'BASE' || symbol === 'BASE') {
+    if (decimals === 0) {
+      decimals = 1;
+      fieldType = "decimalPlaces";
+      console.log('[token-display] Applied BASE token decimal fix:', { decimals, fieldType });
+    }
+  }
 
   const nameCandidate = findFirstString(candidates, NAME_KEYS);
   const metadataName = metadataCandidate ? getTokenDisplayName(metadataCandidate) : "";
@@ -807,5 +875,6 @@ export function deriveOperationTokenDisplay(
     fallbackIcon,
     decimals,
     fieldType,
+    displayDecimals,
   } satisfies OperationTokenDisplay;
 }

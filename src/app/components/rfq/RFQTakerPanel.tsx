@@ -10,6 +10,8 @@ import {
   getMakerTokenAddressFromOrder,
   getMakerTokenDecimalsFromOrder,
   getTakerTokenAddressFromOrder,
+  getTakerTokenDecimalsFromOrder,
+  toBaseUnits,
 } from '@/app/lib/token-utils';
 import { declareIntention, fetchDeclarations } from '@/app/lib/rfq-api';
 import type { RFQDeclaration, DeclarationStatus } from '@/app/types/rfq';
@@ -234,14 +236,28 @@ export function RFQTakerPanel({ mode, onModeChange }: RFQTakerPanelProps): React
   console.log('[RFQTakerPanel] Debug - makerTokenAddress:', makerTokenAddress);
   console.log('[RFQTakerPanel] Debug - takerTokenAddress:', takerTokenAddress);
 
-  // Calculate amounts - ensure they are strings to avoid BigInt serialization issues
-  const makerAmount = String(fillAmount); // Amount maker is offering
-  const takerAmount = String(fillAmount * selectedOrder.price); // Amount taker must send
+  // Calculate amounts with proper decimal handling
+  const makerTokenDecimals = getMakerTokenDecimalsFromOrder(selectedOrder);
+  const takerTokenDecimals = getTakerTokenDecimalsFromOrder(selectedOrder);
+  
+  // Convert decimal amounts to base units (smallest token units)
+  const makerAmountBigInt = toBaseUnits(fillAmount, makerTokenDecimals);
+  const takerAmountBigInt = toBaseUnits(fillAmount * selectedOrder.price, takerTokenDecimals);
+  
+  // Convert to strings for serialization
+  const makerAmount = makerAmountBigInt.toString();
+  const takerAmount = takerAmountBigInt.toString();
 
+  console.log('[RFQTakerPanel] Decimal conversion debug:');
+  console.log('[RFQTakerPanel] - fillAmount:', fillAmount);
+  console.log('[RFQTakerPanel] - makerTokenDecimals:', makerTokenDecimals);
+  console.log('[RFQTakerPanel] - takerTokenDecimals:', takerTokenDecimals);
+  console.log('[RFQTakerPanel] - makerAmountBigInt:', makerAmountBigInt.toString());
+  console.log('[RFQTakerPanel] - takerAmountBigInt:', takerAmountBigInt.toString());
+  
   console.log('[RFQTakerPanel] Atomic swap terms:');
   console.log('[RFQTakerPanel] 1. Taker receives:', makerAmount, 'from storage account (funded by Maker)');
   console.log('[RFQTakerPanel] 2. Taker sends:', takerAmount, 'to Maker');
-  console.log('[RFQTakerPanel] Debug - makerAmount type:', typeof makerAmount);
   console.log('[RFQTakerPanel] Debug - takerAmount type:', typeof takerAmount);
   console.log('[RFQTakerPanel] Debug - makerAmount value:', makerAmount);
   console.log('[RFQTakerPanel] Debug - takerAmount value:', takerAmount);
@@ -350,78 +366,106 @@ export function RFQTakerPanel({ mode, onModeChange }: RFQTakerPanelProps): React
   console.log('[RFQTakerPanel] Atomic swap transaction built successfully');
   console.log('[RFQTakerPanel] Operations count:', (builder._operations as unknown[])?.length || 0);
   
-  // For atomic swaps, the Taker should sign their part of the transaction
-  // The Maker will sign their part when they approve the declaration
-  console.log('[RFQTakerPanel] Signing atomic swap transaction with wallet...');
+  // For atomic swaps, the Taker creates an UNSIGNED block for the Maker to sign
+  // Following Keeta's atomic swap pattern: Taker builds, Maker signs and publishes
+  console.log('[RFQTakerPanel] Computing unsigned atomic swap block...');
   
   try {
-  // Publish the transaction to trigger wallet popup for Taker to sign
-  const result = await userClient.publishBuilder(builder);
-  console.log('[RFQTakerPanel] Taker signed atomic swap transaction:', String(result).substring(0, 20) + '...');
-  
-  // Create a structured atomic swap proposal for the Maker to review and sign
-  const atomicSwapProposal = {
-  type: 'atomic_swap_proposal',
-  version: '1.0',
-  operations: builder._operations || [],
-  takerTransactionHash: String(result),
-  terms: {
-  taker: {
-  address: publicKey,
-  receives: {
-  amount: makerAmount,
-  token: makerTokenAddressString,
-  from: selectedOrder.storageAccount
-  },
-  sends: {
-  amount: takerAmount,
-  token: takerTokenAddressString,
-  to: selectedOrder.maker.id
-  }
-  },
-  storage: {
-  address: selectedOrder.storageAccount,
-  sends: {
-  amount: makerAmount,
-  token: makerTokenAddressString,
-  to: publicKey
-  }
-  }
-  },
-  conditions: {
-  atomic: true,
-  conditional: true,
-  expiry: new Date(Date.now() + 5 * 60 * 1000).toISOString()
-  },
-  metadata: {
-  orderId: selectedOrder.id,
-  pair: selectedOrder.pair,
-  side: selectedOrder.side,
-  price: selectedOrder.price,
-  timestamp: Date.now()
-  }
-  };
-  
-  const serializedProposal = JSON.stringify(atomicSwapProposal);
-  const unsignedBlockHex = Buffer.from(serializedProposal, 'utf8').toString('hex');
-  console.log('[RFQTakerPanel] Created atomic swap proposal with Taker signature:', unsignedBlockHex.substring(0, 20) + '...');
-  
-  // Send declaration with the atomic swap proposal
-  await declareIntention(selectedOrder.id, {
-  takerAddress: publicKey,
-  fillAmount,
-  unsignedAtomicSwapBlock: unsignedBlockHex,
-  });
+    // Compute the transaction blocks but DO NOT publish them
+    // This creates the unsigned block that the Maker will sign
+    const computedResult = await (builder as any).computeBuilderBlocks();
+    const { blocks } = computedResult;
+    console.log('[RFQTakerPanel] Computed unsigned blocks:', blocks.length);
+    
+    if (!blocks || blocks.length === 0) {
+      throw new Error('Failed to compute atomic swap blocks');
+    }
+    
+    // Get the unsigned block data
+    // The blocks now contain actual bytes from the wallet extension
+    const unsignedBlock = blocks[0];
+    console.log('[RFQTakerPanel] Raw unsigned block data:', unsignedBlock);
+    console.log('[RFQTakerPanel] Block keys:', Object.keys(unsignedBlock));
+    
+    // Try to get hex bytes from different possible fields
+    let unsignedBlockHex = unsignedBlock.bytesHex || '';
+    
+    // Fallback: convert bytes array to hex if bytesHex is not available
+    if (!unsignedBlockHex && unsignedBlock.bytes) {
+      const bytesArray = unsignedBlock.bytes;
+      unsignedBlockHex = bytesArray.map((byte: number) => byte.toString(16).padStart(2, '0')).join('');
+      console.log('[RFQTakerPanel] Converted bytes array to hex:', unsignedBlockHex.substring(0, 20) + '...');
+    }
+    
+    const unsignedBlockHash = unsignedBlock.hash || 'unknown_hash';
+    console.log('[RFQTakerPanel] Created unsigned atomic swap block with hash:', unsignedBlockHash);
+    console.log('[RFQTakerPanel] Block bytes (hex):', unsignedBlockHex.substring(0, 20) + '...');
+    console.log('[RFQTakerPanel] Block bytes length:', unsignedBlockHex.length);
+    
+    // Validate that we have block data
+    if (!unsignedBlockHex || unsignedBlockHex.length === 0) {
+      throw new Error('Failed to get unsigned block bytes from wallet extension');
+    }
+    
+    // Create atomic swap metadata for the Maker to review
+    const atomicSwapMetadata = {
+      type: 'atomic_swap_declaration',
+      version: '1.0',
+      taker: {
+        address: publicKey,
+        receives: {
+          amount: makerAmount,
+          decimals: makerTokenDecimals,
+          token: makerTokenAddressString,
+          from: selectedOrder.storageAccount
+        },
+        sends: {
+          amount: takerAmount,
+          decimals: takerTokenDecimals,
+          token: takerTokenAddressString,
+          to: selectedOrder.maker.id
+        }
+      },
+      terms: {
+        atomic: true,
+        conditional: true,
+        expiry: new Date(Date.now() + 5 * 60 * 1000).toISOString()
+      },
+      metadata: {
+        orderId: selectedOrder.id,
+        pair: selectedOrder.pair,
+        side: selectedOrder.side,
+        price: selectedOrder.price,
+        timestamp: Date.now()
+      }
+    };
+    
+    // Combine the unsigned block with metadata
+    const declarationData = {
+      unsignedBlock: unsignedBlockHex, // Send the actual block bytes as hex
+      blockHash: unsignedBlockHash,    // Also include the hash for reference
+      metadata: atomicSwapMetadata
+    };
+    
+    const serializedDeclaration = JSON.stringify(declarationData);
+    console.log('[RFQTakerPanel] Sending atomic swap declaration to Maker...');
+    
+    // Send declaration with the unsigned atomic swap block
+    await declareIntention(selectedOrder.id, {
+      takerAddress: publicKey,
+      fillAmount,
+      unsignedAtomicSwapBlock: serializedDeclaration,
+    });
 
-  setHasActiveDeclaration(true);
-  setDeclarationStatus('pending');
-  setSuccessMessage('Taker signed atomic swap! Waiting for Maker to sign their part...');
-  return;
-  
+    setHasActiveDeclaration(true);
+    setDeclarationStatus('pending');
+    setSuccessMessage('Atomic swap declaration sent! Maker will review and sign the transaction...');
+    return;
+    
   } catch (error) {
-  console.error('[RFQTakerPanel] Error signing atomic swap transaction:', error);
-  setLocalError(error instanceof Error ? error.message : 'Failed to sign atomic swap transaction');
-  return;
+    console.error('[RFQTakerPanel] Error computing atomic swap block:', error);
+    setLocalError(error instanceof Error ? error.message : 'Failed to create atomic swap declaration');
+    return;
   }
   } catch (error) {
   console.error('[RFQTakerPanel] Error building atomic swap:', error);
@@ -581,7 +625,7 @@ export function RFQTakerPanel({ mode, onModeChange }: RFQTakerPanelProps): React
   <div>Rate: {selectedOrder.price} {selectedOrder.pair}</div>
   </div>
   <div className="mt-2 text-blue-400/70">
-  Both operations execute atomically - if either fails, both fail. No partial execution possible.
+  Both operations execute atomically - if either fails, both fail. No partial execution possible. The maker will sign and publish this transaction after reviewing your declaration.
   </div>
   </div>
   )}
@@ -663,12 +707,12 @@ export function RFQTakerPanel({ mode, onModeChange }: RFQTakerPanelProps): React
   )}
 
   <p className="text-[11px] text-muted">
-  {!hasActiveDeclaration 
-  ? "Declare your intention to fill this quote. The maker will review and approve your request, then execute the atomic swap automatically."
-  : declarationStatus === 'approved'
-  ? "Your declaration has been approved and the atomic swap has been executed automatically!"
-  : "Your declaration is pending maker approval. The maker will review your request and execute the atomic swap if approved."
-  }
+    {!hasActiveDeclaration 
+    ? "Declare your intention to fill this quote. You'll create an unsigned atomic swap transaction that the maker will review and sign."
+    : declarationStatus === 'approved'
+    ? "Your atomic swap declaration has been approved and the transaction has been executed on-chain!"
+    : "Your atomic swap declaration is pending maker approval. The maker will review your unsigned transaction and sign it if approved."
+    }
   </p>
   </>
   ) : (
