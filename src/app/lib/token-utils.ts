@@ -117,19 +117,39 @@ export function getTakerTokenAddressFromOrder(order: RFQOrder): string {
   return getTakerTokenAddress(order.pair, order.side);
 }
 
+/**
+ * @deprecated Use getTokenMetadata() from wallet context instead of cache-based decimals
+ * These functions may return stale or incorrect decimal values
+ */
 export function getMakerTokenDecimals(pair: string, side: OrderSide): number {
+  console.warn('[DEPRECATED] getMakerTokenDecimals() - Use getTokenMetadata() from wallet context instead');
   return getTokenDecimalsForSymbol(getMakerTokenSymbol(pair, side));
 }
 
+/**
+ * @deprecated Use getTokenMetadata() from wallet context instead of cache-based decimals
+ * These functions may return stale or incorrect decimal values
+ */
 export function getTakerTokenDecimals(pair: string, side: OrderSide): number {
+  console.warn('[DEPRECATED] getTakerTokenDecimals() - Use getTokenMetadata() from wallet context instead');
   return getTokenDecimalsForSymbol(getTakerTokenSymbol(pair, side));
 }
 
+/**
+ * @deprecated Use getTokenMetadata() from wallet context instead of cache-based decimals
+ * These functions may return stale or incorrect decimal values
+ */
 export function getMakerTokenDecimalsFromOrder(order: RFQOrder): number {
+  console.warn('[DEPRECATED] getMakerTokenDecimalsFromOrder() - Use getTokenMetadata() from wallet context instead');
   return getMakerTokenDecimals(order.pair, order.side);
 }
 
+/**
+ * @deprecated Use getTokenMetadata() from wallet context instead of cache-based decimals
+ * These functions may return stale or incorrect decimal values
+ */
 export function getTakerTokenDecimalsFromOrder(order: RFQOrder): number {
+  console.warn('[DEPRECATED] getTakerTokenDecimalsFromOrder() - Use getTokenMetadata() from wallet context instead');
   return getTakerTokenDecimals(order.pair, order.side);
 }
 
@@ -148,6 +168,39 @@ export function fromBaseUnits(amount: bigint, decimals: number): number {
   }
   const divisor = 10 ** decimals;
   return Number(amount) / divisor;
+}
+
+/**
+ * Validate that token metadata decimals match expected values
+ * Used to ensure consistency between taker and maker transactions
+ */
+export async function validateTokenMetadataConsistency(
+  tokenAddress: string,
+  expectedDecimals: number,
+  getTokenMetadata: (addr: string) => Promise<{ decimals: number; fieldType: 'decimalPlaces' | 'decimals' } | null>
+): Promise<boolean> {
+  try {
+    const metadata = await getTokenMetadata(tokenAddress);
+    if (!metadata) {
+      console.warn('[validateTokenMetadataConsistency] No metadata found for token:', tokenAddress);
+      return false;
+    }
+    
+    const isConsistent = metadata.decimals === expectedDecimals;
+    if (!isConsistent) {
+      console.error('[validateTokenMetadataConsistency] Decimal mismatch:', {
+        tokenAddress,
+        expected: expectedDecimals,
+        actual: metadata.decimals,
+        fieldType: metadata.fieldType
+      });
+    }
+    
+    return isConsistent;
+  } catch (error) {
+    console.error('[validateTokenMetadataConsistency] Validation failed:', error);
+    return false;
+  }
 }
 
 interface TokenMetadata {
@@ -485,7 +538,7 @@ export async function processTokenForDisplay(
 
   if (isBaseToken) {
     name = metadataName || "Keeta Token";
-    ticker = metadataTicker ? metadataTicker.trim().toUpperCase() : "BASE";
+    ticker = metadataTicker ? metadataTicker.trim().toUpperCase() : "KTA";
   }
 
   const formattedAmount = formatTokenAmount(balance, decimals, fieldType, displayDecimals);

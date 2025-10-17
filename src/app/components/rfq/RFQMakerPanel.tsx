@@ -10,7 +10,8 @@ import { useWallet } from '@/app/contexts/WalletContext';
 import { useProcessedTokens } from '@/app/hooks/useProcessedTokens';
 import { StorageAccountManager } from '@/app/lib/storage-account-manager';
 import { createPermissionPayload } from '@/app/lib/storage-account-manager';
-import { getMakerTokenAddress, getMakerTokenDecimals, getTakerTokenAddress, getTakerTokenDecimals, toBaseUnits } from '@/app/lib/token-utils';
+import { getTakerTokenAddress, toBaseUnits } from '@/app/lib/token-utils';
+import { useTokenMetadata } from '@/app/hooks/useTokenMetadata';
 import { fetchDeclarations, approveDeclaration } from '@/app/lib/rfq-api';
 
 const EXPIRY_PRESETS: Array<{ value: RFQQuoteDraft['expiryPreset']; label: string }> = [
@@ -72,7 +73,7 @@ interface RFQMakerPanelProps {
 export function RFQMakerPanel({ mode, onModeChange }: RFQMakerPanelProps): React.JSX.Element {
   const { pair, createQuote, cancelQuote, selectedOrder } = useRFQContext();
   const makerProfiles = useMakerProfiles();
-  const { publicKey, isConnected, userClient } = useWallet();
+  const { publicKey, isConnected, userClient, getTokenMetadata } = useWallet();
   const { tokens, isLoading: isLoadingTokens, error: tokensError, refreshTokens } = useProcessedTokens();
   const [draft, setDraft] = useState<MakerDraftState>(DEFAULT_DRAFT);
   const [isPublishing, setIsPublishing] = useState(false);
@@ -351,8 +352,21 @@ export function RFQMakerPanel({ mode, onModeChange }: RFQMakerPanelProps): React
       const makerAmount = toBaseUnits(parseFloat(currentSubmission.size), makerTokenDecimals);
       
       // Taker always provides KTA (base token)
-      const takerTokenAddress = (userClient?.baseToken as any)?.publicKeyString || 'keeta_base_token_placeholder';
-      const takerTokenDecimals = 6; // KTA has 6 decimals
+      const baseTokenAddressCandidate = (userClient?.baseToken as { publicKeyString?: string } | undefined)?.publicKeyString;
+      const baseTokenAddress = typeof baseTokenAddressCandidate === 'string' ? baseTokenAddressCandidate : null;
+      const derivedTakerTokenAddress = getTakerTokenAddress(currentSubmission.pair, currentSubmission.side);
+      const takerTokenAddress = baseTokenAddress ?? derivedTakerTokenAddress;
+
+      if (!takerTokenAddress || takerTokenAddress.toUpperCase().startsWith('PLACEHOLDER')) {
+        throw new Error('Unable to determine KTA token address. Refresh your wallet balances and try again.');
+      }
+
+      // Fetch taker token metadata from wallet provider
+      const takerTokenMetadata = await getTokenMetadata(baseTokenAddress ?? takerTokenAddress);
+      if (!takerTokenMetadata) {
+        throw new Error('Failed to fetch taker token (KTA) metadata from blockchain');
+      }
+      const takerTokenDecimals = takerTokenMetadata.decimals;
       const takerAmount = toBaseUnits(parseFloat(currentSubmission.size) * parseFloat(currentSubmission.price), takerTokenDecimals);
       
       // Set metadata with RFQ order details and atomic swap terms
@@ -465,7 +479,7 @@ export function RFQMakerPanel({ mode, onModeChange }: RFQMakerPanelProps): React
     } finally {
       setIsPublishing(false);
     }
-  }, [userClient, publicKey, storageAccountAddress, currentSubmission, createQuote, makerProfile, availableTokens, selectedToken]);
+  }, [userClient, publicKey, storageAccountAddress, currentSubmission, createQuote, makerProfile, availableTokens, selectedToken, getTokenMetadata]);
 
   const handleCreateStorage = useCallback(async () => {
     if (!isConnected || !publicKey || !userClient) {

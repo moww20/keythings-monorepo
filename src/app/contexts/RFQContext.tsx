@@ -307,6 +307,7 @@ export function RFQProvider({ pair, children }: { pair: string; children: ReactN
         expiry: expiryIso,
         tokenAddress: makerTokenAddress,
         tokenDecimals: makerTokenDecimals,
+        fieldType: 'decimals', // Default to decimals field type
         makerAddress: walletIdentity,
         allowlistLabel: submission.allowlistLabel,
         metadata: {
@@ -365,6 +366,7 @@ export function RFQProvider({ pair, children }: { pair: string; children: ReactN
           order,
           tokenAddress: makerTokenAddress,
           tokenDecimals: makerTokenDecimals,
+          fieldType: 'decimals', // Default to decimals field type
           amount: remaining,
         });
       }

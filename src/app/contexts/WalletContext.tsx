@@ -13,10 +13,9 @@ import {
   toBaseUnits,
   getMakerTokenAddressFromOrder,
   getTakerTokenAddressFromOrder,
-  getMakerTokenDecimalsFromOrder,
-  getTakerTokenDecimalsFromOrder,
   setTokenAddressCache,
   setTokenDecimalsCache,
+  extractDecimalsAndFieldType,
 } from "../lib/token-utils";
 import type { KeetaUserClient, KeetaBalanceEntry } from "../../types/keeta";
 import {
@@ -117,6 +116,7 @@ interface WalletContextValue {
   publicKey: string | null;
   signMessage: ((message: string) => Promise<string>) | null;
   userClient: KeetaUserClient | null;
+  getTokenMetadata: (tokenAddress: string) => Promise<{ decimals: number; fieldType: 'decimalPlaces' | 'decimals'; name?: string; symbol?: string; ticker?: string; metadata?: string } | null>;
   
   // Legacy properties for backward compatibility
   isWalletLoading: boolean;
@@ -606,8 +606,58 @@ export function WalletProvider({ children }: WalletProviderProps) {
       const makerToken = JSON.parse(JSON.stringify({ publicKeyString: makerTokenAddress }));
       const takerToken = JSON.parse(JSON.stringify({ publicKeyString: takerTokenAddress }));
 
-      const makerDecimals = getMakerTokenDecimalsFromOrder(order);
-      const takerDecimals = getTakerTokenDecimalsFromOrder(order);
+      // Fetch token metadata from blockchain instead of using cache
+      let makerDecimals = 0;
+      let takerDecimals = 0;
+      
+      try {
+        // Handle base token specially
+        if (makerTokenAddress === 'base' || makerTokenAddress === (userClient.baseToken as any)?.publicKeyString) {
+          const baseTokenInfo = userClient.baseToken;
+          if (baseTokenInfo && typeof baseTokenInfo === 'object' && 'info' in baseTokenInfo) {
+            const info = (baseTokenInfo as any).info;
+            const metadata = info?.metadata;
+            if (metadata) {
+              const { decimals } = extractDecimalsAndFieldType(metadata);
+              makerDecimals = decimals;
+            }
+          }
+        } else {
+          // For regular tokens, try to get from account state
+          if ('getAccountState' in userClient && typeof userClient.getAccountState === 'function') {
+            const accountState = await userClient.getAccountState(makerTokenAddress);
+            if (accountState?.info?.metadata) {
+              const { decimals } = extractDecimalsAndFieldType(accountState.info.metadata);
+              makerDecimals = decimals;
+            }
+          }
+        }
+        
+        // Same logic for taker token
+        if (takerTokenAddress === 'base' || takerTokenAddress === (userClient.baseToken as any)?.publicKeyString) {
+          const baseTokenInfo = userClient.baseToken;
+          if (baseTokenInfo && typeof baseTokenInfo === 'object' && 'info' in baseTokenInfo) {
+            const info = (baseTokenInfo as any).info;
+            const metadata = info?.metadata;
+            if (metadata) {
+              const { decimals } = extractDecimalsAndFieldType(metadata);
+              takerDecimals = decimals;
+            }
+          }
+        } else {
+          // For regular tokens, try to get from account state
+          if ('getAccountState' in userClient && typeof userClient.getAccountState === 'function') {
+            const accountState = await userClient.getAccountState(takerTokenAddress);
+            if (accountState?.info?.metadata) {
+              const { decimals } = extractDecimalsAndFieldType(accountState.info.metadata);
+              takerDecimals = decimals;
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Failed to fetch token metadata:', error);
+        throw new Error('Failed to fetch token metadata from blockchain');
+      }
       const takerAmount = toBaseUnits(fillAmount, takerDecimals);
       const makerAmount = toBaseUnits(fillAmount * order.price, makerDecimals);
 
@@ -740,6 +790,7 @@ export function WalletProvider({ children }: WalletProviderProps) {
           token,
           amount,
           decimals,
+          fieldType: 'decimals' as const, // Default to decimals field type
           normalizedAmount: fromBaseUnits(amount, decimals),
         };
       });
@@ -823,6 +874,92 @@ export function WalletProvider({ children }: WalletProviderProps) {
       publicKey: primaryAccount,
       signMessage: !primaryAccount ? null : signMessage,
       userClient, // Keeta SDK client for building and signing transactions
+      getTokenMetadata: async (tokenAddress: string) => {
+        if (!userClient) return null;
+        
+        try {
+          console.log('[WalletContext] getTokenMetadata called for:', tokenAddress);
+          console.log('[WalletContext] userClient.baseToken:', userClient.baseToken);
+          console.log('[WalletContext] baseTokenAddress:', primaryAccount);
+          
+          // Handle base token specially
+          if (tokenAddress === 'base' || 
+              tokenAddress === (userClient.baseToken as any)?.publicKeyString ||
+              tokenAddress === primaryAccount) {
+            const baseTokenInfo = userClient.baseToken;
+            if (baseTokenInfo && typeof baseTokenInfo === 'object' && 'info' in baseTokenInfo) {
+              const info = (baseTokenInfo as any).info;
+              const metadata = info?.metadata;
+              
+              if (metadata) {
+                const { decimals, fieldType } = extractDecimalsAndFieldType(metadata);
+                console.log('[WalletContext] Base token metadata found:', { decimals, fieldType });
+                
+                // Fix incorrect naming - ensure proper KTA naming
+                let name = info.name || 'Keeta Token';
+                let symbol = info.symbol || 'KTA';
+                let ticker = info.ticker || 'KTA';
+                
+                // Correct common naming issues
+                if (name.includes('BASE') && !name.includes('Keeta Token')) {
+                  name = 'Keeta Token';
+                }
+                if (symbol.includes('BASE') && symbol !== 'KTA') {
+                  symbol = 'KTA';
+                }
+                if (ticker.includes('BASE') && ticker !== 'KTA') {
+                  ticker = 'KTA';
+                }
+                
+                return {
+                  decimals,
+                  fieldType,
+                  name,
+                  symbol,
+                  ticker,
+                  metadata
+                };
+              }
+            }
+            
+            // Fallback for base token when metadata is not available
+            console.log('[WalletContext] Base token metadata not found, using fallback');
+            return {
+              decimals: 9, // Default KTA decimals
+              fieldType: 'decimals' as const,
+              name: 'Keeta Token',
+              symbol: 'KTA',
+              ticker: 'KTA',
+              metadata: null
+            };
+          }
+
+          // For regular tokens, try to get from account state
+          console.log('[WalletContext] Trying to get account state for token:', tokenAddress);
+          if ('getAccountState' in userClient && typeof userClient.getAccountState === 'function') {
+            const accountState = await userClient.getAccountState(tokenAddress);
+            console.log('[WalletContext] Account state result:', accountState);
+            if (accountState?.info?.metadata) {
+              const { decimals, fieldType } = extractDecimalsAndFieldType(accountState.info.metadata);
+              console.log('[WalletContext] Token metadata found:', { decimals, fieldType });
+              return {
+                decimals,
+                fieldType,
+                name: accountState.info.name,
+                symbol: accountState.info.symbol,
+                ticker: accountState.info.ticker,
+                metadata: accountState.info.metadata
+              };
+            }
+          }
+
+          console.log('[WalletContext] No metadata found for token:', tokenAddress);
+          return null;
+        } catch (error) {
+          console.error('Failed to fetch token metadata:', error);
+          return null;
+        }
+      },
 
       // Legacy properties for backward compatibility
       isWalletLoading: walletData.isLoading,

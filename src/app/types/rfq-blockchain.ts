@@ -10,6 +10,7 @@ export interface RFQStorageAccountDetails {
   expiry: string;
   tokenAddress: string;
   tokenDecimals: number;
+  fieldType: 'decimalPlaces' | 'decimals';
   makerAddress: string;
   allowlistLabel?: string;
   metadata?: Record<string, unknown>;
@@ -35,6 +36,7 @@ export interface RFQCancelDetails {
   order: RFQOrder;
   tokenAddress: string;
   tokenDecimals: number;
+  fieldType: 'decimalPlaces' | 'decimals';
   amount: number;
 }
 
@@ -53,6 +55,7 @@ export interface StorageAccountBalanceEntry {
   amount: bigint;
   normalizedAmount: number;
   decimals: number;
+  fieldType: 'decimalPlaces' | 'decimals';
 }
 
 export interface StorageAccountState {

@@ -64,7 +64,7 @@ export function RFQTakerPanel({ mode, onModeChange }: RFQTakerPanelProps): React
   refreshEscrowState,
   lastEscrowVerification,
   } = useRFQContext();
-  const { isConnected, publicKey, userClient } = useWallet();
+  const { isConnected, publicKey, userClient, getTokenMetadata } = useWallet();
   const [localError, setLocalError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -230,15 +230,25 @@ export function RFQTakerPanel({ mode, onModeChange }: RFQTakerPanelProps): React
   }
   
   // Use the same base token for both sides (KTA)
-  const makerTokenAddress = baseToken; // What Maker is offering (KTA)
-  const takerTokenAddress = baseToken; // What Taker is sending (KTA)
+  const makerTokenAddress = (baseToken as any)?.publicKeyString || 'base'; // What Maker is offering (KTA)
+  const takerTokenAddress = (baseToken as any)?.publicKeyString || 'base'; // What Taker is sending (KTA)
   
   console.log('[RFQTakerPanel] Debug - makerTokenAddress:', makerTokenAddress);
   console.log('[RFQTakerPanel] Debug - takerTokenAddress:', takerTokenAddress);
 
-  // Calculate amounts with proper decimal handling
-  const makerTokenDecimals = getMakerTokenDecimalsFromOrder(selectedOrder);
-  const takerTokenDecimals = getTakerTokenDecimalsFromOrder(selectedOrder);
+  // Fetch token metadata from blockchain instead of using cache
+  const makerTokenMetadata = await getTokenMetadata(makerTokenAddress);
+  const takerTokenMetadata = await getTokenMetadata(takerTokenAddress);
+  
+  if (!makerTokenMetadata) {
+    throw new Error('Failed to fetch maker token metadata from blockchain');
+  }
+  if (!takerTokenMetadata) {
+    throw new Error('Failed to fetch taker token metadata from blockchain');
+  }
+  
+  const makerTokenDecimals = makerTokenMetadata.decimals;
+  const takerTokenDecimals = takerTokenMetadata.decimals;
   
   // Convert decimal amounts to base units (smallest token units)
   const makerAmountBigInt = toBaseUnits(fillAmount, makerTokenDecimals);
@@ -416,12 +426,14 @@ export function RFQTakerPanel({ mode, onModeChange }: RFQTakerPanelProps): React
         receives: {
           amount: makerAmount,
           decimals: makerTokenDecimals,
+          fieldType: makerTokenMetadata.fieldType,
           token: makerTokenAddressString,
           from: selectedOrder.storageAccount
         },
         sends: {
           amount: takerAmount,
           decimals: takerTokenDecimals,
+          fieldType: takerTokenMetadata.fieldType,
           token: takerTokenAddressString,
           to: selectedOrder.maker.id
         }
@@ -473,7 +485,7 @@ export function RFQTakerPanel({ mode, onModeChange }: RFQTakerPanelProps): React
   } finally {
   setIsDeclaring(false);
   }
-  }, [escrowInsights.lockedAmount, fillAmount, isConnected, publicKey, selectedOrder, userClient]);
+  }, [escrowInsights.lockedAmount, fillAmount, isConnected, publicKey, selectedOrder, userClient, getTokenMetadata]);
 
   // Removed handleExecuteSwap - atomic swap execution happens automatically when Maker approves
 
