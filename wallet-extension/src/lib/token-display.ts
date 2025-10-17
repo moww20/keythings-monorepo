@@ -154,30 +154,37 @@ export function formatTokenAmount(
 ): string {
   const amount = BigInt(rawAmount);
 
-  if (decimals === 0) {
+  if (decimals <= 0) {
     return amount.toString();
   }
 
-  if (fieldType === "decimalPlaces") {
-    const divisor = BigInt(10) ** BigInt(decimals);
-    const quotient = amount / divisor;
-    const remainder = amount % divisor;
+  const divisor = BigInt(10) ** BigInt(decimals);
+  const isNegative = amount < BigInt(0);
+  const absoluteAmount = isNegative ? -amount : amount;
+  const quotient = absoluteAmount / divisor;
+  const remainder = absoluteAmount % divisor;
+  const signPrefix = isNegative ? "-" : "";
 
-    if (remainder === BigInt(0)) {
-      return quotient.toString();
+  if (remainder === BigInt(0)) {
+    if (fieldType === "decimals") {
+      return `${signPrefix}${quotient.toString()}.${"0".repeat(decimals)}`;
     }
 
-    const remainderStr = remainder.toString().padStart(decimals, "0");
-    const trimmed = remainderStr.replace(/0+$/, "");
-    if (trimmed.length === 0) {
-      return quotient.toString();
-    }
-
-    return `${quotient}.${trimmed}`;
+    return `${signPrefix}${quotient.toString()}`;
   }
 
-  const amountStr = amount.toString();
-  return `${amountStr}.${"0".repeat(decimals)}`;
+  const remainderStr = remainder.toString().padStart(decimals, "0");
+
+  if (fieldType === "decimals") {
+    return `${signPrefix}${quotient.toString()}.${remainderStr}`;
+  }
+
+  const trimmed = remainderStr.replace(/0+$/, "");
+  if (trimmed.length === 0) {
+    return `${signPrefix}${quotient.toString()}`;
+  }
+
+  return `${signPrefix}${quotient.toString()}.${trimmed}`;
 }
 
 export function formatAmountWithCommas(amount: string | number | bigint): string {
