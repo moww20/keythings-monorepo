@@ -177,10 +177,6 @@ function RFQOrderCard({ order, isSelected, onSelect }: RFQOrderCardProps): React
               {order.maker.displayName} · Rep {order.maker.reputationScore}
             </span>
             <span className="inline-flex items-center gap-1">
-              <BadgeCheck className="h-3 w-3 text-blue-400" />
-              SLA {order.maker.autoSignSlaMs} ms
-            </span>
-            <span className="inline-flex items-center gap-1">
               <Clock3 className={`h-3 w-3 ${isExpired ? 'text-red-400' : 'text-muted'}`} />
               {relativeExpiry}
             </span>

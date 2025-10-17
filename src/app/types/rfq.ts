@@ -7,7 +7,6 @@ export interface RFQMakerMeta {
   displayName: string;
   verified: boolean;
   reputationScore: number;
-  autoSignSlaMs: number;
   fillsCompleted: number;
   failureRate: number;
   allowlistLabel?: string;

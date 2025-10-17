@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState, useEffect } from 'react';
 
 import { TradingPairSelector, DEFAULT_TRADING_PAIRS } from '@/app/components/TradingPairSelector';
 import { TradingViewChart, type TradingViewTimeframe } from '@/app/components/TradingViewChart';
@@ -25,11 +25,60 @@ export default function TradePage(): React.JSX.Element {
   const [selectedPair, setSelectedPair] = useState<string>(DEFAULT_TRADING_PAIRS[0].symbol);
   const [timeframe, setTimeframe] = useState<TradingViewTimeframe>('1D');
   const [mode, setMode] = useState<TradePageMode>('rfq_taker');
+  const [ktaPriceData, setKtaPriceData] = useState<{
+    usd: number;
+    usd_24h_change: number;
+    usd_24h_vol: number;
+  } | null>(null);
+  const [isLoadingPrice, setIsLoadingPrice] = useState(false);
 
-  const marketDetails: TradingPairInfo | undefined = useMemo(
-    () => DEFAULT_TRADING_PAIRS.find((pair) => pair.symbol === selectedPair),
-    [selectedPair],
-  );
+  // Fetch live KTA price data
+  useEffect(() => {
+    const fetchKtaPrice = async () => {
+      if (!window.keeta?.getKtaPrice) return;
+      
+      try {
+        setIsLoadingPrice(true);
+        const priceData = await window.keeta.getKtaPrice();
+        if (priceData && typeof priceData === 'object' && 'usd' in priceData) {
+          const data = priceData as any;
+          setKtaPriceData({
+            usd: data.usd || 0,
+            usd_24h_change: data.usd_24h_change || 0,
+            usd_24h_vol: data.usd_24h_vol || 0,
+          });
+        }
+      } catch (error) {
+        console.error('Failed to fetch KTA price:', error);
+      } finally {
+        setIsLoadingPrice(false);
+      }
+    };
+
+    fetchKtaPrice();
+    
+    // Set up interval to refresh price data every 30 seconds
+    const interval = setInterval(fetchKtaPrice, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const marketDetails: TradingPairInfo | undefined = useMemo(() => {
+    const basePair = DEFAULT_TRADING_PAIRS.find((pair) => pair.symbol === selectedPair);
+    if (!basePair) return undefined;
+    
+    // Use live data if available, otherwise fall back to static data
+    if (ktaPriceData) {
+      return {
+        ...basePair,
+        price: ktaPriceData.usd,
+        changePercent24h: ktaPriceData.usd_24h_change,
+        volume24h: ktaPriceData.usd_24h_vol,
+        change24h: (ktaPriceData.usd * ktaPriceData.usd_24h_change) / 100,
+      };
+    }
+    
+    return basePair;
+  }, [selectedPair, ktaPriceData]);
 
   const handlePairChange = useCallback((symbol: string) => {
     setSelectedPair(symbol);
@@ -47,51 +96,42 @@ export default function TradePage(): React.JSX.Element {
                 <TradingPairSelector selected={selectedPair} onChange={handlePairChange} />
               </div>
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-6">
-                <div className="grid grid-cols-2 gap-4 text-sm text-muted sm:grid-cols-4">
+                <div className="grid grid-cols-2 gap-4 text-sm text-muted sm:grid-cols-3">
                   <div>
                     <p className="text-xs uppercase tracking-wide">Last Price</p>
                     <p className="text-sm font-semibold text-foreground">
-                      ${marketDetails.price.toLocaleString('en-US', { minimumFractionDigits: 4, maximumFractionDigits: 4 })}
+                      {isLoadingPrice ? (
+                        <span className="text-muted">Loading...</span>
+                      ) : (
+                        `$${marketDetails.price.toLocaleString('en-US', { minimumFractionDigits: 4, maximumFractionDigits: 4 })}`
+                      )}
                     </p>
                   </div>
                   <div>
                     <p className="text-xs uppercase tracking-wide">24h Change</p>
                     <p className={`text-sm font-semibold ${marketDetails.changePercent24h >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                      {marketDetails.changePercent24h >= 0 ? '+' : ''}
-                      {marketDetails.changePercent24h.toFixed(2)}%
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-xs uppercase tracking-wide">24h High</p>
-                    <p className="text-sm font-semibold text-foreground">
-                      ${marketDetails.high24h.toLocaleString('en-US', { minimumFractionDigits: 4, maximumFractionDigits: 4 })}
+                      {isLoadingPrice ? (
+                        <span className="text-muted">Loading...</span>
+                      ) : (
+                        <>
+                          {marketDetails.changePercent24h >= 0 ? '+' : ''}
+                          {marketDetails.changePercent24h.toFixed(2)}%
+                        </>
+                      )}
                     </p>
                   </div>
                   <div>
                     <p className="text-xs uppercase tracking-wide">24h Volume</p>
                     <p className="text-sm font-semibold text-foreground">
-                      {marketDetails.volume24h.toLocaleString('en-US', { maximumFractionDigits: 0 })}
+                      {isLoadingPrice ? (
+                        <span className="text-muted">Loading...</span>
+                      ) : (
+                        marketDetails.volume24h.toLocaleString('en-US', { maximumFractionDigits: 0 })
+                      )}
                     </p>
                   </div>
                 </div>
                 
-                {/* Wallet Status Information */}
-                <div className="flex items-center gap-4 text-sm">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs uppercase tracking-wide text-muted">Wallet:</span>
-                    <span className="font-medium text-foreground">keet…ll3a</span>
-                  </div>
-                  <div className="h-4 w-px bg-hairline"></div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs uppercase tracking-wide text-muted">Escrow:</span>
-                    <span className="font-medium text-foreground">Verified at 04:55 PM</span>
-                  </div>
-                  <div className="h-4 w-px bg-hairline"></div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs uppercase tracking-wide text-muted">Settlement:</span>
-                    <span className="font-medium text-foreground">Idle</span>
-                  </div>
-                </div>
               </div>
             </div>
           </section>

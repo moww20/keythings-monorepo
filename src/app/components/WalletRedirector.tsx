@@ -60,24 +60,28 @@ export default function WalletRedirector(): null {
     const checkExistingConnection = async () => {
       if (!provider) return;
       try {
-        if (typeof provider.getAccounts === "function") {
-          const accounts = await provider.getAccounts();
-          if (Array.isArray(accounts) && accounts.length > 0) {
-            redirectToHome();
-            return;
-          }
-        }
-
-        if (typeof provider.isConnected === "boolean" && provider.isConnected) {
-          redirectToHome();
-        } else if (typeof provider.isConnected === "function") {
-          try {
-            const connected = await provider.isConnected();
-            if (connected) {
+        // Only redirect if we're on the root page and wallet is connected
+        // This prevents redirecting when user is already on a specific page
+        if (window.location.pathname === "/" || window.location.pathname === "") {
+          if (typeof provider.getAccounts === "function") {
+            const accounts = await provider.getAccounts();
+            if (Array.isArray(accounts) && accounts.length > 0) {
               redirectToHome();
+              return;
             }
-          } catch (error) {
-            console.debug("Keeta provider isConnected check failed", error);
+          }
+
+          if (typeof provider.isConnected === "boolean" && provider.isConnected) {
+            redirectToHome();
+          } else if (typeof provider.isConnected === "function") {
+            try {
+              const connected = await provider.isConnected();
+              if (connected) {
+                redirectToHome();
+              }
+            } catch (error) {
+              console.debug("Keeta provider isConnected check failed", error);
+            }
           }
         }
       } catch (error) {
