@@ -2,6 +2,7 @@ import React from "react";
 import { PendingDappRequest, OperationDetail } from "../types/dapp-requests";
 import {
   deriveOperationTokenDisplay,
+  type OperationTokenDisplayContext,
   type TokenIcon,
 } from "../lib/token-display";
 
@@ -49,9 +50,13 @@ function renderTokenIcon(iconUrl: string | null, fallbackIcon: TokenIcon | null,
   return null;
 }
 
-function renderOperation(operation: OperationDetail, index: number) {
+function renderOperation(
+  operation: OperationDetail,
+  index: number,
+  context?: OperationTokenDisplayContext,
+) {
   const key = `${operation.type}-${index}`;
-  const tokenDisplay = deriveOperationTokenDisplay(operation);
+  const tokenDisplay = deriveOperationTokenDisplay(operation, context);
   const amount = tokenDisplay.formattedAmount
     ? tokenDisplay.symbol
       ? `${tokenDisplay.formattedAmount} ${tokenDisplay.symbol}`
@@ -95,6 +100,10 @@ export function BuilderPublishRequest({ request }: BuilderPublishRequestProps) {
   const { summary, operations } = request;
   const { sendOperations, receiveOperations, otherOperations } = operations;
 
+  const context: OperationTokenDisplayContext = {
+    requestMetadata: request.metadata,
+  };
+
   return (
     <section aria-label="Transaction summary" className="builder-publish-request">
       <header>
@@ -105,21 +114,21 @@ export function BuilderPublishRequest({ request }: BuilderPublishRequestProps) {
       {sendOperations.length > 0 ? (
         <section aria-label="Send operations">
           <h3>Send</h3>
-          <ul>{sendOperations.map(renderOperation)}</ul>
+          <ul>{sendOperations.map((operation, index) => renderOperation(operation, index, context))}</ul>
         </section>
       ) : null}
 
       {receiveOperations.length > 0 ? (
         <section aria-label="Receive operations">
           <h3>Receive</h3>
-          <ul>{receiveOperations.map(renderOperation)}</ul>
+          <ul>{receiveOperations.map((operation, index) => renderOperation(operation, index, context))}</ul>
         </section>
       ) : null}
 
       {otherOperations.length > 0 ? (
         <section aria-label="Other operations">
           <h3>Other</h3>
-          <ul>{otherOperations.map(renderOperation)}</ul>
+          <ul>{otherOperations.map((operation, index) => renderOperation(operation, index, context))}</ul>
         </section>
       ) : null}
     </section>

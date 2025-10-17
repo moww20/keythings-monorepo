@@ -16,6 +16,8 @@ interface TokenMetadata {
   [key: string]: unknown;
 }
 
+type TokenMetadataInput = TokenMetadata | string | null | undefined;
+
 export interface TokenIcon {
   type?: "badge" | "badge-square" | "image" | string;
   imageData?: string;
@@ -36,6 +38,11 @@ export interface OperationTokenDisplay {
   fallbackIcon: TokenIcon | null;
   decimals: number;
   fieldType: TokenFieldType;
+}
+
+export interface OperationTokenDisplayContext {
+  requestMetadata?: Record<string, unknown> | null | undefined;
+  additionalSources?: unknown[];
 }
 
 function safeAtob(value: string): string {
@@ -78,25 +85,49 @@ function safeBtoa(value: string): string {
   }
 }
 
-function parseMetadata(metadata?: string | null): TokenMetadata | null {
-  if (!metadata || typeof metadata !== "string") {
+function parseMetadata(metadata?: TokenMetadataInput): TokenMetadata | null {
+  if (!metadata) {
     return null;
   }
 
-  const decoded = safeAtob(metadata);
-  if (!decoded) {
+  if (typeof metadata === "object") {
+    if (Array.isArray(metadata)) {
+      return null;
+    }
+    return metadata as TokenMetadata;
+  }
+
+  if (typeof metadata !== "string") {
     return null;
   }
 
-  try {
-    const parsed = JSON.parse(decoded);
-    return parsed && typeof parsed === "object" ? (parsed as TokenMetadata) : null;
-  } catch {
+  const trimmed = metadata.trim();
+  if (!trimmed) {
     return null;
   }
+
+  const decoded = safeAtob(trimmed);
+  const attempts = decoded ? [decoded, trimmed] : [trimmed];
+
+  for (const candidate of attempts) {
+    if (!candidate) {
+      continue;
+    }
+
+    try {
+      const parsed = JSON.parse(candidate);
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        return parsed as TokenMetadata;
+      }
+    } catch {
+      continue;
+    }
+  }
+
+  return null;
 }
 
-export function extractDecimalsAndFieldType(metadata?: string | null): {
+export function extractDecimalsAndFieldType(metadata?: TokenMetadataInput): {
   decimals: number;
   fieldType: TokenFieldType;
 } {
@@ -161,7 +192,7 @@ export function formatAmountWithCommas(amount: string | number | bigint): string
   return formattedInteger;
 }
 
-export function getTokenDisplayName(metadata?: string | null): string {
+export function getTokenDisplayName(metadata?: TokenMetadataInput): string {
   const metadataObj = parseMetadata(metadata);
   if (!metadataObj) {
     return "";
@@ -182,7 +213,7 @@ export function getTokenDisplayName(metadata?: string | null): string {
   return "";
 }
 
-export function getTokenTicker(metadata?: string | null): string {
+export function getTokenTicker(metadata?: TokenMetadataInput): string {
   const metadataObj = parseMetadata(metadata);
   if (!metadataObj) {
     return "";
@@ -223,7 +254,7 @@ function sanitizeSvgMarkup(svg?: string): string | null {
   return svg;
 }
 
-export function getTokenIconFromMetadata(metadata?: string | null): TokenIcon | null {
+export function getTokenIconFromMetadata(metadata?: TokenMetadataInput): TokenIcon | null {
   const metadataObj = parseMetadata(metadata);
   if (!metadataObj) {
     return null;
@@ -260,6 +291,20 @@ export function getTokenIconDataUrl(icon: TokenIcon | null | undefined): string 
     }
 
     return "";
+  }
+
+  const remoteUrl =
+    typeof icon.url === "string"
+      ? icon.url
+      : typeof icon.href === "string"
+        ? icon.href
+        : undefined;
+
+  if (remoteUrl) {
+    const trimmed = remoteUrl.trim();
+    if (trimmed.length > 0) {
+      return trimmed;
+    }
   }
 
   if (typeof icon.svg === "string") {
@@ -421,7 +466,10 @@ const BASE_TOKEN_KEYS = [
   "isBase",
 ];
 
-function gatherCandidates(operation: OperationDetail): Record<string, unknown>[] {
+function gatherCandidates(
+  operation: OperationDetail,
+  additionalSources: unknown[] = [],
+): Record<string, unknown>[] {
   const results: Record<string, unknown>[] = [];
   const queue: Record<string, unknown>[] = [];
   const visited = new Set<unknown>();
@@ -441,6 +489,10 @@ function gatherCandidates(operation: OperationDetail): Record<string, unknown>[]
 
   enqueue(operation as Record<string, unknown>);
   enqueue(operation.metadata);
+
+  for (const source of additionalSources) {
+    enqueue(source);
+  }
 
   while (queue.length > 0) {
     const current = queue.shift()!;
@@ -480,6 +532,68 @@ function findFirstString(candidates: Record<string, unknown>[], keys: readonly s
   }
 
   return undefined;
+}
+
+function collectMetadataCandidates(
+  candidates: Record<string, unknown>[],
+  keys: readonly string[],
+): TokenMetadataInput[] {
+  const results: TokenMetadataInput[] = [];
+
+  for (const candidate of candidates) {
+    for (const key of keys) {
+      if (!Object.hasOwn(candidate, key)) {
+        continue;
+      }
+
+      const value = candidate[key];
+      if (typeof value === "string") {
+        const trimmed = value.trim();
+        if (trimmed.length > 0) {
+          results.push(trimmed);
+        }
+      }
+
+      if (value && typeof value === "object") {
+        if (Array.isArray(value)) {
+          for (const item of value) {
+            if (item && typeof item === "object" && !Array.isArray(item)) {
+              results.push(item as TokenMetadata);
+            }
+          }
+        } else {
+          results.push(value as TokenMetadata);
+        }
+      }
+    }
+  }
+
+  return results;
+}
+
+function collectStringsByKeys(
+  candidates: Record<string, unknown>[],
+  keys: readonly string[],
+): string[] {
+  const results = new Set<string>();
+
+  for (const candidate of candidates) {
+    for (const key of keys) {
+      if (!Object.hasOwn(candidate, key)) {
+        continue;
+      }
+
+      const value = candidate[key];
+      if (typeof value === "string") {
+        const trimmed = value.trim();
+        if (trimmed.length > 0) {
+          results.add(trimmed);
+        }
+      }
+    }
+  }
+
+  return Array.from(results);
 }
 
 function findFirstNumber(candidates: Record<string, unknown>[], keys: readonly string[]): number | undefined {
@@ -550,10 +664,46 @@ function findFormattedAmountCandidate(candidates: Record<string, unknown>[]): st
   return undefined;
 }
 
-export function deriveOperationTokenDisplay(operation: OperationDetail): OperationTokenDisplay {
-  const candidates = gatherCandidates(operation);
+export function deriveOperationTokenDisplay(
+  operation: OperationDetail,
+  context?: OperationTokenDisplayContext,
+): OperationTokenDisplay {
+  const additionalSources: unknown[] = [];
 
-  const metadataCandidate = findFirstString(candidates, METADATA_KEYS);
+  if (context?.requestMetadata) {
+    additionalSources.push(context.requestMetadata);
+  }
+
+  if (Array.isArray(context?.additionalSources)) {
+    for (const source of context.additionalSources) {
+      additionalSources.push(source);
+    }
+  }
+
+  const operationCandidates = gatherCandidates(operation);
+  const candidates = gatherCandidates(operation, additionalSources);
+  const metadataCandidates = collectMetadataCandidates(candidates, METADATA_KEYS);
+  const operationSymbols = new Set(
+    collectStringsByKeys(operationCandidates, SYMBOL_KEYS).map((value) => value.toUpperCase()),
+  );
+
+  if (typeof operation.tokenSymbol === "string" && operation.tokenSymbol.trim().length > 0) {
+    operationSymbols.add(operation.tokenSymbol.trim().toUpperCase());
+  }
+
+  let metadataCandidate: TokenMetadataInput | undefined = metadataCandidates[0];
+
+  if (metadataCandidates.length > 1 && operationSymbols.size > 0) {
+    const matched = metadataCandidates.find((metadata) => {
+      const ticker = getTokenTicker(metadata);
+      return ticker ? operationSymbols.has(ticker.trim().toUpperCase()) : false;
+    });
+
+    if (matched) {
+      metadataCandidate = matched;
+    }
+  }
+
   const { decimals: metadataDecimals, fieldType: metadataFieldType } = extractDecimalsAndFieldType(metadataCandidate);
 
   const decimalPlacesOverride = findFirstNumber(candidates, DECIMAL_PLACES_KEYS);
@@ -612,7 +762,8 @@ export function deriveOperationTokenDisplay(operation: OperationDetail): Operati
     }
   }
 
-  const symbolCandidate = findFirstString(candidates, SYMBOL_KEYS);
+  const symbolCandidate =
+    findFirstString(operationCandidates, SYMBOL_KEYS) ?? findFirstString(candidates, SYMBOL_KEYS);
   const metadataTicker = metadataCandidate ? getTokenTicker(metadataCandidate) : "";
   const symbol = symbolCandidate || (metadataTicker ? metadataTicker : operation.tokenSymbol) || null;
 
