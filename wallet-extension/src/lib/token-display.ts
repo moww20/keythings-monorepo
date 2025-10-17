@@ -777,6 +777,7 @@ export function deriveOperationTokenDisplay(
     displayDecimals = decimals;
   }
 
+
   const rawAmountResult = (() => {
     for (const candidate of candidates) {
       for (const key of RAW_AMOUNT_KEYS) {
@@ -800,6 +801,14 @@ export function deriveOperationTokenDisplay(
     try {
       const normalized = formatTokenAmount(rawAmountResult.raw, decimals, fieldType, displayDecimals);
       formattedAmount = formatAmountWithCommas(normalized);
+      
+      // Debug logging for BASE token result
+      if (operation.tokenSymbol === 'BASE') {
+        console.log('[token-display] BASE token result:', {
+          normalized,
+          formattedAmount
+        });
+      }
     } catch (error) {
       console.warn("[token-display] Failed to format raw amount", error);
     }
@@ -823,6 +832,15 @@ export function deriveOperationTokenDisplay(
     findFirstString(operationCandidates, SYMBOL_KEYS) ?? findFirstString(candidates, SYMBOL_KEYS);
   const metadataTicker = metadataCandidate ? getTokenTicker(metadataCandidate) : "";
   const symbol = symbolCandidate || (metadataTicker ? metadataTicker : operation.tokenSymbol) || null;
+
+  // Special handling for BASE token - ensure it has 1 decimal place
+  if (operation.tokenSymbol === 'BASE' || symbol === 'BASE') {
+    if (decimals === 0) {
+      decimals = 1;
+      fieldType = "decimalPlaces";
+      console.log('[token-display] Applied BASE token decimal fix:', { decimals, fieldType });
+    }
+  }
 
   const nameCandidate = findFirstString(candidates, NAME_KEYS);
   const metadataName = metadataCandidate ? getTokenDisplayName(metadataCandidate) : "";

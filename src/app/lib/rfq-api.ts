@@ -247,6 +247,7 @@ export async function createRfqOrder(order: RFQOrder): Promise<RFQOrder> {
       display_name: order.maker.displayName,
       verified: order.maker.verified,
       reputation_score: order.maker.reputationScore,
+      auto_sign_sla_ms: 0, // SLA removed, set to 0
       fills_completed: order.maker.fillsCompleted,
       failure_rate: order.maker.failureRate,
       ...(order.maker.allowlistLabel && { allowlist_label: order.maker.allowlistLabel }),

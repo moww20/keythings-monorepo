@@ -613,10 +613,29 @@ export function RFQMakerPanel({ mode, onModeChange }: RFQMakerPanelProps): React
         throw new Error('No unsigned atomic swap block found in declaration');
       }
       
+      // Parse the declaration data (it's JSON containing the block and metadata)
+      let declarationData;
+      try {
+        declarationData = JSON.parse(declaration.unsignedAtomicSwapBlock);
+      } catch (parseError) {
+        throw new Error('Failed to parse atomic swap declaration data');
+      }
+      
+      // Extract the block bytes and metadata
+      const unsignedBlockHex = declarationData.unsignedBlock;
+      const blockHash = declarationData.blockHash;
+      const metadata = declarationData.metadata;
+      
+      if (!unsignedBlockHex) {
+        throw new Error('No unsigned block hex found in declaration');
+      }
+      
       // Convert hex back to bytes
-      const unsignedBlockBytes = Buffer.from(declaration.unsignedAtomicSwapBlock, 'hex');
+      const unsignedBlockBytes = Buffer.from(unsignedBlockHex, 'hex');
       
       console.log('[RFQMakerPanel] Received unsigned atomic swap block:', unsignedBlockBytes.length, 'bytes');
+      console.log('[RFQMakerPanel] Block hash:', blockHash);
+      console.log('[RFQMakerPanel] Metadata:', metadata);
       
       // Show progress message
       setProgressMessage('Wallet popup will appear for transaction signing...');
@@ -627,101 +646,70 @@ export function RFQMakerPanel({ mode, onModeChange }: RFQMakerPanelProps): React
         throw new Error('Wallet not connected');
       }
       
-              // Try to determine if this is a real Keeta unsigned block or a structured proposal
-              let unsignedBlock;
-              let isStructuredProposal = false;
+              // We have valid metadata, so we can reconstruct the atomic swap transaction
+              console.log('[RFQMakerPanel] Processing atomic swap from metadata');
               
-              try {
-                // First, try to parse as JSON to see if it's a structured proposal
-                const jsonString = unsignedBlockBytes.toString('utf8');
-                unsignedBlock = JSON.parse(jsonString);
-                
-                if (unsignedBlock.type === 'atomic_swap_proposal') {
-                  isStructuredProposal = true;
-                  console.log('[RFQMakerPanel] Detected structured atomic swap proposal');
-                } else {
-                  console.log('[RFQMakerPanel] Parsed JSON but not a structured proposal, treating as raw unsigned block');
-                }
-              } catch (parseError) {
-                console.log('[RFQMakerPanel] Not JSON, treating as raw unsigned block bytes');
-                // This is likely a raw unsigned block from computeBlocks()
-                // We need to reconstruct the operations from the Taker's original request
-                // For now, we'll create a basic builder and let the wallet handle it
-                const builder = userClient.initBuilder();
-                
-                // The wallet will show the transaction details and ask for Maker's signature
-                const result = await userClient.publishBuilder(builder);
-                
-                setProgressMessage(null); // Clear progress message
-                setSuccess(`Atomic swap executed successfully! Transaction hash: ${String(result).substring(0, 20)}...`);
-                
-                // Now approve the declaration in the backend (just for tracking)
-                await approveDeclaration(selectedOrder.id, {
-                  declarationId: declaration.id,
-                  approved: true,
-                });
-                
-                // Refresh declarations
-                await loadDeclarations();
-                return;
-              }
+              // Reconstruct the transaction using the metadata we already parsed
+              const builder = userClient.initBuilder();
               
-              if (isStructuredProposal && unsignedBlock.operations) {
-                console.log('[RFQMakerPanel] Reconstructing operations from structured proposal');
-                
-                const builder = userClient.initBuilder();
-                
-                // Reconstruct the operations from the proposal
-                for (const operation of unsignedBlock.operations) {
-                  if (operation.type === 'send') {
-                    if (typeof builder.send === 'function') {
-                      builder.send(operation.to, operation.amount, operation.token, operation.data, operation.options);
-                    }
-                  } else if (operation.type === 'receive') {
-                    if (typeof builder.receive === 'function') {
-                      builder.receive(operation.from, operation.amount, operation.token, operation.conditional, operation.data, operation.options);
-                    }
-                  }
-                }
-                
-                // Publish the reconstructed transaction
-                const result = await userClient.publishBuilder(builder);
-                
-                setProgressMessage(null); // Clear progress message
-                setSuccess(`Atomic swap executed successfully! Transaction hash: ${String(result).substring(0, 20)}...`);
-                
-                // Now approve the declaration in the backend (just for tracking)
-                await approveDeclaration(selectedOrder.id, {
-                  declarationId: declaration.id,
-                  approved: true,
-                });
-                
-                // Refresh declarations
-                await loadDeclarations();
-              } else {
-                // This is a real unsigned block from computeBlocks()
-                console.log('[RFQMakerPanel] Processing real Keeta unsigned block');
-                
-                // For real unsigned blocks, we need to use the Keeta SDK to sign and publish
-                // This would require more complex integration with the wallet extension
-                // For now, we'll create a basic builder as a fallback
-                const builder = userClient.initBuilder();
-                
-                // The wallet will show the transaction details and ask for Maker's signature
-                const result = await userClient.publishBuilder(builder);
-                
-                setProgressMessage(null); // Clear progress message
-                setSuccess(`Atomic swap executed successfully! Transaction hash: ${String(result).substring(0, 20)}...`);
-                
-                // Now approve the declaration in the backend (just for tracking)
-                await approveDeclaration(selectedOrder.id, {
-                  declarationId: declaration.id,
-                  approved: true,
-                });
-                
-                // Refresh declarations
-                await loadDeclarations();
-              }
+              // Reconstruct the atomic swap operations from the metadata
+              const takerData = metadata.taker;
+              
+              console.log('[RFQMakerPanel] Reconstructing atomic swap from metadata:', takerData);
+              
+              // Convert string addresses to proper account objects for the wallet extension
+              // The wallet extension will handle the conversion internally
+              
+              // 1. Taker receives from storage account (this is what maker funded)
+              const storageAccount = JSON.parse(JSON.stringify({ publicKeyString: takerData.receives.from }));
+              const receiveAmount = takerData.receives.amount;
+              const receiveToken = JSON.parse(JSON.stringify({ publicKeyString: takerData.receives.token }));
+              const receiveDecimals = takerData.receives.decimals || 0;
+              
+              // 2. Taker sends to maker
+              const makerAccount = JSON.parse(JSON.stringify({ publicKeyString: takerData.sends.to }));
+              const sendAmount = takerData.sends.amount;
+              const sendToken = JSON.parse(JSON.stringify({ publicKeyString: takerData.sends.token }));
+              const sendDecimals = takerData.sends.decimals || 0;
+              
+              console.log('[RFQMakerPanel] Building receive operation:');
+              console.log('[RFQMakerPanel] - from storage:', storageAccount);
+              console.log('[RFQMakerPanel] - amount (base units):', receiveAmount);
+              console.log('[RFQMakerPanel] - decimals:', receiveDecimals);
+              console.log('[RFQMakerPanel] - token:', receiveToken);
+              
+              // Build the receive operation (taker receives from storage)
+              (builder as any).receive(storageAccount, receiveAmount, receiveToken);
+              
+              console.log('[RFQMakerPanel] Building send operation:');
+              console.log('[RFQMakerPanel] - to maker:', makerAccount);
+              console.log('[RFQMakerPanel] - amount (base units):', sendAmount);
+              console.log('[RFQMakerPanel] - decimals:', sendDecimals);
+              console.log('[RFQMakerPanel] - token:', sendToken);
+              
+              // Build the send operation (taker sends to maker)
+              (builder as any).send(makerAccount, sendAmount, sendToken);
+              
+              console.log('[RFQMakerPanel] Atomic swap transaction reconstructed successfully');
+              
+              // Debug: Check builder operations before publishing
+              console.log('[RFQMakerPanel] Builder operations:', (builder as any)._operations);
+              console.log('[RFQMakerPanel] Builder operations length:', (builder as any)._operations?.length || 0);
+              
+              // The wallet will show the transaction details and ask for Maker's signature
+              const result = await userClient.publishBuilder(builder);
+              
+              setProgressMessage(null); // Clear progress message
+              setSuccess(`Atomic swap executed successfully! Transaction hash: ${String(result).substring(0, 20)}...`);
+              
+              // Now approve the declaration in the backend (just for tracking)
+              await approveDeclaration(selectedOrder.id, {
+                declarationId: declaration.id,
+                approved: true,
+              });
+              
+              // Refresh declarations
+              await loadDeclarations();
     } catch (error) {
       console.error('Failed to approve declaration:', error);
       setError(error instanceof Error ? error.message : 'Failed to approve declaration');
@@ -758,6 +746,18 @@ export function RFQMakerPanel({ mode, onModeChange }: RFQMakerPanelProps): React
     if (selectedOrder) {
       loadDeclarations();
     }
+  }, [selectedOrder, loadDeclarations]);
+
+  // Auto-refresh declarations every 5 seconds when an order is selected
+  useEffect(() => {
+    if (!selectedOrder) return;
+
+    const interval = setInterval(() => {
+      console.log('[RFQMakerPanel] Auto-refreshing declarations...');
+      loadDeclarations();
+    }, 5000); // Poll every 5 seconds
+
+    return () => clearInterval(interval);
   }, [selectedOrder, loadDeclarations]);
 
   // Helper function for expiry calculation
