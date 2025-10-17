@@ -227,37 +227,44 @@ export function extractDecimalsAndFieldType(metadata?: string | null): { decimal
 /**
  * Format token amount for display
  */
-export function formatTokenAmount(rawAmount: string | number | bigint, decimals = 0, fieldType: TokenFieldType = "decimals"): string {
+export function formatTokenAmount(
+  rawAmount: string | number | bigint,
+  decimals = 0,
+  fieldType: TokenFieldType = "decimals",
+): string {
   const amount = BigInt(rawAmount);
 
-  if (decimals === 0) {
+  if (decimals <= 0) {
     return amount.toString();
   }
 
-  if (fieldType === "decimalPlaces") {
-    // decimalPlaces: divide by 10^decimalPlaces
-    const divisor = BigInt(10) ** BigInt(decimals);
-    const quotient = amount / divisor;
-    const remainder = amount % divisor;
+  const divisor = BigInt(10) ** BigInt(decimals);
+  const isNegative = amount < BigInt(0);
+  const absoluteAmount = isNegative ? -amount : amount;
+  const quotient = absoluteAmount / divisor;
+  const remainder = absoluteAmount % divisor;
+  const signPrefix = isNegative ? "-" : "";
 
-    if (remainder === BigInt(0)) {
-      return quotient.toString();
+  if (remainder === BigInt(0)) {
+    if (fieldType === "decimals") {
+      return `${signPrefix}${quotient.toString()}.${"0".repeat(decimals)}`;
     }
 
-    // Format with proper decimal places
-    const remainderStr = remainder.toString().padStart(decimals, "0");
-    const displayFractional = remainderStr.replace(/0+$/, "");
-
-    if (displayFractional === "") {
-      return quotient.toString();
-    }
-
-    return `${quotient}.${displayFractional}`;
+    return `${signPrefix}${quotient.toString()}`;
   }
 
-  // decimals: add decimal padding (no division)
-  const amountStr = amount.toString();
-  return `${amountStr}.${"0".repeat(decimals)}`;
+  const remainderStr = remainder.toString().padStart(decimals, "0");
+
+  if (fieldType === "decimals") {
+    return `${signPrefix}${quotient.toString()}.${remainderStr}`;
+  }
+
+  const trimmed = remainderStr.replace(/0+$/, "");
+  if (trimmed.length === 0) {
+    return `${signPrefix}${quotient.toString()}`;
+  }
+
+  return `${signPrefix}${quotient.toString()}.${trimmed}`;
 }
 
 /**
