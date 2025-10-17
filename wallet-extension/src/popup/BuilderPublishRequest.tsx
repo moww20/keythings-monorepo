@@ -1,17 +1,82 @@
 import React from "react";
 import { PendingDappRequest, OperationDetail } from "../types/dapp-requests";
+import {
+  deriveOperationTokenDisplay,
+  type TokenIcon,
+} from "../lib/token-display";
+
+function renderTokenIcon(iconUrl: string | null, fallbackIcon: TokenIcon | null, label: string | null) {
+  if (iconUrl) {
+    return (
+      <div className="operation-token-icon" aria-hidden={!label}>
+        <img
+          src={iconUrl}
+          alt={label ? `${label} token icon` : "Token icon"}
+          className="operation-token-icon-image"
+          style={{ width: 32, height: 32, borderRadius: "50%" }}
+        />
+      </div>
+    );
+  }
+
+  if (fallbackIcon?.letter) {
+    const backgroundColor = typeof fallbackIcon.bgColor === "string" ? fallbackIcon.bgColor : "#1f2937";
+    const textColor = typeof fallbackIcon.textColor === "string" ? fallbackIcon.textColor : "#ffffff";
+
+    return (
+      <div
+        className="operation-token-icon operation-token-icon--fallback"
+        style={{
+          width: 32,
+          height: 32,
+          borderRadius: fallbackIcon.shape === "square" ? 8 : "50%",
+          backgroundColor,
+          color: textColor,
+          fontSize: 14,
+          fontWeight: 600,
+          display: "inline-flex",
+          alignItems: "center",
+          justifyContent: "center",
+          textTransform: "uppercase",
+        }}
+        aria-hidden="true"
+      >
+        {fallbackIcon.letter}
+      </div>
+    );
+  }
+
+  return null;
+}
 
 function renderOperation(operation: OperationDetail, index: number) {
   const key = `${operation.type}-${index}`;
+  const tokenDisplay = deriveOperationTokenDisplay(operation);
+  const amount = tokenDisplay.formattedAmount
+    ? tokenDisplay.symbol
+      ? `${tokenDisplay.formattedAmount} ${tokenDisplay.symbol}`
+      : tokenDisplay.formattedAmount
+    : operation.amount ?? null;
+
   return (
     <li key={key} className="operation-item">
       <div className="operation-header">
-        <span className="operation-type">{operation.type}</span>
-        {operation.tokenSymbol ? (
+        {renderTokenIcon(tokenDisplay.iconUrl, tokenDisplay.fallbackIcon, tokenDisplay.name ?? tokenDisplay.symbol)}
+
+        <div className="operation-header-content">
+          <span className="operation-type">{operation.type}</span>
+          {tokenDisplay.name && tokenDisplay.name !== operation.type ? (
+            <span className="operation-token-name">{tokenDisplay.name}</span>
+          ) : null}
+        </div>
+
+        {tokenDisplay.symbol ? (
+          <span className="operation-token">{tokenDisplay.symbol}</span>
+        ) : operation.tokenSymbol ? (
           <span className="operation-token">{operation.tokenSymbol}</span>
         ) : null}
       </div>
-      {operation.amount ? <div className="operation-amount">{operation.amount}</div> : null}
+      {amount ? <div className="operation-amount">{amount}</div> : null}
       {operation.storageAddress ? (
         <div className="operation-storage">Storage: {operation.storageAddress}</div>
       ) : null}
