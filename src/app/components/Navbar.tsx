@@ -73,7 +73,10 @@ export default function Navbar(): React.JSX.Element {
         if (accounts && accounts.length > 0) {
           setWalletConnected(true);
           setWalletAddress(accounts[0] ?? null);
-          redirectToHome();
+          // Only redirect to home if we're on the root page
+          if (window.location.pathname === "/" || window.location.pathname === "") {
+            redirectToHome();
+          }
         }
       } catch (error) {
         console.log("No wallet connected", error);
@@ -111,7 +114,10 @@ export default function Navbar(): React.JSX.Element {
         if (accounts && accounts.length > 0) {
           setWalletConnected(true);
           setWalletAddress(accounts[0] ?? null);
-          redirectToHome();
+          // Only redirect to home if we're on the root page
+          if (window.location.pathname === "/" || window.location.pathname === "") {
+            redirectToHome();
+          }
         } else {
           setWalletConnected(false);
           setWalletAddress(null);
@@ -181,7 +187,10 @@ export default function Navbar(): React.JSX.Element {
       if (accounts && accounts.length > 0) {
         setWalletConnected(true);
         setWalletAddress(accounts[0] ?? null);
-        redirectToHome();
+        // Only redirect to home if we're on the root page
+        if (window.location.pathname === "/" || window.location.pathname === "") {
+          redirectToHome();
+        }
       }
     } catch (error) {
       console.error("Connection failed:", error);

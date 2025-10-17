@@ -179,7 +179,6 @@ export function RFQMakerPanel({ mode, onModeChange }: RFQMakerPanelProps): React
         displayName: networkProfile.displayName,
         verified: networkProfile.verified,
         reputationScore: networkProfile.reputationScore,
-        autoSignSlaMs: networkProfile.autoSignSlaMs,
         fillsCompleted: networkProfile.fillsCompleted,
         failureRate: networkProfile.failureRate,
         allowlistLabel: networkProfile.allowlistLabel || undefined,
@@ -191,7 +190,6 @@ export function RFQMakerPanel({ mode, onModeChange }: RFQMakerPanelProps): React
       displayName: `Maker ${trimPubkey(publicKey)}`,
       verified: false,
       reputationScore: 0,
-      autoSignSlaMs: 5000,
       fillsCompleted: 0,
       failureRate: 0,
       allowlistLabel: undefined,
@@ -449,7 +447,7 @@ export function RFQMakerPanel({ mode, onModeChange }: RFQMakerPanelProps): React
       // Create the order with the storage account address
       const order = await createQuote(currentSubmission, storageAccountAddress);
       setSuccess(
-        `Quote ${order.id} funded with escrow ${shorten(storageAccountAddress)}. Auto-sign SLA ${makerProfile.autoSignSlaMs} ms.`,
+        `Quote ${order.id} funded with escrow ${shorten(storageAccountAddress)}.`,
       );
       setProgressMessage(null); // Clear progress message since process is complete
       setStep('details');
@@ -1506,10 +1504,6 @@ export function RFQMakerPanel({ mode, onModeChange }: RFQMakerPanelProps): React
       )}
 
       <div className="space-y-3 rounded-lg border border-hairline bg-surface-strong p-3 text-xs text-muted">
-        <div className="flex items-center justify-between">
-          <span>Auto-sign SLA</span>
-          <span className="text-foreground">{makerProfile.autoSignSlaMs} ms</span>
-        </div>
         <div className="flex items-center justify-between">
           <span>Fills completed</span>
           <span className="text-foreground">{makerProfile.fillsCompleted}</span>
