@@ -14,7 +14,7 @@ import {
 } from '@/app/lib/token-utils';
 import { declareIntention, fetchDeclarations } from '@/app/lib/rfq-api';
 import type { RFQDeclaration, DeclarationStatus } from '@/app/types/rfq';
-import { RFQOrdersPanel } from '@/app/components/rfq/RFQOrdersPanel';
+import { RFQOrdersPanel } from './RFQOrdersPanel';
 
 function formatCurrency(value?: number): string {
   if (!value || Number.isNaN(value)) {

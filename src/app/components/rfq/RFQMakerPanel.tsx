@@ -1,19 +1,21 @@
-﻿'use client';
+'use client';
 
 import Image from 'next/image';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, CheckCircle2, ClipboardCopy, Loader2, Zap } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Loader2, Zap } from 'lucide-react';
 
 import { useMakerProfiles, useRFQContext } from '@/app/contexts/RFQContext';
-import type { RFQMakerMeta, RFQQuoteDraft, RFQQuoteSubmission, RFQDeclaration } from '@/app/types/rfq';
+import type { RFQDeclaration, RFQMakerMeta, RFQQuoteDraft, RFQQuoteSubmission } from '@/app/types/rfq';
 import { useWallet } from '@/app/contexts/WalletContext';
 import { useProcessedTokens } from '@/app/hooks/useProcessedTokens';
 import { StorageAccountManager } from '@/app/lib/storage-account-manager';
 import { createPermissionPayload } from '@/app/lib/storage-account-manager';
-import { getMakerTokenAddressFromOrder, getTakerTokenAddress, getTakerTokenAddressFromOrder, toBaseUnits } from '@/app/lib/token-utils';
+import { getMakerTokenAddressFromOrder, getMakerTokenSymbol, getTakerTokenAddress, getTakerTokenAddressFromOrder, getTakerTokenSymbol, toBaseUnits } from '@/app/lib/token-utils';
+import { WizardProgress, type WizardProgressStep } from '../WizardProgress';
+
 import { useTokenMetadata } from '@/app/hooks/useTokenMetadata';
-import { fetchDeclarations, approveDeclaration } from '@/app/lib/rfq-api';
 import { encodeToBase64 } from '@/app/lib/encoding';
+import { approveDeclaration, fetchDeclarations } from '@/app/lib/rfq-api';
 
 const EXPIRY_PRESETS: Array<{ value: RFQQuoteDraft['expiryPreset']; label: string }> = [
   { value: '5m', label: '5 minutes' },
@@ -64,7 +66,32 @@ function shorten(address: string | undefined | null, chars = 4): string {
 
 // Token utility functions are now imported from @/app/lib/token-utils
 
-type WizardStep = 'details' | 'controls' | 'review' | 'creating' | 'funding';
+type WizardStep = 'details' | 'review' | 'creating' | 'funding';
+
+const RFQ_STEP_SEQUENCE: WizardStep[] = ['details', 'review', 'creating', 'funding'];
+
+const RFQ_WIZARD_STEPS: WizardProgressStep<WizardStep>[] = [
+  {
+    id: 'details',
+    title: 'Quote Details',
+    description: 'Configure price & size',
+  },
+  {
+    id: 'review',
+    title: 'Review & Confirm',
+    description: 'Check summary before signing',
+  },
+  {
+    id: 'creating',
+    title: 'Create Storage',
+    description: 'Wallet builds escrow account',
+  },
+  {
+    id: 'funding',
+    title: 'Fund & Publish',
+    description: 'Deposit tokens & publish RFQ',
+  },
+];
 
 function isValidKeetaAddress(value: string | null | undefined): value is string {
   if (typeof value !== 'string') {
@@ -81,15 +108,17 @@ function isValidKeetaAddress(value: string | null | undefined): value is string 
 }
 
 interface RFQMakerPanelProps {
-  mode: 'rfq_taker' | 'rfq_maker';
-  onModeChange: (mode: 'rfq_taker' | 'rfq_maker') => void;
+  mode: 'rfq_taker' | 'rfq_maker' | 'rfq_orders';
+  onModeChange: (mode: 'rfq_taker' | 'rfq_maker' | 'rfq_orders') => void;
+  hideInternalTabs?: boolean;
 }
 
-export function RFQMakerPanel({ mode, onModeChange }: RFQMakerPanelProps): React.JSX.Element {
+export function RFQMakerPanel({ mode, onModeChange, hideInternalTabs }: RFQMakerPanelProps): React.JSX.Element {
   const { pair, createQuote, cancelQuote, selectedOrder } = useRFQContext();
   const makerProfiles = useMakerProfiles();
   const { publicKey, isConnected, userClient, getTokenMetadata } = useWallet();
   const { tokens, isLoading: isLoadingTokens, error: tokensError, refreshTokens } = useProcessedTokens();
+
   const [draft, setDraft] = useState<MakerDraftState>(DEFAULT_DRAFT);
   const [isPublishing, setIsPublishing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -97,13 +126,26 @@ export function RFQMakerPanel({ mode, onModeChange }: RFQMakerPanelProps): React
   const [copied, setCopied] = useState(false);
   const [progressMessage, setProgressMessage] = useState<string | null>(null);
 
-  // Multi-step wizard (following CreatePoolModal pattern)
+  // Multi-step wizard (aligned with CreatePoolModal pattern)
   const [step, setStep] = useState<WizardStep>('details');
   const [storageAccountAddress, setStorageAccountAddress] = useState<string | null>(null);
   const [currentSubmission, setCurrentSubmission] = useState<RFQQuoteSubmission | null>(null);
   const [isAwaitingManualAddress, setIsAwaitingManualAddress] = useState(false);
   const [manualAddress, setManualAddress] = useState('');
   const [manualAddressError, setManualAddressError] = useState<string | null>(null);
+
+  const [baseSymbol, quoteSymbol] = useMemo(() => {
+    const [base = '', quote = ''] = pair.split('/').map((symbol) => symbol.trim());
+    return [base, quote];
+  }, [pair]);
+
+  const completedSteps = useMemo(() => {
+    const index = RFQ_STEP_SEQUENCE.indexOf(step);
+    if (index <= 0) {
+      return [] as WizardStep[];
+    }
+    return RFQ_STEP_SEQUENCE.slice(0, index) as WizardStep[];
+  }, [step]);
 
   // Declaration management state
   const [declarations, setDeclarations] = useState<RFQDeclaration[]>([]);
@@ -120,11 +162,17 @@ export function RFQMakerPanel({ mode, onModeChange }: RFQMakerPanelProps): React
       return [];
     }
 
+    const normalizedBase = (baseSymbol && baseSymbol.trim().length > 0
+      ? baseSymbol.trim().toUpperCase()
+      : 'KTA');
+
     return tokens
       .filter((token) => {
         // Filter out tokens with zero balance - use the raw balance string, not formattedAmount
         const balance = parseFloat(token.balance);
-        return balance > 0;
+        const symbol = token.ticker?.toUpperCase();
+        const isBaseAsset = normalizedBase.length > 0 && symbol === normalizedBase;
+        return balance > 0 && !isBaseAsset;
       })
       .map((token) => ({
         address: token.address,
@@ -139,11 +187,19 @@ export function RFQMakerPanel({ mode, onModeChange }: RFQMakerPanelProps): React
         const balanceB = parseFloat(tokens.find(t => t.address === b.address)?.balance || '0');
         return balanceB - balanceA;
       });
-  }, [tokens]);
+  }, [tokens, baseSymbol]);
 
-  // Auto-select first token when available
+  // Auto-select first token when available and reset invalid selections
   useEffect(() => {
-    if (availableTokens.length > 0 && !selectedToken) {
+    if (availableTokens.length === 0) {
+      if (selectedToken) {
+        setSelectedToken(null);
+      }
+      return;
+    }
+
+    const stillValid = selectedToken && availableTokens.some((token) => token.address === selectedToken);
+    if (!stillValid) {
       setSelectedToken(availableTokens[0].address);
     }
   }, [availableTokens, selectedToken]);
@@ -222,6 +278,14 @@ export function RFQMakerPanel({ mode, onModeChange }: RFQMakerPanelProps): React
     return selectedOrder.maker.id === publicKey ? selectedOrder : undefined;
   }, [selectedOrder, publicKey]);
 
+  const makerDraftSymbol = useMemo(() => {
+    return draft.side === 'sell' ? baseSymbol || 'base' : quoteSymbol || 'quote';
+  }, [draft.side, baseSymbol, quoteSymbol]);
+
+  const takerDraftSymbol = useMemo(() => {
+    return draft.side === 'sell' ? quoteSymbol || 'quote' : baseSymbol || 'base';
+  }, [draft.side, baseSymbol, quoteSymbol]);
+
   const reviewSubmission = useMemo<RFQQuoteSubmission | null>(() => {
     if (step !== 'review') {
       return null;
@@ -282,6 +346,10 @@ export function RFQMakerPanel({ mode, onModeChange }: RFQMakerPanelProps): React
     if (step === 'review') {
       setCurrentSubmission(null);
       setStep('details');
+      return;
+    }
+    if (step === 'creating') {
+      setStep('review');
     }
   }, [setCurrentSubmission, step]);
 
@@ -318,7 +386,6 @@ export function RFQMakerPanel({ mode, onModeChange }: RFQMakerPanelProps): React
     setIsPublishing(true);
     setError(null);
     setProgressMessage('Setting RFQ order metadata...');
-
     try {
       console.log('[RFQMakerPanel] Step 2/2: Setting RFQ order metadata...');
       console.log('[RFQMakerPanel] Storage account:', storageAccountAddress);
@@ -364,50 +431,68 @@ export function RFQMakerPanel({ mode, onModeChange }: RFQMakerPanelProps): React
         throw new Error('Selected token not found in available tokens');
       }
 
-      // For RFQ, the maker provides the selected token, taker provides KTA (base token)
+      // For RFQ, the maker provides the selected token, taker provides the opposite side of the pair
       const makerTokenAddress = selectedTokenInfo.address;
       const makerTokenDecimals = selectedTokenInfo.decimals;
       const makerAmount = toBaseUnits(parseFloat(currentSubmission.size), makerTokenDecimals).toString();
 
-      // Taker always provides KTA (base token)
+      // Determine the taker token address from pair + side, falling back to base-token reference
       const baseTokenAddressCandidate = (userClient?.baseToken as { publicKeyString?: string } | undefined)?.publicKeyString;
       const baseTokenAddress = typeof baseTokenAddressCandidate === 'string' ? baseTokenAddressCandidate : null;
       const derivedTakerTokenAddress = getTakerTokenAddress(currentSubmission.pair, currentSubmission.side);
       const takerTokenAddress = baseTokenAddress ?? derivedTakerTokenAddress;
 
       if (!takerTokenAddress || takerTokenAddress.toUpperCase().startsWith('PLACEHOLDER')) {
-        throw new Error('Unable to determine KTA token address. Refresh your wallet balances and try again.');
+        const takerSymbolFallback = getTakerTokenSymbol(currentSubmission.pair, currentSubmission.side) || 'taker token';
+        throw new Error(`Unable to determine ${takerSymbolFallback} token address. Refresh your wallet balances and try again.`);
       }
 
       // Fetch taker token metadata from wallet provider
-      const takerTokenMetadata = await getTokenMetadata(baseTokenAddress ?? takerTokenAddress);
-      if (!takerTokenMetadata) {
-        throw new Error('Failed to fetch taker token (KTA) metadata from blockchain');
-      }
-      const takerTokenDecimals = takerTokenMetadata.decimals;
-      const takerAmount = toBaseUnits(parseFloat(currentSubmission.size) * parseFloat(currentSubmission.price), takerTokenDecimals).toString();
+      const makerTokenSymbol = selectedTokenInfo.symbol;
+      const takerTokenMetadata = await getTokenMetadata(baseTokenAddress ?? takerTokenAddress).catch(() => null);
+      const takerTokenDecimals = takerTokenMetadata?.decimals ?? 9;
+      const takerAmount = toBaseUnits(
+        parseFloat(currentSubmission.size) * parseFloat(currentSubmission.price),
+        takerTokenDecimals,
+      ).toString();
+      const takerTokenSymbol = takerTokenMetadata?.symbol
+        ?? takerTokenMetadata?.ticker
+        ?? takerTokenMetadata?.name
+        ?? getTakerTokenSymbol(currentSubmission.pair, currentSubmission.side)
+        ?? shorten(takerTokenAddress);
+
+      const normalizedPair = `${makerTokenSymbol}/${takerTokenSymbol}`;
+      const nextSubmission: RFQQuoteSubmission = {
+        ...currentSubmission,
+        pair: normalizedPair,
+      };
+      setCurrentSubmission(nextSubmission);
 
       // Set metadata with RFQ order details and atomic swap terms
       const metadataJson = JSON.stringify({
         // Existing fields
-        pair: `${selectedTokenInfo.symbol}/KTA`,
-        side: currentSubmission.side,
-        price: currentSubmission.price,
-        size: currentSubmission.size,
-        minFill: currentSubmission.minFill,
-        expiry: new Date(Date.now() + getExpiryMs(currentSubmission.expiryPreset)).toISOString(),
+        pair: normalizedPair,
+        side: nextSubmission.side,
+        price: nextSubmission.price,
+        size: nextSubmission.size,
+        minFill: nextSubmission.minFill,
+        expiry: new Date(Date.now() + getExpiryMs(nextSubmission.expiryPreset)).toISOString(),
         makerAddress: publicKey,
-        allowlistLabel: currentSubmission.allowlistLabel,
-        autoSignProfileId: currentSubmission.autoSignProfileId,
+        allowlistLabel: nextSubmission.allowlistLabel,
+        autoSignProfileId: nextSubmission.autoSignProfileId,
 
         // NEW: Atomic swap constraints
         atomicSwap: {
           makerToken: makerTokenAddress,      // Token maker is offering
           makerAmount: makerAmount.toString(), // Amount maker deposited
+          makerSymbol: makerTokenSymbol,
+          makerDecimals: makerTokenDecimals,
           takerToken: takerTokenAddress,       // Token taker must send
           takerAmount: takerAmount.toString(), // Amount taker must send
-          swapRate: currentSubmission.price,   // Exchange rate
-          recipient: publicKey,                 // Where taker must send tokens
+          takerSymbol: takerTokenSymbol,
+          takerDecimals: takerTokenDecimals,
+          swapRate: nextSubmission.price,      // Exchange rate
+          recipient: publicKey,                // Where taker must send tokens
         },
       });
 
@@ -418,7 +503,7 @@ export function RFQMakerPanel({ mode, onModeChange }: RFQMakerPanelProps): React
       // According to Keeta docs, defaultPermission grants public access
       builder.setInfo({
         name: `RFQ_STORAGE_ACCOUNT`,
-        description: `${currentSubmission.side} ${currentSubmission.size} ${currentSubmission.pair} @ ${currentSubmission.price}`,
+        description: `${nextSubmission.side} ${nextSubmission.size} ${nextSubmission.pair} @ ${nextSubmission.price}`,
         metadata: metadataBase64,
         // Grant storage permissions (no public SEND_ON_BEHALF in declaration-based flow)
         // STORAGE_DEPOSIT: anyone can deposit tokens
@@ -477,7 +562,7 @@ export function RFQMakerPanel({ mode, onModeChange }: RFQMakerPanelProps): React
       }
 
       // Create the order with the storage account address
-      const order = await createQuote(currentSubmission, storageAccountAddress);
+      const order = await createQuote(nextSubmission, storageAccountAddress);
       setSuccess(
         `Quote ${order.id} funded with escrow ${shorten(storageAccountAddress)}.`,
       );
@@ -548,6 +633,7 @@ export function RFQMakerPanel({ mode, onModeChange }: RFQMakerPanelProps): React
       }
 
       const takerTokenCandidate = getTakerTokenAddress(submission.pair, submission.side);
+
       const baseTokenCandidate =
         (userClient.baseToken as { publicKeyString?: string } | undefined)?.publicKeyString;
       const envAllowedTokens = (process.env.NEXT_PUBLIC_RFQ_ALLOWED_TOKENS ?? '')
@@ -655,101 +741,100 @@ export function RFQMakerPanel({ mode, onModeChange }: RFQMakerPanelProps): React
     }
   }, [selectedOrder]);
 
-
-const handleApproveDeclaration = useCallback(async (declaration: RFQDeclaration) => {
-  if (!selectedOrder) {
-    setError('Missing order data');
-    return;
-  }
-
-  if (!userClient) {
-    setError('Wallet not connected');
-    return;
-  }
-
-  setIsApprovingDeclaration(declaration.id);
-  setError(null);
-
-  try {
-    setProgressMessage('Preparing atomic swap transaction for signing...');
-
-    if (!declaration.unsignedAtomicSwapBlock) {
-      throw new Error('No unsigned atomic swap block found in declaration');
+  const handleApproveDeclaration = useCallback(async (declaration: RFQDeclaration) => {
+    if (!selectedOrder) {
+      setError('Missing order data');
+      return;
     }
 
-    let parsedPayload: Record<string, unknown>;
+    if (!userClient) {
+      setError('Wallet not connected');
+      return;
+    }
+
+    setIsApprovingDeclaration(declaration.id);
+    setError(null);
+
     try {
-      parsedPayload = JSON.parse(declaration.unsignedAtomicSwapBlock) as Record<string, unknown>;
-    } catch {
-      throw new Error('Failed to parse atomic swap declaration data');
+      setProgressMessage('Preparing atomic swap transaction for signing...');
+
+      if (!declaration.unsignedAtomicSwapBlock) {
+        throw new Error('No unsigned atomic swap block found in declaration');
+      }
+
+      let parsedPayload: Record<string, unknown>;
+      try {
+        parsedPayload = JSON.parse(declaration.unsignedAtomicSwapBlock) as Record<string, unknown>;
+      } catch {
+        throw new Error('Failed to parse atomic swap declaration data');
+      }
+
+      const metadata = parsedPayload.metadata as Record<string, unknown> | undefined;
+      const takerSection = metadata?.taker as Record<string, unknown> | undefined;
+      const takerReceives = takerSection?.receives as Record<string, unknown> | undefined;
+      const takerSends = takerSection?.sends as Record<string, unknown> | undefined;
+
+      if (!takerReceives || !takerSends) {
+        throw new Error('Declaration metadata is missing taker operation details.');
+      }
+
+      const makerTokenAddress = getMakerTokenAddressFromOrder(selectedOrder);
+      const takerTokenAddress = getTakerTokenAddressFromOrder(selectedOrder);
+
+      if (takerReceives.token !== makerTokenAddress || takerSends.token !== takerTokenAddress) {
+        throw new Error('Declaration tokens do not match the RFQ order.');
+      }
+
+      const storageAccountAddress = (takerReceives.from as string | null | undefined) ?? selectedOrder.storageAccount ?? selectedOrder.unsignedBlock;
+      if (!isValidKeetaAddress(storageAccountAddress)) {
+        throw new Error('Declaration is missing a valid storage account reference.');
+      }
+
+      const receiveAmount = String(takerReceives.amount ?? '');
+      const sendAmount = String(takerSends.amount ?? '');
+
+      if (receiveAmount.length === 0 || sendAmount.length === 0) {
+        throw new Error('Declaration amounts are incomplete.');
+      }
+
+      const builder = userClient.initBuilder();
+      if (!builder) {
+        throw new Error('Wallet did not provide a transaction builder for approval.');
+      }
+
+      const receiveFn = (builder as { receive?: (...args: unknown[]) => unknown }).receive;
+      const sendFn = (builder as { send?: (...args: unknown[]) => unknown }).send;
+
+      if (typeof receiveFn !== 'function' || typeof sendFn !== 'function') {
+        throw new Error('Wallet builder does not support required operations.');
+      }
+
+      const storageAccount = { publicKeyString: storageAccountAddress };
+      const makerAccount = { publicKeyString: selectedOrder.maker.id };
+      const makerTokenRef = { publicKeyString: makerTokenAddress };
+      const takerTokenRef = { publicKeyString: takerTokenAddress };
+
+      await Promise.resolve(receiveFn.call(builder, storageAccount, receiveAmount, makerTokenRef));
+      await Promise.resolve(sendFn.call(builder, makerAccount, sendAmount, takerTokenRef));
+
+      await userClient.publishBuilder(builder);
+
+      setProgressMessage(null);
+      setSuccess('Atomic swap executed successfully.');
+
+      await approveDeclaration(selectedOrder.id, {
+        declarationId: declaration.id,
+        approved: true,
+      });
+
+      await loadDeclarations();
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'Failed to approve declaration');
+      setProgressMessage(null);
+    } finally {
+      setIsApprovingDeclaration(null);
     }
-
-    const metadata = parsedPayload.metadata as Record<string, unknown> | undefined;
-    const takerSection = metadata?.taker as Record<string, unknown> | undefined;
-    const takerReceives = takerSection?.receives as Record<string, unknown> | undefined;
-    const takerSends = takerSection?.sends as Record<string, unknown> | undefined;
-
-    if (!takerReceives || !takerSends) {
-      throw new Error('Declaration metadata is missing taker operation details.');
-    }
-
-    const makerTokenAddress = getMakerTokenAddressFromOrder(selectedOrder);
-    const takerTokenAddress = getTakerTokenAddressFromOrder(selectedOrder);
-
-    if (takerReceives.token !== makerTokenAddress || takerSends.token !== takerTokenAddress) {
-      throw new Error('Declaration tokens do not match the RFQ order.');
-    }
-
-    const storageAccountAddress = (takerReceives.from as string | null | undefined) ?? selectedOrder.storageAccount ?? selectedOrder.unsignedBlock;
-    if (!isValidKeetaAddress(storageAccountAddress)) {
-      throw new Error('Declaration is missing a valid storage account reference.');
-    }
-
-    const receiveAmount = String(takerReceives.amount ?? '');
-    const sendAmount = String(takerSends.amount ?? '');
-
-    if (receiveAmount.length === 0 || sendAmount.length === 0) {
-      throw new Error('Declaration amounts are incomplete.');
-    }
-
-    const builder = userClient.initBuilder();
-    if (!builder) {
-      throw new Error('Wallet did not provide a transaction builder for approval.');
-    }
-
-    const receiveFn = (builder as { receive?: (...args: unknown[]) => unknown }).receive;
-    const sendFn = (builder as { send?: (...args: unknown[]) => unknown }).send;
-
-    if (typeof receiveFn !== 'function' || typeof sendFn !== 'function') {
-      throw new Error('Wallet builder does not support required operations.');
-    }
-
-    const storageAccount = { publicKeyString: storageAccountAddress };
-    const makerAccount = { publicKeyString: selectedOrder.maker.id };
-    const makerTokenRef = { publicKeyString: makerTokenAddress };
-    const takerTokenRef = { publicKeyString: takerTokenAddress };
-
-    await Promise.resolve(receiveFn.call(builder, storageAccount, receiveAmount, makerTokenRef));
-    await Promise.resolve(sendFn.call(builder, makerAccount, sendAmount, takerTokenRef));
-
-    await userClient.publishBuilder(builder);
-
-    setProgressMessage(null);
-    setSuccess('Atomic swap executed successfully.');
-
-    await approveDeclaration(selectedOrder.id, {
-      declarationId: declaration.id,
-      approved: true,
-    });
-
-    await loadDeclarations();
-  } catch (error) {
-    setError(error instanceof Error ? error.message : 'Failed to approve declaration');
-    setProgressMessage(null);
-  } finally {
-    setIsApprovingDeclaration(null);
-  }
-}, [selectedOrder, loadDeclarations, userClient]);
+  }, [selectedOrder, loadDeclarations, userClient]);
 
   const handleRejectDeclaration = useCallback(async (declaration: RFQDeclaration) => {
     if (!selectedOrder) {
@@ -812,31 +897,32 @@ const handleApproveDeclaration = useCallback(async (declaration: RFQDeclaration)
     await cancelQuote(selectedMakerOrder.id);
   }, [cancelQuote, selectedMakerOrder]);
 
-  return (
-    <div className="flex h-full flex-col gap-4 rounded-lg border border-hairline bg-surface p-4">
-      {/* RFQ Mode Toggle */}
-      <div className="flex items-center justify-between gap-1 rounded-full bg-surface-strong px-2 py-1 text-xs">
-        <button
-          type="button"
-          onClick={() => onModeChange('rfq_taker')}
-          className={`flex-1 rounded-full px-3 py-1 font-medium transition-colors ${
-            mode === 'rfq_taker' ? 'bg-accent text-white' : 'text-muted hover:text-foreground'
-          }`}
-        >
-          RFQ Taker
-        </button>
-        <button
-          type="button"
-          onClick={() => onModeChange('rfq_maker')}
-          className={`flex-1 rounded-full px-3 py-1 font-medium transition-colors ${
-            mode === 'rfq_maker' ? 'bg-accent text-white' : 'text-muted hover:text-foreground'
-          }`}
-        >
-          RFQ Maker
-        </button>
-      </div>
+  const content = (
+    <>
+      {!hideInternalTabs && (
+        <div className="flex items-center justify-between gap-1 rounded-full bg-surface-strong px-2 py-1 text-xs">
+          <button
+            type="button"
+            onClick={() => onModeChange('rfq_taker')}
+            className={`flex-1 rounded-full px-3 py-1 font-medium transition-colors ${
+              mode === 'rfq_taker' ? 'bg-accent text-white' : 'text-muted hover:text-foreground'
+            }`}
+          >
+            RFQ Taker
+          </button>
+          <button
+            type="button"
+            onClick={() => onModeChange('rfq_maker')}
+            className={`flex-1 rounded-full px-3 py-1 font-medium transition-colors ${
+              mode === 'rfq_maker' ? 'bg-accent text-white' : 'text-muted hover:text-foreground'
+            }`}
+          >
+            RFQ Maker
+          </button>
+        </div>
+      )}
 
-      <div className="flex items-start justify-between">
+      <div className="flex items-center justify-between gap-3">
         <div>
           <p className="text-xs uppercase tracking-wide text-muted">Quote Builder</p>
           <h3 className="text-lg font-semibold text-foreground">Publish RFQ</h3>
@@ -851,41 +937,11 @@ const handleApproveDeclaration = useCallback(async (declaration: RFQDeclaration)
         Create and publish RFQ quotes to provide liquidity to the market. Complete each step to review details before signing.
       </div>
 
-      {/* Progress Indicator */}
-      <div className="flex flex-col gap-3">
-        <div className="grid grid-cols-3 gap-2">
-          {(['details', 'review', 'funding'] as const).map((wizardStep, index) => {
-            const isActive =
-              (wizardStep === 'details' && step === 'details') ||
-              (wizardStep === 'review' && ['review', 'creating'].includes(step)) ||
-              (wizardStep === 'funding' && step === 'funding');
-            const isComplete =
-              (wizardStep === 'details' && ['review', 'creating', 'funding'].includes(step)) ||
-              (wizardStep === 'review' && ['creating', 'funding'].includes(step));
-
-            return (
-              <div
-                key={wizardStep}
-                className={`flex flex-col items-center gap-2 rounded-lg border px-3 py-2 text-center ${
-                  isActive ? 'border-accent/60 bg-accent/10 text-foreground' : isComplete ? 'border-hairline bg-surface text-foreground' : 'border-hairline bg-surface text-muted'
-                }`}
-              >
-                <div className={`flex h-8 w-8 items-center justify-center rounded-full text-sm font-semibold ${
-                  isComplete ? 'bg-accent text-white' : isActive ? 'bg-accent text-white' : 'bg-surface-strong text-muted'
-                }`}
-                >
-                  {isComplete ? <CheckCircle2 className="h-4 w-4" /> : index + 1}
-                </div>
-                <span className="text-[11px] font-medium leading-tight">
-                  {wizardStep === 'details' && 'Quote Details'}
-                  {wizardStep === 'review' && 'Create Storage'}
-                  {wizardStep === 'funding' && 'Publish Quote'}
-                </span>
-              </div>
-            );
-          })}
-        </div>
-      </div>
+      <WizardProgress
+        steps={RFQ_WIZARD_STEPS}
+        currentStep={step === 'creating' ? 'creating' : step}
+        completedSteps={completedSteps}
+      />
 
       {/* Error Banner */}
       {error && (
@@ -965,12 +1021,7 @@ const handleApproveDeclaration = useCallback(async (declaration: RFQDeclaration)
           <div className="rounded-lg border border-hairline bg-surface-strong p-4">
             <div className="mb-3 flex items-center justify-between text-xs text-muted">
               <span>Trading Pair</span>
-              <span className="text-foreground font-medium">
-                {selectedToken && availableTokens.find(t => t.address === selectedToken)
-                  ? `${availableTokens.find(t => t.address === selectedToken)?.symbol}/KTA`
-                  : 'Select Token'
-                }
-              </span>
+              <span className="text-foreground font-medium">{pair}</span>
             </div>
 
             {/* Token Selector */}
@@ -1104,65 +1155,65 @@ const handleApproveDeclaration = useCallback(async (declaration: RFQDeclaration)
 
                       {/* Token List */}
                       <div className="max-h-48 overflow-y-auto space-y-2">
-                      {availableTokens.map((token) => {
-                        const fullToken = tokens.find(t => t.address === token.address);
+                        {availableTokens.map((token) => {
+                          const fullToken = tokens.find(t => t.address === token.address);
 
-                        return (
-                          <button
-                            key={token.address}
-                            type="button"
-                            onClick={() => {
-                              setSelectedToken(token.address);
-                              setIsSelectingToken(false);
-                            }}
-                            className="w-full flex items-center gap-3 p-3 rounded-lg border border-hairline bg-surface hover:bg-surface-strong transition-colors text-left"
-                          >
-                            {/* Token Icon */}
-                            <div className="w-8 h-8 rounded-full bg-accent/20 flex items-center justify-center flex-shrink-0">
-                              {fullToken?.icon ? (
-                                <Image
-                                  src={fullToken.icon}
-                                  alt={token.symbol}
-                                  width={24}
-                                  height={24}
-                                  unoptimized
-                                  className="w-6 h-6 rounded-full object-cover"
-                                />
-                              ) : fullToken?.fallbackIcon ? (
-                                <div
-                                  className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold"
-                                  style={{
-                                    backgroundColor: fullToken.fallbackIcon.bgColor || '#6aa8ff',
-                                    color: fullToken.fallbackIcon.textColor || '#ffffff'
-                                  }}
-                                >
-                                  {fullToken.fallbackIcon.letter}
+                          return (
+                            <button
+                              key={token.address}
+                              type="button"
+                              onClick={() => {
+                                setSelectedToken(token.address);
+                                setIsSelectingToken(false);
+                              }}
+                              className="w-full flex items-center gap-3 p-3 rounded-lg border border-hairline bg-surface hover:bg-surface-strong transition-colors text-left"
+                            >
+                              {/* Token Icon */}
+                              <div className="w-8 h-8 rounded-full bg-accent/20 flex items-center justify-center flex-shrink-0">
+                                {fullToken?.icon ? (
+                                  <Image
+                                    src={fullToken.icon}
+                                    alt={token.symbol}
+                                    width={24}
+                                    height={24}
+                                    unoptimized
+                                    className="w-6 h-6 rounded-full object-cover"
+                                  />
+                                ) : fullToken?.fallbackIcon ? (
+                                  <div
+                                    className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold"
+                                    style={{
+                                      backgroundColor: fullToken.fallbackIcon.bgColor || '#6aa8ff',
+                                      color: fullToken.fallbackIcon.textColor || '#ffffff'
+                                    }}
+                                  >
+                                    {fullToken.fallbackIcon.letter}
+                                  </div>
+                                ) : (
+                                  <span className="text-accent font-bold text-sm">
+                                    {token.symbol.charAt(0)}
+                                  </span>
+                                )}
+                              </div>
+
+                              {/* Token Info */}
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2">
+                                  <span className="font-medium text-foreground">{token.symbol}</span>
+                                  <span className="text-xs text-muted">{token.name}</span>
                                 </div>
-                              ) : (
-                                <span className="text-accent font-bold text-sm">
-                                  {token.symbol.charAt(0)}
-                                </span>
-                              )}
-                            </div>
-
-                            {/* Token Info */}
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2">
-                                <span className="font-medium text-foreground">{token.symbol}</span>
-                                <span className="text-xs text-muted">{token.name}</span>
+                                <div className="text-sm text-muted">
+                                  Balance: {token.balance} {token.symbol}
+                                </div>
                               </div>
-                              <div className="text-sm text-muted">
-                                Balance: {token.balance} {token.symbol}
-                              </div>
-                            </div>
 
-                            {/* Select Arrow */}
-                            <svg className="h-4 w-4 text-muted flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                            </svg>
-                          </button>
-                        );
-                      })}
+                              {/* Select Arrow */}
+                              <svg className="h-4 w-4 text-muted flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                              </svg>
+                            </button>
+                          );
+                        })}
                       </div>
                     </div>
                   )}
@@ -1172,17 +1223,22 @@ const handleApproveDeclaration = useCallback(async (declaration: RFQDeclaration)
 
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="mb-1 block text-xs font-medium text-muted">Side</label>
+                <label className="block text-xs text-muted mb-0.5">Side</label>
                 <div className="relative">
                   <select
                     value={draft.side}
-                    onChange={(e) => setDraft(prev => ({ ...prev, side: e.target.value as 'buy' | 'sell' }))}
+                    onChange={(event) => setDraft((previous) => ({ ...previous, side: event.target.value as 'sell' | 'buy' }))}
                     className="w-full rounded-lg border border-hairline bg-surface-strong px-3 py-2 pr-8 text-sm text-foreground focus:border-accent focus:outline-none appearance-none cursor-pointer"
                     aria-label="Select order side"
                   >
-                    <option value="sell" style={{ backgroundColor: 'var(--surface-strong)', color: 'var(--foreground)' }}>Sell (maker provides base)</option>
-                    <option value="buy" style={{ backgroundColor: 'var(--surface-strong)', color: 'var(--foreground)' }}>Buy (maker provides quote)</option>
+                    <option value="sell" style={{ backgroundColor: 'var(--surface-strong)', color: 'var(--foreground)' }}>
+                      Sell (maker provides {baseSymbol || 'base'})
+                    </option>
+                    <option value="buy" style={{ backgroundColor: 'var(--surface-strong)', color: 'var(--foreground)' }}>
+                      Buy (maker provides {quoteSymbol || 'quote'})
+                    </option>
                   </select>
+
                   {/* Custom dropdown arrow */}
                   <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
                     <svg className="h-4 w-4 text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1361,35 +1417,6 @@ const handleApproveDeclaration = useCallback(async (declaration: RFQDeclaration)
                 Continue
               </button>
             )}
-            {step === 'controls' && (
-              <button
-                type="button"
-                onClick={() => {
-                  if (validateControlsStep()) {
-                    setCurrentSubmission({
-                      pair: selectedToken && availableTokens.find(t => t.address === selectedToken)
-                        ? `${availableTokens.find(t => t.address === selectedToken)?.symbol}/KTA`
-                        : pair,
-                      side: draft.side,
-                      price: draft.price,
-                      size: draft.size,
-                      minFill: draft.minFill || undefined,
-                      expiryPreset: draft.expiryPreset,
-                      allowlistLabel: draft.allowlistLabel || undefined,
-                      autoSignProfileId: draft.autoSignProfileId || undefined,
-                      maker: makerProfile,
-                    });
-                    setStep('review');
-                  }
-                }}
-                className={`flex flex-1 items-center justify-center gap-2 rounded-lg px-4 py-3 text-sm font-semibold text-white transition-colors ${
-                  isConnected ? 'bg-accent hover:bg-accent/90' : 'bg-muted'
-                }`}
-                disabled={!isConnected}
-              >
-                Review Quote
-              </button>
-            )}
             {step === 'review' && (
               <button
                 type="button"
@@ -1437,149 +1464,8 @@ const handleApproveDeclaration = useCallback(async (declaration: RFQDeclaration)
         )}
       </div>
 
-      {/* Selected Order Info */}
-        {selectedMakerOrder && (
-        <div className="space-y-3 rounded-lg border border-hairline bg-surface-strong p-3">
-          <div className="flex items-center justify-between">
-            <h4 className="text-sm font-semibold text-foreground">Your Active Quote</h4>
-            <button
-              type="button"
-              onClick={handleCopyOrderId}
-              className="flex items-center gap-1 px-2 py-1 text-xs text-muted hover:text-foreground transition-colors"
-            >
-              {copied ? (
-                <>
-                  <CheckCircle2 className="h-3 w-3" />
-                  Copied
-                </>
-              ) : (
-                <>
-                  <ClipboardCopy className="h-3 w-3" />
-                  Copy ID
-                </>
-              )}
-            </button>
-          </div>
-          <div className="space-y-2 text-xs">
-            <div className="flex justify-between">
-              <span className="text-muted">Order ID:</span>
-              <span className="font-mono text-foreground">{shorten(selectedMakerOrder.id)}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted">Side:</span>
-              <span className="text-foreground">{selectedMakerOrder.side}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted">Size:</span>
-              <span className="text-foreground">{selectedMakerOrder.size}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted">Price:</span>
-              <span className="text-foreground">{selectedMakerOrder.price}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted">Status:</span>
-              <span className="text-foreground">{selectedMakerOrder.status}</span>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={handleCancelSelected}
-            className="w-full px-3 py-2 text-xs font-medium text-muted border border-hairline rounded-lg hover:bg-surface transition-colors"
-          >
-            Cancel Quote
-          </button>
-        </div>
-      )}
 
-      {/* Declarations Panel */}
-      {selectedMakerOrder && (
-        <div className="space-y-3 rounded-lg border border-hairline bg-surface-strong p-3">
-          <div className="flex items-center justify-between">
-            <h4 className="text-sm font-semibold text-foreground">Pending Fill Requests</h4>
-            <button
-              type="button"
-              onClick={loadDeclarations}
-              disabled={isLoadingDeclarations}
-              className="flex items-center gap-1 px-2 py-1 text-xs text-muted hover:text-foreground transition-colors disabled:opacity-50"
-            >
-              {isLoadingDeclarations ? (
-                <Loader2 className="h-3 w-3 animate-spin" />
-              ) : (
-                'Refresh'
-              )}
-            </button>
-          </div>
-
-          {declarations.length === 0 ? (
-            <div className="text-center py-4 text-xs text-muted">
-              No pending declarations
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {declarations.map((declaration) => (
-                <div key={declaration.id} className="rounded-lg border border-hairline bg-surface p-3">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs font-medium text-foreground">
-                      Taker: {shorten(declaration.takerAddress)}
-                    </span>
-                    <span
-                      className={`text-xs px-2 py-1 rounded-full ${
-                        declaration.status === 'pending'
-                          ? 'bg-surface-strong text-muted'
-                          : declaration.status === 'approved'
-                            ? 'bg-accent/15 text-accent'
-                            : 'bg-surface text-muted'
-                      }`}
-                    >
-                      {declaration.status}
-                    </span>
-                  </div>
-
-                  <div className="text-xs text-muted mb-3">
-                    <div>Fill Amount: {declaration.fillAmount} base</div>
-                    <div>Declared: {new Date(declaration.declaredAt).toLocaleTimeString()}</div>
-                    {declaration.unsignedAtomicSwapBlock && selectedOrder && (
-                      <div className="mt-2 rounded border border-accent/30 bg-accent/10 p-2 text-foreground">
-                        <div className="font-medium text-accent mb-1">Atomic Swap Terms</div>
-                        <div>Storage -&gt; Taker: {declaration.fillAmount} {selectedOrder.side === 'sell' ? selectedOrder.pair.split('/') [0] : selectedOrder.pair.split('/') [1]}</div>
-                        <div>Taker -&gt; Maker: {declaration.fillAmount * selectedOrder.price} {selectedOrder.side === 'sell' ? selectedOrder.pair.split('/') [1] : selectedOrder.pair.split('/') [0]}</div>
-                      </div>
-                    )}
-                  </div>
-
-                  {declaration.status === 'pending' && (
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => handleApproveDeclaration(declaration)}
-                        disabled={isApprovingDeclaration === declaration.id}
-                        className="flex-1 px-3 py-1 text-xs font-medium text-accent border border-accent/40 rounded hover:bg-accent/10 transition-colors disabled:opacity-50"
-                      >
-                        {isApprovingDeclaration === declaration.id ? (
-                          <>
-                            <Loader2 className="h-3 w-3 animate-spin inline mr-1" />
-                            Approving...
-                          </>
-                        ) : (
-                          'Approve'
-                        )}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleRejectDeclaration(declaration)}
-                        className="flex-1 px-3 py-1 text-xs font-medium text-muted border border-hairline rounded hover:bg-surface-strong transition-colors"
-                      >
-                        Reject
-                      </button>
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
+      {/* Selected Order Info now shown in RFQ Orders */}
 
       <div className="space-y-3 rounded-lg border border-hairline bg-surface-strong p-3 text-xs text-muted">
         <div className="flex items-center justify-between">
@@ -1591,6 +1477,20 @@ const handleApproveDeclaration = useCallback(async (declaration: RFQDeclaration)
           <span className="text-foreground">{(makerProfile.failureRate * 100).toFixed(1)}%</span>
         </div>
       </div>
+    </>
+  );
+
+  if (hideInternalTabs) {
+    return (
+      <div className="flex h-full flex-col gap-4">
+        {content}
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex h-full flex-col gap-4 rounded-lg border border-hairline bg-surface p-4">
+      {content}
     </div>
   );
 }
