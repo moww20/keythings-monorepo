@@ -148,11 +148,20 @@ export default function TradePage(): React.JSX.Element {
         <section className="relative z-30 rounded-lg border border-hairline bg-surface/70 p-4 shadow-sm backdrop-blur">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-6">
-              <TradingPairSelector
-                selected={selectedPair}
-                onChange={handlePairChange}
-                pairs={availablePairs}
-              />
+              {availablePairs.length > 0 ? (
+                <TradingPairSelector
+                  selected={selectedPair ?? availablePairs[0]?.symbol}
+                  onChange={handlePairChange}
+                  pairs={availablePairs}
+                />
+              ) : (
+                <button
+                  type="button"
+                  className="rounded-lg border border-hairline bg-surface px-3 py-2 text-sm text-muted"
+                >
+                  No RFQ markets available yet.
+                </button>
+              )}
             </div>
             {marketDetails ? (
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-6">
