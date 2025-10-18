@@ -17,6 +17,17 @@ function getApiBase(): string {
   return configured.replace(/\/$/, '');
 }
 
+export async function fetchRfqAvailablePairs(): Promise<string[]> {
+  const orders = await fetchRfqOrders();
+  const uniquePairs = new Set<string>();
+  orders.forEach((order) => {
+    if (order.pair) {
+      uniquePairs.add(order.pair);
+    }
+  });
+  return Array.from(uniquePairs);
+}
+
 const makerSchema = z
   .object({
     id: z.string(),
@@ -64,9 +75,9 @@ const orderSchema = z
     min_fill: z.union([z.string(), z.number(), z.null()]).optional(),
     expiry: z.string(),
     maker: makerSchema,
-    unsigned_block: z.string(),
-    maker_signature: z.string(),
-    storage_account: z.string().optional(),
+    unsigned_block: z.union([z.string(), z.null()]).optional(),
+    maker_signature: z.union([z.string(), z.null()]).optional(),
+    storage_account: z.union([z.string(), z.null()]).optional(),
     allowlisted: z.boolean().optional().default(false),
     status: rfqStatusSchema,
     taker_fill_amount: z.union([z.string(), z.number(), z.null()]).optional(),
@@ -88,9 +99,12 @@ const orderSchema = z
           : value.min_fill,
     expiry: value.expiry,
     maker: value.maker,
-    unsignedBlock: value.unsigned_block,
-    makerSignature: value.maker_signature,
-    storageAccount: value.storage_account ?? value.unsigned_block,
+    unsignedBlock: value.unsigned_block ?? undefined,
+    makerSignature: value.maker_signature ?? undefined,
+    storageAccount:
+      value.storage_account == null || value.storage_account === ''
+        ? value.unsigned_block ?? undefined
+        : value.storage_account,
     allowlisted: value.allowlisted ?? false,
     status: value.status,
     takerFillAmount:
@@ -146,10 +160,13 @@ async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
   }
 }
 
-export async function fetchRfqOrders(pair: string): Promise<RFQOrder[]> {
+export async function fetchRfqOrders(pair?: string): Promise<RFQOrder[]> {
   try {
-    const query = new URLSearchParams({ pair });
-    const payload = await apiRequest<unknown>(`/api/rfq/orders?${query.toString()}`);
+    console.log('[rfq-api] fetchRfqOrders', { pair });
+    const path = pair
+      ? `/api/rfq/orders?${new URLSearchParams({ pair }).toString()}`
+      : '/api/rfq/orders';
+    const payload = await apiRequest<unknown>(path);
     const listSchema = z.array(orderSchema);
     const result = listSchema.safeParse(payload);
     if (!result.success) {
@@ -158,6 +175,11 @@ export async function fetchRfqOrders(pair: string): Promise<RFQOrder[]> {
     }
     return result.data;
   } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (message.includes('404')) {
+      console.warn('[rfq-api] No RFQ orders found for pair. Returning empty list.', { pair });
+      return [];
+    }
     console.error('[rfq-api] Failed to fetch RFQ orders', error);
     return [];
   }
@@ -165,6 +187,7 @@ export async function fetchRfqOrders(pair: string): Promise<RFQOrder[]> {
 
 export async function fetchRfqOrder(orderId: string): Promise<RFQOrder | null> {
   try {
+    console.log('[rfq-api] fetchRfqOrder', { orderId });
     const payload = await apiRequest<unknown>(`/api/rfq/orders/${encodeURIComponent(orderId)}`);
     const parsed = orderSchema.safeParse(payload);
     if (!parsed.success) {
@@ -180,6 +203,7 @@ export async function fetchRfqOrder(orderId: string): Promise<RFQOrder | null> {
 
 export async function fetchRfqMakers(): Promise<RFQMakerMeta[]> {
   try {
+    console.log('[rfq-api] fetchRfqMakers');
     const payload = await apiRequest<unknown>('/api/rfq/makers');
     const listSchema = z.array(makerSchema);
     const result = listSchema.safeParse(payload);
@@ -223,6 +247,7 @@ export async function submitRfqFill(
       body: JSON.stringify(payload),
     },
   );
+  console.log('[rfq-api] submitRfqFill response', response);
 
   const parsed = fillResponseSchema.safeParse(response);
   if (!parsed.success) {
@@ -263,15 +288,11 @@ export async function createRfqOrder(order: RFQOrder): Promise<RFQOrder> {
     updated_at: order.updatedAt,
   };
 
-
-
-
-
-
   const response = await apiRequest<unknown>('/api/rfq/orders', {
     method: 'POST',
     body: JSON.stringify(backendOrder),
   });
+  console.log('[rfq-api] createRfqOrder response', response);
 
   const parsed = orderSchema.safeParse(response);
   if (!parsed.success) {
@@ -323,6 +344,7 @@ export async function declareIntention(
   orderId: string,
   payload: RFQDeclarationRequest,
 ): Promise<RFQDeclarationResponse> {
+  console.log('[rfq-api] declareIntention request', { orderId, payload });
   const response = await apiRequest<unknown>(
     `/api/rfq/orders/${encodeURIComponent(orderId)}/declare`,
     {
@@ -334,6 +356,7 @@ export async function declareIntention(
       }),
     },
   );
+  console.log('[rfq-api] declareIntention response', response);
 
   const parsed = declarationResponseSchema.safeParse(response);
   if (!parsed.success) {
@@ -345,6 +368,7 @@ export async function declareIntention(
 
 export async function fetchDeclarations(orderId: string): Promise<RFQDeclaration[]> {
   try {
+    console.log('[rfq-api] fetchDeclarations', { orderId });
     const payload = await apiRequest<unknown>(`/api/rfq/orders/${encodeURIComponent(orderId)}/declarations`);
     const listSchema = z.array(declarationSchema);
     const result = listSchema.safeParse(payload);
@@ -363,6 +387,7 @@ export async function approveDeclaration(
   orderId: string,
   payload: RFQApprovalRequest,
 ): Promise<RFQDeclarationResponse> {
+  console.log('[rfq-api] approveDeclaration request', { orderId, payload });
   const response = await apiRequest<unknown>(
     `/api/rfq/orders/${encodeURIComponent(orderId)}/approve-declaration`,
     {
@@ -373,6 +398,7 @@ export async function approveDeclaration(
       }),
     },
   );
+  console.log('[rfq-api] approveDeclaration response', response);
 
   const parsed = declarationResponseSchema.safeParse(response);
   if (!parsed.success) {
