@@ -135,6 +135,7 @@ impl KeetaRFQManager {
     }
 
     /// Get all RFQ orders from Keeta testnet
+    #[allow(dead_code)]
     pub async fn get_all_orders(&self) -> Vec<KeetaRFQOrder> {
         // In a real implementation, this would:
         // 1. Query Keeta testnet for all tokens with RFQ metadata
@@ -145,6 +146,7 @@ impl KeetaRFQManager {
     }
 
     /// Get orders for a specific trading pair
+    #[allow(dead_code)]
     pub async fn get_orders_for_pair(&self, pair: &str) -> Vec<KeetaRFQOrder> {
         self.orders.values()
             .filter(|order| order.pair == pair)
@@ -153,6 +155,7 @@ impl KeetaRFQManager {
     }
 
     /// Get a specific order by ID
+    #[allow(dead_code)]
     pub async fn get_order(&self, order_id: &str) -> Option<KeetaRFQOrder> {
         self.orders.get(order_id).cloned()
     }
@@ -197,6 +200,7 @@ impl KeetaRFQManager {
     }
 
     /// Build unsigned atomic swap transaction block
+    #[allow(dead_code)]
     pub async fn build_atomic_swap_unsigned_block(
         &self,
         order: &RFQOrder,

@@ -123,96 +123,24 @@ lazy_static::lazy_static! {
     static ref KEETA_RFQ_MANAGER: Arc<Mutex<KeetaRFQManager>> = Arc::new(Mutex::new(KeetaRFQManager::new()));
 }
 
-// Initialize with some sample data
+// Initialize RFQ storage for production deployments (no demo data)
 pub fn init_rfq_data() {
-    // Initialize some sample makers
-    let mut makers = MAKERS.lock().unwrap();
-    makers.insert("maker-1".to_string(), RFQMakerMeta {
-        id: "maker-1".to_string(),
-        display_name: "Sample Maker 1".to_string(),
-        verified: true,
-        reputation_score: 95.0,
-        auto_sign_sla_ms: 1000,
-        fills_completed: 150,
-        failure_rate: 0.02,
-        allowlist_label: Some("verified".to_string()),
-    });
-    makers.insert("maker-2".to_string(), RFQMakerMeta {
-        id: "maker-2".to_string(),
-        display_name: "Sample Maker 2".to_string(),
-        verified: false,
-        reputation_score: 78.0,
-        auto_sign_sla_ms: 2000,
-        fills_completed: 45,
-        failure_rate: 0.05,
-        allowlist_label: None,
-    });
+    {
+        let mut makers = MAKERS.lock().unwrap();
+        makers.clear();
+    }
 
-    // Initialize some sample orders
-    let mut orders = RFQ_ORDERS.lock().unwrap();
-    
-    // Sample buy order for BTC/USD
-    orders.insert("order-1".to_string(), RFQOrder {
-        id: "order-1".to_string(),
-        pair: "BTC/USD".to_string(),
-        side: "buy".to_string(),
-        price: 65000.0,
-        size: 0.1,
-        min_fill: Some(0.05),
-        expiry: "2024-12-31T23:59:59Z".to_string(),
-        maker: makers.get("maker-1").unwrap().clone(),
-        unsigned_block: None,
-        maker_signature: None,
-        storage_account: None,
-        allowlisted: true,
-        status: "open".to_string(),
-        taker_fill_amount: None,
-        taker_address: None,
-        created_at: "2024-01-01T00:00:00Z".to_string(),
-        updated_at: "2024-01-01T00:00:00Z".to_string(),
-    });
+    {
+        let mut orders = RFQ_ORDERS.lock().unwrap();
+        orders.clear();
+    }
 
-    // Sample sell order for BTC/USD
-    orders.insert("order-2".to_string(), RFQOrder {
-        id: "order-2".to_string(),
-        pair: "BTC/USD".to_string(),
-        side: "sell".to_string(),
-        price: 65100.0,
-        size: 0.05,
-        min_fill: Some(0.01),
-        expiry: "2024-12-31T23:59:59Z".to_string(),
-        maker: makers.get("maker-2").unwrap().clone(),
-        unsigned_block: None,
-        maker_signature: None,
-        storage_account: None,
-        allowlisted: false,
-        status: "open".to_string(),
-        taker_fill_amount: None,
-        taker_address: None,
-        created_at: "2024-01-01T00:00:00Z".to_string(),
-        updated_at: "2024-01-01T00:00:00Z".to_string(),
-    });
+    {
+        let mut declarations = DECLARATIONS.lock().unwrap();
+        declarations.clear();
+    }
 
-    // Sample order for ETH/USD
-    orders.insert("order-3".to_string(), RFQOrder {
-        id: "order-3".to_string(),
-        pair: "ETH/USD".to_string(),
-        side: "buy".to_string(),
-        price: 3500.0,
-        size: 1.0,
-        min_fill: Some(0.5),
-        expiry: "2024-12-31T23:59:59Z".to_string(),
-        maker: makers.get("maker-1").unwrap().clone(),
-        unsigned_block: None,
-        maker_signature: None,
-        storage_account: None,
-        allowlisted: true,
-        status: "open".to_string(),
-        taker_fill_amount: None,
-        taker_address: None,
-        created_at: "2024-01-01T00:00:00Z".to_string(),
-        updated_at: "2024-01-01T00:00:00Z".to_string(),
-    });
+    log::info!("[RFQ] Initialized empty RFQ state");
 }
 
 
@@ -318,6 +246,11 @@ pub async fn create_order(payload: web::Json<RFQOrder>) -> impl Responder {
                       order_id, keeta_order.keeta_token_id);
             
             // Also store in local memory for quick access
+            {
+                let mut makers = MAKERS.lock().unwrap();
+                makers.insert(new_order.maker.id.clone(), new_order.maker.clone());
+            }
+
             let mut orders = RFQ_ORDERS.lock().unwrap();
             orders.insert(order_id.clone(), new_order.clone());
 
@@ -380,7 +313,7 @@ pub async fn declare_intention(
     drop(orders); // Release the lock
     
     // Validate taker balance using Keeta RFQ manager
-    let mut keeta_manager = KEETA_RFQ_MANAGER.lock().unwrap();
+    let keeta_manager = KEETA_RFQ_MANAGER.lock().unwrap();
     match keeta_manager.validate_taker_balance(
         &payload.taker_address,
         &order,

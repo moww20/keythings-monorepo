@@ -47,13 +47,36 @@ function splitPair(pair: string): { base: string; quote: string } {
 // Global token address cache from wallet balances
 let tokenAddressCache: Map<string, string> = new Map();
 let tokenDecimalsCache: Map<string, number> = new Map();
+interface CachedTokenMetadata {
+  metadata: string | null;
+  decimals: number;
+  fieldType: TokenFieldType;
+  name?: string;
+  symbol?: string;
+  ticker?: string;
+}
+let tokenMetadataCache: Map<string, CachedTokenMetadata> = new Map();
 
 export function setTokenAddressCache(addresses: Map<string, string>) {
-  tokenAddressCache = addresses;
+  addresses.forEach((value, key) => {
+    tokenAddressCache.set(key, value);
+  });
 }
 
 export function setTokenDecimalsCache(decimals: Map<string, number>) {
-  tokenDecimalsCache = decimals;
+  decimals.forEach((value, key) => {
+    tokenDecimalsCache.set(key, value);
+  });
+}
+
+export function setTokenMetadataCache(metadata: Map<string, CachedTokenMetadata>) {
+  metadata.forEach((value, key) => {
+    tokenMetadataCache.set(key, value);
+  });
+}
+
+export function getTokenMetadataFromCache(address: string): CachedTokenMetadata | null {
+  return tokenMetadataCache.get(address) ?? null;
 }
 
 export function getTokenAddressForSymbol(symbol: string): string {
@@ -107,12 +130,12 @@ export function getTokenDecimalsForSymbol(symbol: string): number {
 
 export function getMakerTokenSymbol(pair: string, side: OrderSide): string {
   const { base, quote } = splitPair(pair);
-  return side === 'sell' ? quote : base;
+  return side === 'sell' ? base : quote;
 }
 
 export function getTakerTokenSymbol(pair: string, side: OrderSide): string {
   const { base, quote } = splitPair(pair);
-  return side === 'sell' ? base : quote;
+  return side === 'sell' ? quote : base;
 }
 
 export function getMakerTokenAddress(pair: string, side: OrderSide): string {

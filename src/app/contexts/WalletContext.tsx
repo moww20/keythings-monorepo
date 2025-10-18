@@ -38,14 +38,17 @@ import type {
 import type { RFQOrder } from '@/app/types/rfq';
 
 // Exchange operator public key - TODO: Move to environment variable
-const EXCHANGE_OPERATOR_PUBKEY = process.env.NEXT_PUBLIC_EXCHANGE_OPERATOR_PUBKEY;
+const rawExchangeOperatorPubkey = process.env.NEXT_PUBLIC_EXCHANGE_OPERATOR_PUBKEY;
+const EXCHANGE_OPERATOR_PUBKEY: string | null = typeof rawExchangeOperatorPubkey === 'string' && rawExchangeOperatorPubkey.length > 0
+  ? rawExchangeOperatorPubkey
+  : null;
 
 // Allowed tokens for trading - TODO: Fetch from backend
 const ALLOWED_TOKENS = [
   process.env.NEXT_PUBLIC_USDT_TOKEN_PUBKEY,
   process.env.NEXT_PUBLIC_USDX_TOKEN_PUBKEY,
   process.env.NEXT_PUBLIC_KTA_TOKEN_PUBKEY,
-].filter(Boolean); // Remove undefined values
+].filter((token): token is string => typeof token === 'string' && token.length > 0);
 
 // Zod schema for trading status API response
 const TradingStatusSchema = z.object({
@@ -687,9 +690,9 @@ export function WalletProvider({ children }: WalletProviderProps) {
         console.error('Failed to fetch token metadata:', error);
         throw new Error('Failed to fetch token metadata from blockchain');
       }
-      const takerAmount = toBaseUnits(fillAmount, takerDecimals);
-      const makerNotional = fillAmount * order.price;
-      const makerAmount = toBaseUnits(makerNotional, makerDecimals);
+      const makerAmount = toBaseUnits(fillAmount, makerDecimals);
+      const takerNotional = fillAmount * order.price;
+      const takerAmount = toBaseUnits(takerNotional, takerDecimals);
 
       // NEW: Validate atomic swap terms
       const isValidSwap = await validateAtomicSwapTerms(order, fillAmount, storageAddress);

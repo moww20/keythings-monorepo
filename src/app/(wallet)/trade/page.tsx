@@ -250,7 +250,7 @@ export default function TradePage(): React.JSX.Element {
                 <RFQDepthChart />
                 <div className="glass rounded-lg border border-hairline p-4">
                   {selectedPair ? (
-                    <RFQOrderBook onPairChange={handlePairChange} />
+                    <RFQOrderBook />
                   ) : (
                     <div className="text-sm text-muted text-center">
                       Select a market to view the RFQ order book.

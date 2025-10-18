@@ -1,6 +1,6 @@
 # AGENTS Instructions
 
-Welcome to the bigCat repository. Follow these rules whenever you modify code.
+Welcome to the Keythings repository. Follow these rules whenever you modify code.
 
 ## ⚠️ CRITICAL: Build Command Usage - READ THIS FIRST
 
@@ -542,6 +542,12 @@ disabled:transform-none
 ## 🚫 NO MOCK DATA / FALLBACK DATA
 
 **MANDATORY**: Never use mock data or fallback data in the application code.
+
+**Production Readiness Requirement (Added 2025-10-18):**
+- **NO demo data seeded in backend services.** All persisted or in-memory datasets must originate from real user flows or explicit QA fixtures loaded via documented scripts.
+- **NO localStorage or hardcoded RFQ/order fallbacks in frontend contexts.** Frontend components must surface clear empty/error states when APIs return no data.
+- **Before merging any change, confirm no mock helpers remain** (e.g. `getLocalRfqOrdersForPair`, inlined sample makers, placeholder tokens). Delete helper functions once production integrations exist.
+- **Reviews must block** any PR that reintroduces mock/demo data.
 
 **Why:**
 - ❌ Mixes with real data (hard to detect)

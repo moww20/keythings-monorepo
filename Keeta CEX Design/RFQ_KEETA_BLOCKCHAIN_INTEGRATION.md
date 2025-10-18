@@ -94,8 +94,8 @@ The RFQ integration with Keeta is **feasible** with the current SDK and storage-
 ### High-Level System Design
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                         Frontend (React)                         │
+┌────────────────────────────────────────────────────────────────┐
+│                         Frontend (React)                       │
 │  ┌────────────────┐  ┌──────────────────┐  ┌─────────────────┐ │
 │  │ RFQMakerPanel  │  │  RFQTakerPanel   │  │  WalletContext  │ │
 │  │  (Publish RFQ) │  │  (Fill Orders)   │  │ (Keeta SDK)     │ │
@@ -105,18 +105,19 @@ The RFQ integration with Keeta is **feasible** with the current SDK and storage-
             │ Create Order     │ Fill Order           │ Sign Tx
             ▼                  ▼                      ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│                  Keeta Wallet Extension                          │
+│                  Keeta Wallet Extension                         │
 │  ┌───────────────────────────────────────────────────────────┐  │
-│  │  User signs all transactions via wallet                    │  │
-│  │  - Create storage account + deposit funds (maker)          │  │
-│  │  - Send tokens to maker + receive from storage (taker)     │  │
+│  │  User signs all transactions via wallet                   │  │
+│  │  - Create storage account + deposit funds (maker)         │  │
+│  │  - Send tokens to maker + receive from storage (taker)    │  │
 │  └───────────────────────────────────────────────────────────┘  │
+│  │  Source: Maintained in external repo (https://github.com/keythings-labs/keeta-wallet) │  │
 └─────────────────────────┬───────────────────────────────────────┘
                           │
                           │ Published Blocks
                           ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│                    Keeta Testnet Blockchain                      │
+│                    Keeta Testnet Blockchain                     │
 │  ┌───────────────────────────────────────────────────────────┐  │
 │  │ Storage Account (RFQ Order)                               │  │
 │  │  - Address: keeta_storage_abc123...                       │  │
@@ -124,15 +125,15 @@ The RFQ integration with Keeta is **feasible** with the current SDK and storage-
 │  │  - Metadata: { pair, price, size, expiry, maker }         │  │
 │  │  - Permissions: Maker=OWNER, Taker=SEND_ON_BEHALF (after) │  │
 │  └───────────────────────────────────────────────────────────┘  │
-│                                                                   │
-│  Settlement Time: ~400ms per transaction                         │
-│  Throughput: 10M TPS capacity                                    │
+│                                                                 │
+│  Settlement Time: ~400ms per transaction                        │
+│  Throughput: 10M TPS capacity                                   │
 └─────────────────────────┬───────────────────────────────────────┘
                           │
                           │ Query On-Chain State
                           ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│                   Backend API (Rust/Actix)                       │
+│                   Backend API (Rust/Actix)                      │
 │  ┌───────────────────────────────────────────────────────────┐  │
 │  │  KeetaRFQManager (Indexing Only)                          │  │
 │  │  - Index storage accounts from Keeta blockchain           │  │

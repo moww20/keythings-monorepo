@@ -19,6 +19,8 @@ function getExpiryMs(preset: '5m' | '15m' | '1h' | '4h' | '24h'): number {
 import {
   cancelRfqOrder,
   createRfqOrder,
+  fetchDeclarations,
+  fetchRfqAvailablePairs,
   fetchRfqMakers,
   fetchRfqOrder,
   fetchRfqOrders,
@@ -42,6 +44,8 @@ import type { RFQStorageAccountDetails, StorageAccountState } from '@/app/types/
 
 interface RFQContextValue {
   pair: string;
+  availablePairs: string[];
+  recommendedPair?: string;
   orders: RFQOrder[];
   makers: RFQMakerMeta[];
   buckets: RFQOrderBookBuckets;
@@ -83,32 +87,72 @@ export function RFQProvider({ pair, children }: { pair: string; children: ReactN
   const [escrowError, setEscrowError] = useState<string | null>(null);
   const [isVerifyingEscrow, setIsVerifyingEscrow] = useState(false);
   const [lastEscrowVerification, setLastEscrowVerification] = useState<number | null>(null);
+  const [availablePairs, setAvailablePairs] = useState<string[]>([pair]);
+  const [recommendedPair, setRecommendedPair] = useState<string | undefined>(undefined);
 
   const refreshOrders = useCallback(async () => {
+    console.debug('[RFQContext] refreshOrders:start', { pair });
     try {
       const [orderList, makerList] = await Promise.all([fetchRfqOrders(pair), fetchRfqMakers()]);
+      console.debug('[RFQContext] refreshOrders:data', {
+        pair,
+        orderCount: orderList.length,
+        makerCount: makerList.length,
+        firstOrder: orderList[0],
+      });
       setOrders(orderList);
       setMakers(makerList);
 
       if (orderList.length === 0) {
+        console.debug('[RFQContext] refreshOrders:empty', { pair });
+        const allOrders = await fetchRfqOrders();
+        const pairs = Array.from(new Set(allOrders.map((order) => order.pair))).filter(Boolean);
+        setAvailablePairs(pairs.length > 0 ? pairs : [pair]);
+        const firstDifferentPair = pairs.find((candidate) => candidate !== pair);
+        setRecommendedPair(firstDifferentPair);
         setSelectedOrderId(null);
         setFillAmountState(undefined);
         return;
       }
 
       const defaultOrder = orderList.find((order) => order.status === 'open') ?? orderList[0];
+      console.debug('[RFQContext] refreshOrders:defaultOrder', { pair, defaultOrderId: defaultOrder?.id });
+      setAvailablePairs((previous) => {
+        const next = new Set(previous);
+        next.add(pair);
+        orderList.forEach((order: RFQOrder) => {
+          if (order.pair) {
+            next.add(order.pair);
+          }
+        });
+        return Array.from(next);
+      });
+      setRecommendedPair(undefined);
       setSelectedOrderId(defaultOrder?.id ?? null);
       setFillAmountState(defaultOrder ? defaultOrder.minFill ?? defaultOrder.size : undefined);
     } catch (error) {
       console.error('[RFQ] Failed to refresh orders:', error);
-      // Keep existing orders/makers on error, but log the issue
-      // This prevents the UI from completely breaking when the RFQ service is unavailable
     }
   }, [pair]);
 
   useEffect(() => {
+    console.debug('[RFQContext] useEffect(refreshOrders) invoked', { pair });
     void refreshOrders();
-  }, [refreshOrders]);
+  }, [refreshOrders, pair]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadPairs = async () => {
+      const pairs = await fetchRfqAvailablePairs();
+      if (!cancelled && pairs.length > 0) {
+        setAvailablePairs((prev) => Array.from(new Set([...prev, ...pairs])));
+      }
+    };
+    void loadPairs();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const selectedOrder = useMemo(
     () => orders.find((order) => order.id === selectedOrderId),
@@ -116,12 +160,16 @@ export function RFQProvider({ pair, children }: { pair: string; children: ReactN
   );
 
   useEffect(() => {
+    console.debug('[RFQContext] selectedOrder updated', {
+      selectedOrderId,
+      selectedOrder,
+    });
     if (selectedOrder) {
       setFillAmountState(selectedOrder.minFill ?? selectedOrder.size);
     } else {
       setFillAmountState(undefined);
     }
-  }, [selectedOrder]);
+  }, [selectedOrder, selectedOrderId]);
 
   const refreshEscrowState = useCallback(async () => {
     if (!selectedOrder) {
@@ -142,6 +190,10 @@ export function RFQProvider({ pair, children }: { pair: string; children: ReactN
     try {
       setIsVerifyingEscrow(true);
       const state = await walletVerifyStorageAccount(storageAddress);
+      console.debug('[RFQContext] refreshEscrowState:resolved', {
+        storageAddress,
+        balancesCount: state?.balances?.length,
+      });
       setEscrowState(state);
       setEscrowError(null);
       setLastEscrowVerification(Date.now());
@@ -190,6 +242,7 @@ export function RFQProvider({ pair, children }: { pair: string; children: ReactN
   }, []);
 
   const setFillAmount = useCallback((value?: number) => {
+    console.debug('[RFQContext] setFillAmount invoked', { value });
     setFillAmountState(value && Number.isFinite(value) ? value : undefined);
   }, []);
 
@@ -342,10 +395,23 @@ export function RFQProvider({ pair, children }: { pair: string; children: ReactN
         updatedAt: nowIso,
       };
 
-      console.log('[RFQContext] newOrder.storageAccount:', newOrder.storageAccount);
+      console.debug('[RFQContext] createQuote:payload', {
+        orderId,
+        storageAccount: newOrder.storageAccount,
+        pair: newOrder.pair,
+        side: newOrder.side,
+        price,
+        size,
+        minFillValue,
+        expiryIso,
+      });
 
       const createdOrder = await createRfqOrder(newOrder);
-      console.log('[RFQContext] createdOrder.storageAccount:', createdOrder.storageAccount);
+      console.debug('[RFQContext] createQuote:response', {
+        createdOrderId: createdOrder.id,
+        storageAccount: createdOrder.storageAccount,
+        status: createdOrder.status,
+      });
 
       setOrders((prev) => [createdOrder, ...prev]);
       setSelectedOrderId(createdOrder.id);
@@ -363,50 +429,78 @@ export function RFQProvider({ pair, children }: { pair: string; children: ReactN
         throw new Error('RFQ order not found locally. Refresh and try again.');
       }
 
-      const makerTokenAddress = getMakerTokenAddressFromOrder(order);
-      const normalizedTokenAddress =
-        typeof makerTokenAddress === 'string' ? makerTokenAddress.trim() : '';
-      const isPlaceholderToken =
-        normalizedTokenAddress.length === 0 ||
-        normalizedTokenAddress.startsWith('PLACEHOLDER_');
-      const sanitizedTokenAddress = isPlaceholderToken ? '' : normalizedTokenAddress;
-
-      // Get token metadata from wallet context instead of deprecated function
-      let makerTokenDecimals = 9; // Default fallback
-      if (!isPlaceholderToken && sanitizedTokenAddress) {
-        const tokenMetadata = await getTokenMetadata(sanitizedTokenAddress);
-        if (tokenMetadata) {
-          makerTokenDecimals = tokenMetadata.decimals;
-        }
+      const declarations = await fetchDeclarations(orderId);
+      const hasPendingDeclaration = declarations.some((declaration) => declaration.status === 'pending');
+      if (hasPendingDeclaration) {
+        throw new Error('Cannot cancel quote while a taker declaration is pending. Please resolve declarations first.');
       }
+
       const remaining = Math.max(order.size - (order.takerFillAmount ?? 0), 0);
 
-      await walletCancelRFQOrder({
-        order,
-        tokenAddress: sanitizedTokenAddress,
-        tokenDecimals: makerTokenDecimals,
-        fieldType: 'decimals', // Default to decimals field type
-        amount: remaining,
-      });
+      if (remaining > 0) {
+        const makerTokenAddress = getMakerTokenAddressFromOrder(order);
+        const normalizedTokenAddress =
+          typeof makerTokenAddress === 'string' ? makerTokenAddress.trim() : '';
+        const isPlaceholderToken =
+          normalizedTokenAddress.length === 0 ||
+          normalizedTokenAddress.startsWith('PLACEHOLDER_');
+        const sanitizedTokenAddress = isPlaceholderToken ? '' : normalizedTokenAddress;
+
+        let makerTokenDecimals = 9;
+        if (!isPlaceholderToken && sanitizedTokenAddress) {
+          const tokenMetadata = await getTokenMetadata(sanitizedTokenAddress);
+          if (tokenMetadata) {
+            makerTokenDecimals = tokenMetadata.decimals;
+          }
+        }
+
+        try {
+          await walletCancelRFQOrder({
+            order,
+            tokenAddress: sanitizedTokenAddress,
+            tokenDecimals: makerTokenDecimals,
+            fieldType: 'decimals',
+            amount: remaining,
+          });
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          if (message.includes('Resulting balance becomes negative')) {
+            console.warn('[rfq] Wallet reported empty escrow during cancellation', {
+              orderId,
+              message,
+            });
+          } else {
+            throw error instanceof Error ? error : new Error(message);
+          }
+        }
+      }
 
       await cancelRfqOrder(orderId).catch((error) => {
         console.error('[rfq] Failed to cancel quote', error);
         throw error instanceof Error ? error : new Error('Failed to cancel RFQ quote');
       });
 
-      setOrders((previous) => previous.filter((order) => order.id !== orderId));
+      setOrders((previous) => previous.filter((candidate) => candidate.id !== orderId));
       if (selectedOrderId === orderId) {
         setSelectedOrderId(null);
         setFillAmountState(undefined);
       }
       void refreshEscrowState();
     },
-    [orders, refreshEscrowState, selectedOrderId, walletCancelRFQOrder, getTokenMetadata],
+    [
+      orders,
+      refreshEscrowState,
+      selectedOrderId,
+      walletCancelRFQOrder,
+      getTokenMetadata,
+    ],
   );
 
   const value = useMemo<RFQContextValue>(
     () => ({
       pair,
+      availablePairs,
+      recommendedPair,
       orders,
       makers,
       buckets,
@@ -428,6 +522,8 @@ export function RFQProvider({ pair, children }: { pair: string; children: ReactN
     }),
     [
       pair,
+      availablePairs,
+      recommendedPair,
       orders,
       makers,
       buckets,

@@ -6,6 +6,7 @@ import { Clock3, ShieldAlert, ShieldCheck, Zap } from 'lucide-react';
 import { useRFQContext } from '@/app/contexts/RFQContext';
 import type { RFQOrder, RFQOrderStatus } from '@/app/types/rfq';
 import type { OrderSide } from '@/app/types/rfq';
+import { getMakerTokenSymbol, getTakerTokenSymbol } from '@/app/lib/token-utils';
 
 const STATUS_LABELS: Record<RFQOrderStatus, string> = {
   open: 'Open',
@@ -52,12 +53,20 @@ function formatNumber(value: number, fractionDigits = 2): string {
   });
 }
 
-function sideLabel(side: OrderSide): string {
-  return side === 'buy' ? 'Maker Buys Base' : 'Maker Sells Base';
+function sideLabel(order: RFQOrder): string {
+  const makerSymbol = getMakerTokenSymbol(order.pair, order.side) || 'token';
+  const takerSymbol = getTakerTokenSymbol(order.pair, order.side) || 'token';
+  return order.side === 'sell'
+    ? `Maker sells ${makerSymbol} for ${takerSymbol}`
+    : `Maker buys ${makerSymbol} with ${takerSymbol}`;
 }
 
-export function RFQOrderBook(): React.JSX.Element {
-  const { buckets, selectedOrder, selectOrder } = useRFQContext();
+interface RFQOrderBookProps {
+  onPairChange?: (pair: string) => void;
+}
+
+export function RFQOrderBook({ onPairChange }: RFQOrderBookProps = {}): React.JSX.Element {
+  const { pair, buckets, selectedOrder, selectOrder, recommendedPair } = useRFQContext();
   const [sideFilter, setSideFilter] = useState<OrderSide>('sell');
   const [statusFilter, setStatusFilter] = useState<RFQOrderStatus>('open');
 
@@ -71,8 +80,8 @@ export function RFQOrderBook(): React.JSX.Element {
   return (
     <div className="flex h-full flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h2 className="text-lg font-semibold text-foreground">RFQ Order Book</h2>
+        <div className="space-y-1">
+          <h2 className="text-lg font-semibold text-foreground">RFQ Order Book · {pair}</h2>
           <p className="text-xs text-muted">Direct maker quotes updated in real time.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -110,8 +119,20 @@ export function RFQOrderBook(): React.JSX.Element {
 
       <div className="flex-1 space-y-3 overflow-y-auto pr-2">
         {orders.length === 0 && (
-          <div className="rounded-lg border border-dashed border-hairline bg-surface px-4 py-6 text-center text-xs text-muted">
-            No quotes match your filters yet. Makers can publish fresh RFQs in seconds.
+          <div className="space-y-3 rounded-lg border border-dashed border-hairline bg-surface px-4 py-6 text-center text-xs text-muted">
+            <div>No quotes match your filters yet. Makers can publish fresh RFQs in seconds.</div>
+            {recommendedPair && recommendedPair !== pair && onPairChange && (
+              <div className="text-accent">
+                We detected quotes on <strong>{recommendedPair}</strong>.
+                <button
+                  type="button"
+                  onClick={() => onPairChange(recommendedPair)}
+                  className="ml-2 inline-flex items-center gap-1 rounded-full bg-accent px-3 py-1 text-[11px] font-semibold text-white"
+                >
+                  View {recommendedPair}
+                </button>
+              </div>
+            )}
           </div>
         )}
 
@@ -134,6 +155,8 @@ function RFQOrderCard({ order, isSelected, onSelect }: RFQOrderCardProps): React
   const relativeExpiry = formatRelativeTime(order.expiry);
   const isExpired = order.status === 'expired' || relativeExpiry.startsWith('Expired');
   const escrowRef = order.storageAccount ?? order.unsignedBlock;
+  const makerSymbol = getMakerTokenSymbol(order.pair, order.side) || 'token';
+  const takerSymbol = getTakerTokenSymbol(order.pair, order.side) || 'token';
 
   return (
     <button
@@ -151,15 +174,15 @@ function RFQOrderCard({ order, isSelected, onSelect }: RFQOrderCardProps): React
         <div className="space-y-1">
           <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
             <span>${formatNumber(order.price, order.price > 10 ? 2 : 4)}</span>
-            <span className="text-xs font-medium text-muted">{sideLabel(order.side)}</span>
+            <span className="text-xs font-medium text-muted">{sideLabel(order)}</span>
           </div>
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">
             <span>
-              Size <strong className="text-foreground">{formatNumber(order.size, order.size > 1 ? 2 : 4)}</strong>
+              Size <strong className="text-foreground">{formatNumber(order.size, order.size > 1 ? 2 : 4)} {makerSymbol}</strong>
             </span>
             {order.minFill && (
               <span>
-                Min <strong className="text-foreground">{formatNumber(order.minFill, order.minFill > 1 ? 2 : 4)}</strong>
+                Min <strong className="text-foreground">{formatNumber(order.minFill, order.minFill > 1 ? 2 : 4)} {makerSymbol}</strong>
               </span>
             )}
             <span className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-[11px] font-semibold ${STATUS_BADGES[order.status]}`}>

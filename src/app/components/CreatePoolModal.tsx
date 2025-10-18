@@ -1,7 +1,8 @@
-'use client';
+  'use client';
 
 import { useState, useEffect, useMemo } from 'react';
 import { X, Droplets, Info, AlertCircle, ChevronDown, ExternalLink } from 'lucide-react';
+import { WizardProgress, type WizardProgressStep } from './WizardProgress';
 import { useWallet } from '../contexts/WalletContext';
 import { StorageAccountManager } from '../lib/storage-account-manager';
 
@@ -51,10 +52,45 @@ const FEE_TIERS = [
   { bps: 100, label: '1.0%', description: 'For exotic/volatile pairs' },
 ];
 
+type CreatePoolStep = 'select' | 'amounts' | 'confirm' | 'liquidity';
+
+const CREATE_POOL_STEPS: WizardProgressStep<CreatePoolStep>[] = [
+  {
+    id: 'select',
+    title: 'Select Tokens',
+    description: 'Choose assets to pair',
+  },
+  {
+    id: 'amounts',
+    title: 'Set Amounts',
+    description: 'Specify deposits',
+  },
+  {
+    id: 'confirm',
+    title: 'Confirm Pool',
+    description: 'Review details',
+  },
+  {
+    id: 'liquidity',
+    title: 'Add Liquidity',
+    description: 'Deposit tokens',
+  },
+];
+
+const STEP_SEQUENCE: CreatePoolStep[] = ['select', 'amounts', 'confirm', 'liquidity'];
+
 export default function CreatePoolModal({ isOpen, onClose, onSuccess }: CreatePoolModalProps) {
   const { tokens, publicKey, userClient } = useWallet();
-  const [step, setStep] = useState<'select' | 'amounts' | 'confirm' | 'liquidity'>('select');
-  
+  const [step, setStep] = useState<CreatePoolStep>('select');
+
+  const completedSteps = useMemo(() => {
+    const currentIndex = STEP_SEQUENCE.indexOf(step);
+    if (currentIndex <= 0) {
+      return [] as CreatePoolStep[];
+    }
+    return STEP_SEQUENCE.slice(0, currentIndex) as CreatePoolStep[];
+  }, [step]);
+
   // Form state
   const [tokenA, setTokenA] = useState<string>(''); // Token address
   const [tokenB, setTokenB] = useState<string>(''); // Token address
@@ -62,7 +98,7 @@ export default function CreatePoolModal({ isOpen, onClose, onSuccess }: CreatePo
   const [amountB, setAmountB] = useState<string>('');
   const [poolType, setPoolType] = useState<string>('constant_product');
   const [feeRate, setFeeRate] = useState<number>(30);
-  
+
   // UI state
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -471,52 +507,28 @@ export default function CreatePoolModal({ isOpen, onClose, onSuccess }: CreatePo
       {/* Modal */}
       <div className="relative glass rounded-lg border border-hairline shadow-[0_20px_60px_rgba(6,7,10,0.45)] w-full max-w-2xl max-h-[90vh] overflow-hidden">
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-hairline">
-          <div className="flex items-center gap-3">
-            <Droplets className="h-6 w-6 text-accent" />
-            <div>
-              <h2 className="text-xl font-bold text-foreground">Create Liquidity Pool</h2>
-              <p className="text-sm text-muted">On Keeta Testnet</p>
-            </div>
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2 text-sm text-muted">
+            <Droplets className="h-5 w-5 text-accent" />
+            <span>Create Liquidity Pool</span>
           </div>
           <button
+            type="button"
             onClick={onClose}
-            aria-label="Close modal"
-            className="p-2 hover:bg-surface rounded-lg transition-colors"
+            className="rounded-full bg-surface-strong p-2 text-muted transition-colors hover:text-foreground"
+            aria-label="Close create pool modal"
           >
-            <X className="h-5 w-5 text-muted" />
+            <X className="h-4 w-4" />
           </button>
         </div>
 
         {/* Progress Indicator */}
         <div className="flex items-center justify-center gap-2 p-4 border-b border-hairline bg-surface/30">
-          <div className={`flex items-center gap-2 ${step === 'select' ? 'text-accent' : step === 'amounts' || step === 'confirm' || step === 'liquidity' ? 'text-foreground' : 'text-muted'}`}>
-            <div className={`h-8 w-8 rounded-full flex items-center justify-center text-sm font-semibold ${step === 'select' ? 'bg-accent text-white' : 'bg-surface border border-hairline'}`}>
-              1
-            </div>
-            <span className="text-sm font-medium">Select Pair</span>
-          </div>
-          <div className="h-px w-12 bg-hairline" />
-          <div className={`flex items-center gap-2 ${step === 'amounts' ? 'text-accent' : step === 'confirm' || step === 'liquidity' ? 'text-foreground' : 'text-muted'}`}>
-            <div className={`h-8 w-8 rounded-full flex items-center justify-center text-sm font-semibold ${step === 'amounts' ? 'bg-accent text-white' : 'bg-surface border border-hairline'}`}>
-              2
-            </div>
-            <span className="text-sm font-medium">Amounts</span>
-          </div>
-          <div className="h-px w-12 bg-hairline" />
-          <div className={`flex items-center gap-2 ${step === 'confirm' ? 'text-accent' : step === 'liquidity' ? 'text-foreground' : 'text-muted'}`}>
-            <div className={`h-8 w-8 rounded-full flex items-center justify-center text-sm font-semibold ${step === 'confirm' ? 'bg-accent text-white' : 'bg-surface border border-hairline'}`}>
-              3
-            </div>
-            <span className="text-sm font-medium">Confirm</span>
-          </div>
-          <div className="h-px w-12 bg-hairline" />
-          <div className={`flex items-center gap-2 ${step === 'liquidity' ? 'text-accent' : 'text-muted'}`}>
-            <div className={`h-8 w-8 rounded-full flex items-center justify-center text-sm font-semibold ${step === 'liquidity' ? 'bg-accent text-white' : 'bg-surface border border-hairline'}`}>
-              4
-            </div>
-            <span className="text-sm font-medium">Add Liquidity</span>
-          </div>
+          <WizardProgress
+            steps={CREATE_POOL_STEPS}
+            currentStep={step}
+            completedSteps={completedSteps}
+          />
         </div>
 
         {/* Content */}
