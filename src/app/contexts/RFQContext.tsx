@@ -26,11 +26,8 @@ import {
 } from '@/app/lib/rfq-api';
 import {
   getMakerTokenAddress,
-  getMakerTokenDecimals,
   getMakerTokenAddressFromOrder,
-  getMakerTokenDecimalsFromOrder,
   getTakerTokenAddressFromOrder,
-  getTakerTokenDecimalsFromOrder,
 } from '@/app/lib/token-utils';
 import type {
   RFQFillRequestResult,
@@ -70,6 +67,7 @@ const RFQContext = createContext<RFQContextValue | undefined>(undefined);
 export function RFQProvider({ pair, children }: { pair: string; children: ReactNode }): React.JSX.Element {
   const {
     publicKey,
+    getTokenMetadata,
     fillRFQOrder: walletFillRFQOrder,
     cancelRFQOrder: walletCancelRFQOrder,
     verifyStorageAccount: walletVerifyStorageAccount,
@@ -292,7 +290,15 @@ export function RFQProvider({ pair, children }: { pair: string; children: ReactN
       const minFillValue = submission.minFill ? Number.parseFloat(submission.minFill) : undefined;
       const expiryIso = new Date(Date.now() + getExpiryMs(submission.expiryPreset)).toISOString();
       const makerTokenAddress = getMakerTokenAddress(submission.pair, submission.side);
-      const makerTokenDecimals = getMakerTokenDecimals(submission.pair, submission.side);
+      
+      // Get token metadata from wallet context instead of deprecated function
+      let makerTokenDecimals = 9; // Default fallback
+      if (makerTokenAddress) {
+        const tokenMetadata = await getTokenMetadata(makerTokenAddress);
+        if (tokenMetadata) {
+          makerTokenDecimals = tokenMetadata.decimals;
+        }
+      }
 
       if (!makerTokenAddress) {
         throw new Error('Token mapping missing for selected pair. Configure token addresses in environment variables.');
@@ -347,7 +353,7 @@ export function RFQProvider({ pair, children }: { pair: string; children: ReactN
       void refreshEscrowState();
       return createdOrder;
     },
-    [refreshEscrowState, walletIdentity],
+    [refreshEscrowState, walletIdentity, getTokenMetadata],
   );
 
   const cancelQuote = useCallback(
@@ -358,18 +364,30 @@ export function RFQProvider({ pair, children }: { pair: string; children: ReactN
       }
 
       const makerTokenAddress = getMakerTokenAddressFromOrder(order);
-      const makerTokenDecimals = getMakerTokenDecimalsFromOrder(order);
+      const normalizedTokenAddress =
+        typeof makerTokenAddress === 'string' ? makerTokenAddress.trim() : '';
+      const isPlaceholderToken =
+        normalizedTokenAddress.length === 0 ||
+        normalizedTokenAddress.startsWith('PLACEHOLDER_');
+      const sanitizedTokenAddress = isPlaceholderToken ? '' : normalizedTokenAddress;
+
+      // Get token metadata from wallet context instead of deprecated function
+      let makerTokenDecimals = 9; // Default fallback
+      if (!isPlaceholderToken && sanitizedTokenAddress) {
+        const tokenMetadata = await getTokenMetadata(sanitizedTokenAddress);
+        if (tokenMetadata) {
+          makerTokenDecimals = tokenMetadata.decimals;
+        }
+      }
       const remaining = Math.max(order.size - (order.takerFillAmount ?? 0), 0);
 
-      if (makerTokenAddress) {
-        await walletCancelRFQOrder({
-          order,
-          tokenAddress: makerTokenAddress,
-          tokenDecimals: makerTokenDecimals,
-          fieldType: 'decimals', // Default to decimals field type
-          amount: remaining,
-        });
-      }
+      await walletCancelRFQOrder({
+        order,
+        tokenAddress: sanitizedTokenAddress,
+        tokenDecimals: makerTokenDecimals,
+        fieldType: 'decimals', // Default to decimals field type
+        amount: remaining,
+      });
 
       await cancelRfqOrder(orderId).catch((error) => {
         console.error('[rfq] Failed to cancel quote', error);
@@ -383,7 +401,7 @@ export function RFQProvider({ pair, children }: { pair: string; children: ReactN
       }
       void refreshEscrowState();
     },
-    [orders, refreshEscrowState, selectedOrderId, walletCancelRFQOrder],
+    [orders, refreshEscrowState, selectedOrderId, walletCancelRFQOrder, getTokenMetadata],
   );
 
   const value = useMemo<RFQContextValue>(

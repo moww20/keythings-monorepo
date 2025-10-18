@@ -155,6 +155,12 @@ export function TradingViewChart({
       retryCountRef.current = 0;
 
       try {
+        // Final null check before widget initialization
+        if (!container) {
+          console.error('[TradingViewChart] Container is null, cannot initialize widget');
+          return;
+        }
+
         const widget = new window.TradingView.widget({
           symbol,
           interval: getTradingViewInterval(timeframe),

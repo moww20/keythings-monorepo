@@ -3,14 +3,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { ChangeEvent } from 'react';
 import { AlertTriangle, CheckCircle2, ClipboardCopy, Info, Loader2 } from 'lucide-react';
+import { z } from 'zod';
 
 import { useRFQContext } from '@/app/contexts/RFQContext';
 import { useWallet } from '@/app/contexts/WalletContext';
 import {
   getMakerTokenAddressFromOrder,
-  getMakerTokenDecimalsFromOrder,
   getTakerTokenAddressFromOrder,
-  getTakerTokenDecimalsFromOrder,
   toBaseUnits,
 } from '@/app/lib/token-utils';
 import { declareIntention, fetchDeclarations } from '@/app/lib/rfq-api';
@@ -24,6 +23,17 @@ function formatCurrency(value?: number): string {
   return value.toLocaleString('en-US', {
   minimumFractionDigits: 2,
   maximumFractionDigits: 2,
+  });
+}
+
+function formatNumber(value: number, fractionDigits = 2): string {
+  if (!Number.isFinite(value)) {
+  return '0';
+  }
+
+  return value.toLocaleString('en-US', {
+  minimumFractionDigits: fractionDigits,
+  maximumFractionDigits: fractionDigits,
   });
 }
 
@@ -44,6 +54,44 @@ function shorten(address: string, chars = 4): string {
   }
   return `${address.slice(0, chars)}…${address.slice(-chars)}`;
 }
+
+function isValidKeetaAddress(value: string | null | undefined): value is string {
+  if (typeof value !== 'string') {
+    return false;
+  }
+  const trimmed = value.trim();
+  if (trimmed.length < 10) {
+    return false;
+  }
+  if (trimmed.toLowerCase().startsWith('placeholder')) {
+    return false;
+  }
+  return /^[a-z0-9_:-]+$/i.test(trimmed);
+}
+
+function extractSymbolsFromPair(pair?: string): { maker?: string; taker?: string } {
+  if (!pair || typeof pair !== 'string') {
+  return { maker: undefined, taker: undefined };
+  }
+
+  const [makerSymbol, takerSymbol] = pair.split('/');
+  return {
+  maker: makerSymbol?.trim() || undefined,
+  taker: takerSymbol?.trim() || undefined,
+  };
+}
+
+const EscrowMetadataSchema = z
+  .object({
+    pair: z.string().optional(),
+    atomicSwap: z
+      .object({
+        makerToken: z.string().optional(),
+        takerToken: z.string().optional(),
+      })
+      .optional(),
+  })
+  .passthrough();
 
 interface RFQTakerPanelProps {
   mode: 'rfq_taker' | 'rfq_maker';
@@ -113,382 +161,349 @@ export function RFQTakerPanel({ mode, onModeChange }: RFQTakerPanelProps): React
   };
   }, [fillAmount, selectedOrder]);
 
+  // Get token metadata from wallet context instead of deprecated function
+  const [makerTokenDecimals, setMakerTokenDecimals] = useState(9); // Default fallback
+  const [makerTokenSymbol, setMakerTokenSymbol] = useState('-');
+  const [takerTokenSymbol, setTakerTokenSymbol] = useState('-');
+
+  const parsedEscrowMetadata = useMemo(() => {
+    if (!escrowState?.metadata) {
+    return null;
+    }
+
+    const parsed = EscrowMetadataSchema.safeParse(escrowState.metadata);
+    if (!parsed.success) {
+    console.warn('[RFQTakerPanel] Ignoring escrow metadata parsing error:', parsed.error.flatten());
+    return null;
+    }
+
+    return parsed.data;
+  }, [escrowState?.metadata]);
+
   const escrowInsights = useMemo(() => {
-  if (!selectedOrder) {
-  return {
-  makerTokenAddress: undefined,
-  makerTokenDecimals: 0,
-  takerTokenAddress: undefined,
-  lockedAmount: null as number | null,
-  };
-  }
+    if (!selectedOrder) {
+      return {
+        makerTokenAddress: undefined as string | undefined,
+        takerTokenAddress: undefined as string | undefined,
+        lockedAmount: null as number | null,
+        pairLabel: undefined as string | undefined,
+        fallbackSymbols: {
+          maker: undefined as string | undefined,
+          taker: undefined as string | undefined,
+        },
+        makerDecimalsFromBalance: undefined as number | undefined,
+      };
+    }
 
-  const makerTokenAddress = getMakerTokenAddressFromOrder(selectedOrder);
-  const makerTokenDecimals = getMakerTokenDecimalsFromOrder(selectedOrder);
-  const takerTokenAddress = getTakerTokenAddressFromOrder(selectedOrder);
-  const balanceEntry = escrowState?.balances.find((entry) => entry.token === makerTokenAddress);
-  const lockedAmount = balanceEntry ? balanceEntry.normalizedAmount : null;
+    const metadataMakerToken = parsedEscrowMetadata?.atomicSwap?.makerToken;
+    const metadataTakerToken = parsedEscrowMetadata?.atomicSwap?.takerToken;
 
-  return { makerTokenAddress, makerTokenDecimals, takerTokenAddress, lockedAmount };
-  }, [escrowState, selectedOrder]);
+    const makerTokenAddress = metadataMakerToken ?? getMakerTokenAddressFromOrder(selectedOrder);
+    const takerTokenAddress = metadataTakerToken ?? getTakerTokenAddressFromOrder(selectedOrder);
 
-  const { baseAsset, quoteAsset } = useMemo(() => {
-  if (!selectedOrder) {
-  return { baseAsset: 'BASE', quoteAsset: 'QUOTE' };
-  }
-  const [base, quote] = selectedOrder.pair.split('/');
-  return {
-  baseAsset: base ?? selectedOrder.pair,
-  quoteAsset: quote ?? base ?? selectedOrder.pair,
-  };
-  }, [selectedOrder]);
+    const balances = escrowState?.balances ?? [];
+    const balanceEntry = balances.find((entry) =>
+      metadataMakerToken ? entry.token === metadataMakerToken : entry.token === makerTokenAddress,
+    );
+    const lockedAmount = balanceEntry ? balanceEntry.normalizedAmount : null;
+
+    const pairLabel = parsedEscrowMetadata?.pair ?? selectedOrder.pair;
+    const fallbackSymbols = extractSymbolsFromPair(pairLabel);
+
+    return {
+      makerTokenAddress,
+      takerTokenAddress,
+      lockedAmount,
+      pairLabel,
+      fallbackSymbols,
+      makerDecimalsFromBalance: balanceEntry?.decimals,
+    };
+  }, [escrowState, parsedEscrowMetadata, selectedOrder]);
+
+  const derivedMakerTokenAddress = escrowInsights.makerTokenAddress;
+  const derivedTakerTokenAddress = escrowInsights.takerTokenAddress;
+  const fallbackMakerSymbol = escrowInsights.fallbackSymbols.maker;
+  const fallbackTakerSymbol = escrowInsights.fallbackSymbols.taker;
+  const fallbackPairLabel = escrowInsights.pairLabel;
+  const fallbackMakerDecimals = escrowInsights.makerDecimalsFromBalance;
+
+  // Fetch token metadata for display (symbols + decimals)
+  useEffect(() => {
+    const fetchMetadata = async () => {
+      if (!selectedOrder) {
+        setMakerTokenSymbol('-');
+        setTakerTokenSymbol('-');
+        setMakerTokenDecimals(9);
+        return;
+      }
+
+      const makerAddress = derivedMakerTokenAddress ?? getMakerTokenAddressFromOrder(selectedOrder);
+      const takerAddress = derivedTakerTokenAddress ?? getTakerTokenAddressFromOrder(selectedOrder);
+
+      try {
+        if (makerAddress) {
+          const metadata = await getTokenMetadata(makerAddress);
+          if (metadata) {
+            setMakerTokenDecimals(metadata.decimals ?? fallbackMakerDecimals ?? makerTokenDecimals);
+            setMakerTokenSymbol(
+              metadata.symbol ?? metadata.ticker ?? metadata.name ?? fallbackMakerSymbol ?? shorten(makerAddress),
+            );
+          } else {
+            setMakerTokenDecimals(fallbackMakerDecimals ?? makerTokenDecimals);
+            setMakerTokenSymbol(fallbackMakerSymbol ?? shorten(makerAddress));
+          }
+        }
+
+        if (takerAddress) {
+          const metadata = await getTokenMetadata(takerAddress);
+          if (metadata) {
+            setTakerTokenSymbol(
+              metadata.symbol ?? metadata.ticker ?? metadata.name ?? fallbackTakerSymbol ?? shorten(takerAddress),
+            );
+          } else {
+            setTakerTokenSymbol(fallbackTakerSymbol ?? shorten(takerAddress));
+          }
+        }
+      } catch (error) {
+        console.error('[RFQTakerPanel] Failed to fetch token metadata for display', error);
+        if (makerAddress) {
+          setMakerTokenDecimals(fallbackMakerDecimals ?? makerTokenDecimals);
+          setMakerTokenSymbol(fallbackMakerSymbol ?? shorten(makerAddress));
+        }
+        if (takerAddress) {
+          setTakerTokenSymbol(fallbackTakerSymbol ?? shorten(takerAddress));
+        }
+      }
+    };
+
+    fetchMetadata();
+  }, [
+    derivedMakerTokenAddress,
+    derivedTakerTokenAddress,
+    fallbackMakerDecimals,
+    fallbackMakerSymbol,
+    fallbackTakerSymbol,
+    getTokenMetadata,
+    makerTokenDecimals,
+    selectedOrder,
+  ]);
+
+  const pairLabel = useMemo(() => {
+    if (fallbackPairLabel) {
+    return fallbackPairLabel;
+    }
+    if (!selectedOrder) {
+    return '-/-';
+    }
+    if (makerTokenSymbol === '-' || takerTokenSymbol === '-') {
+    return selectedOrder.pair;
+    }
+    return `${makerTokenSymbol}/${takerTokenSymbol}`;
+  }, [fallbackPairLabel, makerTokenSymbol, selectedOrder, takerTokenSymbol]);
+
+  const makerSymbolDisplay = makerTokenSymbol !== '-' ? makerTokenSymbol : fallbackMakerSymbol ?? '—';
+  const takerSymbolDisplay = takerTokenSymbol !== '-' ? takerTokenSymbol : fallbackTakerSymbol ?? '—';
 
   const handleFillAmountChange = useCallback(
-  (event: ChangeEvent<HTMLInputElement>) => {
-  const value = Number.parseFloat(event.target.value);
-  if (Number.isNaN(value)) {
-  setFillAmount(undefined);
-  return;
-  }
-  setFillAmount(value);
-  },
-  [setFillAmount],
+    (event: ChangeEvent<HTMLInputElement>) => {
+      const value = Number.parseFloat(event.target.value);
+      if (Number.isNaN(value)) {
+        setFillAmount(undefined);
+        return;
+      }
+      setFillAmount(value);
+    },
+    [setFillAmount],
   );
 
   const handleCopyUnsignedBlock = useCallback(() => {
-  if (!selectedOrder) {
-  return;
-  }
-  if (typeof navigator !== 'undefined' && navigator.clipboard) {
-  const reference = selectedOrder.storageAccount ?? selectedOrder.unsignedBlock ?? 'No reference available';
-  void navigator.clipboard.writeText(reference);
-  setCopied(true);
-  setTimeout(() => setCopied(false), 1200);
-  }
+    if (!selectedOrder) {
+      return;
+    }
+    if (typeof navigator !== 'undefined' && navigator.clipboard) {
+      const reference = selectedOrder.storageAccount ?? selectedOrder.unsignedBlock ?? 'No reference available';
+      void navigator.clipboard.writeText(reference);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1200);
+    }
   }, [selectedOrder]);
 
   const handleDeclareIntention = useCallback(async () => {
-  if (!selectedOrder || !fillAmount) {
-  setLocalError('Select a quote and enter a fill size first.');
-  return;
-  }
-
-  if (!isConnected || !publicKey) {
-  setLocalError('Connect your wallet to declare intention.');
-  return;
-  }
-
-  if (selectedOrder.minFill && fillAmount < selectedOrder.minFill) {
-  setLocalError(`Minimum fill is ${formatToken(selectedOrder.minFill)} base.`);
-  return;
-  }
-
-  if (fillAmount > selectedOrder.size) {
-  setLocalError('Fill amount exceeds maker size. Reduce the quantity.');
-  return;
-  }
-
-  const expiryTimestamp = new Date(selectedOrder.expiry).getTime();
-  if (expiryTimestamp < Date.now() + 30_000) {
-  setLocalError('Quote expires in under 30 seconds. Choose a fresher order.');
-  return;
-  }
-
-  if (escrowInsights.lockedAmount !== null && fillAmount > escrowInsights.lockedAmount + 1e-9) {
-  setLocalError('Fill amount exceeds verified on-chain escrow balance.');
-  return;
-  }
-
-  setLocalError(null);
-  setSuccessMessage(null);
-  setIsDeclaring(true);
-
-  try {
-  // Build atomic swap transaction in frontend using Keeta SDK
-  console.log('[RFQTakerPanel] Building atomic swap transaction...');
-  
-  if (!userClient) {
-  throw new Error('Wallet client not available');
-  }
-  
-  const builder = userClient.initBuilder();
-  if (!builder) {
-  throw new Error('Failed to initialize transaction builder');
-  }
-
-  // Get token addresses for the swap
-  // Use the base token from userClient (KTA - Keeta's native token)
-  const baseToken = userClient.baseToken;
-  
-  console.log('[RFQTakerPanel] Debug - baseToken:', baseToken);
-  console.log('[RFQTakerPanel] Debug - baseToken type:', typeof baseToken);
-  
-  // For atomic swap: Both sides use the same base token (KTA)
-  // This is the standard Keeta pattern for token transfers
-  if (!baseToken) {
-  throw new Error('Base token not available from wallet. Please ensure wallet is properly connected.');
-  }
-  
-  // Use the same base token for both sides (KTA)
-  const makerTokenAddress = (baseToken as any)?.publicKeyString || 'base'; // What Maker is offering (KTA)
-  const takerTokenAddress = (baseToken as any)?.publicKeyString || 'base'; // What Taker is sending (KTA)
-  
-  console.log('[RFQTakerPanel] Debug - makerTokenAddress:', makerTokenAddress);
-  console.log('[RFQTakerPanel] Debug - takerTokenAddress:', takerTokenAddress);
-
-  // Fetch token metadata from blockchain instead of using cache
-  const makerTokenMetadata = await getTokenMetadata(makerTokenAddress);
-  const takerTokenMetadata = await getTokenMetadata(takerTokenAddress);
-  
-  if (!makerTokenMetadata) {
-    throw new Error('Failed to fetch maker token metadata from blockchain');
-  }
-  if (!takerTokenMetadata) {
-    throw new Error('Failed to fetch taker token metadata from blockchain');
-  }
-  
-  const makerTokenDecimals = makerTokenMetadata.decimals;
-  const takerTokenDecimals = takerTokenMetadata.decimals;
-  
-  // Convert decimal amounts to base units (smallest token units)
-  const makerAmountBigInt = toBaseUnits(fillAmount, makerTokenDecimals);
-  const takerAmountBigInt = toBaseUnits(fillAmount * selectedOrder.price, takerTokenDecimals);
-  
-  // Convert to strings for serialization
-  const makerAmount = makerAmountBigInt.toString();
-  const takerAmount = takerAmountBigInt.toString();
-
-  console.log('[RFQTakerPanel] Decimal conversion debug:');
-  console.log('[RFQTakerPanel] - fillAmount:', fillAmount);
-  console.log('[RFQTakerPanel] - makerTokenDecimals:', makerTokenDecimals);
-  console.log('[RFQTakerPanel] - takerTokenDecimals:', takerTokenDecimals);
-  console.log('[RFQTakerPanel] - makerAmountBigInt:', makerAmountBigInt.toString());
-  console.log('[RFQTakerPanel] - takerAmountBigInt:', takerAmountBigInt.toString());
-  
-  console.log('[RFQTakerPanel] Atomic swap terms:');
-  console.log('[RFQTakerPanel] 1. Taker receives:', makerAmount, 'from storage account (funded by Maker)');
-  console.log('[RFQTakerPanel] 2. Taker sends:', takerAmount, 'to Maker');
-  console.log('[RFQTakerPanel] Debug - takerAmount type:', typeof takerAmount);
-  console.log('[RFQTakerPanel] Debug - makerAmount value:', makerAmount);
-  console.log('[RFQTakerPanel] Debug - takerAmount value:', takerAmount);
-
-  // Debug: Check what methods are available on the builder
-  console.log('[RFQTakerPanel] Builder methods:', Object.getOwnPropertyNames(builder));
-  console.log('[RFQTakerPanel] Builder prototype methods:', Object.getOwnPropertyNames(Object.getPrototypeOf(builder)));
-  
-  // Build the atomic swap transaction following Keeta's pattern
-  // Taker declares: "I receive Y Token_A from storage and send X Token_B to Maker"
-  
-  // Get storage account address from the order
-  if (!selectedOrder.maker?.id) {
-  throw new Error('Maker address not found in order');
-  }
-  
-  console.log('[RFQTakerPanel] Debug - selectedOrder:', selectedOrder);
-  console.log('[RFQTakerPanel] Debug - storageAccount:', selectedOrder.storageAccount);
-  console.log('[RFQTakerPanel] Debug - unsignedBlock:', selectedOrder.unsignedBlock);
-  console.log('[RFQTakerPanel] Debug - maker.id:', selectedOrder.maker.id);
-  
-  // For atomic swaps, the Taker receives from the storage account
-  // The storage account is created and funded by the Maker when they fund their quote
-  const storageAccountAddress = selectedOrder.storageAccount;
-  console.log('[RFQTakerPanel] Debug - using storageAccountAddress:', storageAccountAddress);
-  console.log('[RFQTakerPanel] Debug - storageAccountAddress type:', typeof storageAccountAddress);
-  console.log('[RFQTakerPanel] Debug - storageAccountAddress length:', storageAccountAddress?.length);
-  console.log('[RFQTakerPanel] Debug - storageAccountAddress starts with:', storageAccountAddress?.substring(0, 10));
-  
-  // Validate that the storage account exists and is valid
-  if (!storageAccountAddress) {
-  throw new Error('Storage account not found. The Maker must fund their quote first before you can take it.');
-  }
-  
-  if (typeof storageAccountAddress !== 'string' || storageAccountAddress.length === 0) {
-  throw new Error('Invalid storage account address - must be a non-empty string');
-  }
-  
-  if (!storageAccountAddress.startsWith('keeta_')) {
-  throw new Error('Invalid storage account address format - must be a valid Keeta address starting with "keeta_"');
-  }
-  
-  // Additional validation: ensure it's a real Keeta address
-  if (storageAccountAddress.length < 10 || !storageAccountAddress.includes('_')) {
-  throw new Error('Invalid storage account address format. The Maker must fund their quote first.');
-  }
-  
-  // 1. Taker receives Token_A from storage account (funded by Maker)
-  const storageAccount = { publicKeyString: storageAccountAddress };
-  const makerAccount = { publicKeyString: selectedOrder.maker.id };
-  
-  // Ensure token addresses are strings
-  const makerTokenAddressString = typeof makerTokenAddress === 'string' 
-  ? makerTokenAddress 
-  : (makerTokenAddress && typeof makerTokenAddress === 'object' && 'publicKeyString' in makerTokenAddress)
-  ? (makerTokenAddress as { publicKeyString: string }).publicKeyString
-  : String(makerTokenAddress);
-  const takerTokenAddressString = typeof takerTokenAddress === 'string' 
-  ? takerTokenAddress 
-  : (takerTokenAddress && typeof takerTokenAddress === 'object' && 'publicKeyString' in takerTokenAddress)
-  ? (takerTokenAddress as { publicKeyString: string }).publicKeyString
-  : String(takerTokenAddress);
-  
-  const makerTokenRef = { publicKeyString: makerTokenAddressString };
-  const takerTokenRef = { publicKeyString: takerTokenAddressString };
-
-  console.log('[RFQTakerPanel] Debug - storageAccount:', storageAccount);
-  console.log('[RFQTakerPanel] Debug - makerAccount:', makerAccount);
-  console.log('[RFQTakerPanel] Debug - makerTokenRef:', makerTokenRef);
-  console.log('[RFQTakerPanel] Debug - takerTokenRef:', takerTokenRef);
-  console.log('[RFQTakerPanel] Debug - makerAmount:', makerAmount);
-  console.log('[RFQTakerPanel] Debug - takerAmount:', takerAmount);
-
-  // Check if builder methods are available
-  if (typeof builder.receive !== 'function') {
-  console.error('[RFQTakerPanel] builder.receive is not a function:', typeof builder.receive);
-  throw new Error('Builder does not support receive operations');
-  }
-  if (typeof builder.send !== 'function') {
-  console.error('[RFQTakerPanel] builder.send is not a function:', typeof builder.send);
-  throw new Error('Builder does not support send operations');
-  }
-  
-  // 1. Taker receives Token_A from storage account
-  console.log('[RFQTakerPanel] Building receive operation:');
-  console.log('[RFQTakerPanel] - from (storageAccount):', JSON.stringify(storageAccount));
-  console.log('[RFQTakerPanel] - amount (makerAmount):', JSON.stringify(makerAmount));
-  console.log('[RFQTakerPanel] - token (makerTokenRef):', JSON.stringify(makerTokenRef));
-  
-  builder.receive(storageAccount, makerAmount, makerTokenRef);
-  console.log('[RFQTakerPanel] builder.receive completed successfully');
-  
-  // 2. Taker sends Token_B to Maker
-  console.log('[RFQTakerPanel] Building send operation:');
-  console.log('[RFQTakerPanel] - to (makerAccount):', JSON.stringify(makerAccount));
-  console.log('[RFQTakerPanel] - amount (takerAmount):', JSON.stringify(takerAmount));
-  console.log('[RFQTakerPanel] - token (takerTokenRef):', JSON.stringify(takerTokenRef));
-  
-  builder.send(makerAccount, takerAmount, takerTokenRef);
-  console.log('[RFQTakerPanel] builder.send completed successfully');
-
-  console.log('[RFQTakerPanel] Atomic swap: Taker receives Token_A from storage and sends Token_B to Maker');
-  console.log('[RFQTakerPanel] Both operations will execute atomically');
-  
-  // Build the atomic swap operations
-  console.log('[RFQTakerPanel] Atomic swap transaction built successfully');
-  console.log('[RFQTakerPanel] Operations count:', (builder._operations as unknown[])?.length || 0);
-  
-  // For atomic swaps, the Taker creates an UNSIGNED block for the Maker to sign
-  // Following Keeta's atomic swap pattern: Taker builds, Maker signs and publishes
-  console.log('[RFQTakerPanel] Computing unsigned atomic swap block...');
-  
-  try {
-    // Compute the transaction blocks but DO NOT publish them
-    // This creates the unsigned block that the Maker will sign
-    const computedResult = await (builder as any).computeBuilderBlocks();
-    const { blocks } = computedResult;
-    console.log('[RFQTakerPanel] Computed unsigned blocks:', blocks.length);
-    
-    if (!blocks || blocks.length === 0) {
-      throw new Error('Failed to compute atomic swap blocks');
+    if (!selectedOrder || !fillAmount) {
+      setLocalError('Select a quote and enter a fill size first.');
+      return;
     }
-    
-    // Get the unsigned block data
-    // The blocks now contain actual bytes from the wallet extension
-    const unsignedBlock = blocks[0];
-    console.log('[RFQTakerPanel] Raw unsigned block data:', unsignedBlock);
-    console.log('[RFQTakerPanel] Block keys:', Object.keys(unsignedBlock));
-    
-    // Try to get hex bytes from different possible fields
-    let unsignedBlockHex = unsignedBlock.bytesHex || '';
-    
-    // Fallback: convert bytes array to hex if bytesHex is not available
-    if (!unsignedBlockHex && unsignedBlock.bytes) {
-      const bytesArray = unsignedBlock.bytes;
-      unsignedBlockHex = bytesArray.map((byte: number) => byte.toString(16).padStart(2, '0')).join('');
-      console.log('[RFQTakerPanel] Converted bytes array to hex:', unsignedBlockHex.substring(0, 20) + '...');
+
+    if (!isConnected || !publicKey) {
+      setLocalError('Connect your wallet to declare intention.');
+      return;
     }
-    
-    const unsignedBlockHash = unsignedBlock.hash || 'unknown_hash';
-    console.log('[RFQTakerPanel] Created unsigned atomic swap block with hash:', unsignedBlockHash);
-    console.log('[RFQTakerPanel] Block bytes (hex):', unsignedBlockHex.substring(0, 20) + '...');
-    console.log('[RFQTakerPanel] Block bytes length:', unsignedBlockHex.length);
-    
-    // Validate that we have block data
-    if (!unsignedBlockHex || unsignedBlockHex.length === 0) {
-      throw new Error('Failed to get unsigned block bytes from wallet extension');
+
+    if (selectedOrder.minFill && fillAmount < selectedOrder.minFill) {
+      setLocalError(`Minimum fill is ${formatToken(selectedOrder.minFill)} ${makerSymbolDisplay}.`);
+      return;
     }
-    
-    // Create atomic swap metadata for the Maker to review
-    const atomicSwapMetadata = {
-      type: 'atomic_swap_declaration',
-      version: '1.0',
-      taker: {
-        address: publicKey,
-        receives: {
-          amount: makerAmount,
-          decimals: makerTokenDecimals,
-          fieldType: makerTokenMetadata.fieldType,
-          token: makerTokenAddressString,
-          from: selectedOrder.storageAccount
-        },
-        sends: {
-          amount: takerAmount,
-          decimals: takerTokenDecimals,
-          fieldType: takerTokenMetadata.fieldType,
-          token: takerTokenAddressString,
-          to: selectedOrder.maker.id
-        }
-      },
-      terms: {
-        atomic: true,
-        conditional: true,
-        expiry: new Date(Date.now() + 5 * 60 * 1000).toISOString()
-      },
-      metadata: {
-        orderId: selectedOrder.id,
-        pair: selectedOrder.pair,
-        side: selectedOrder.side,
-        price: selectedOrder.price,
-        timestamp: Date.now()
+
+    if (fillAmount > selectedOrder.size) {
+      setLocalError('Fill amount exceeds maker size. Reduce the quantity.');
+      return;
+    }
+
+    const expiryTimestamp = new Date(selectedOrder.expiry).getTime();
+    if (expiryTimestamp < Date.now() + 30_000) {
+      setLocalError('Quote expires in under 30 seconds. Choose a fresher order.');
+      return;
+    }
+
+    if (escrowInsights.lockedAmount !== null && fillAmount > escrowInsights.lockedAmount + 1e-9) {
+      setLocalError('Fill amount exceeds verified on-chain escrow balance.');
+      return;
+    }
+
+    setLocalError(null);
+    setSuccessMessage(null);
+    setIsDeclaring(true);
+
+    try {
+      if (!userClient) {
+        throw new Error('Wallet client not available');
       }
-    };
-    
-    // Combine the unsigned block with metadata
-    const declarationData = {
-      unsignedBlock: unsignedBlockHex, // Send the actual block bytes as hex
-      blockHash: unsignedBlockHash,    // Also include the hash for reference
-      metadata: atomicSwapMetadata
-    };
-    
-    const serializedDeclaration = JSON.stringify(declarationData);
-    console.log('[RFQTakerPanel] Sending atomic swap declaration to Maker...');
-    
-    // Send declaration with the unsigned atomic swap block
-    await declareIntention(selectedOrder.id, {
-      takerAddress: publicKey,
-      fillAmount,
-      unsignedAtomicSwapBlock: serializedDeclaration,
-    });
 
-    setHasActiveDeclaration(true);
-    setDeclarationStatus('pending');
-    setSuccessMessage('Atomic swap declaration sent! Maker will review and sign the transaction...');
-    return;
-    
-  } catch (error) {
-    console.error('[RFQTakerPanel] Error computing atomic swap block:', error);
-    setLocalError(error instanceof Error ? error.message : 'Failed to create atomic swap declaration');
-    return;
-  }
-  } catch (error) {
-  console.error('[RFQTakerPanel] Error building atomic swap:', error);
-  setLocalError(error instanceof Error ? error.message : 'Failed to build atomic swap transaction');
-  } finally {
-  setIsDeclaring(false);
-  }
-  }, [escrowInsights.lockedAmount, fillAmount, isConnected, publicKey, selectedOrder, userClient, getTokenMetadata]);
+      const builder = userClient.initBuilder();
+      if (!builder) {
+        throw new Error('Failed to initialize transaction builder');
+      }
 
-  // Removed handleExecuteSwap - atomic swap execution happens automatically when Maker approves
+      const makerTokenAddress = getMakerTokenAddressFromOrder(selectedOrder);
+      const takerTokenAddress = getTakerTokenAddressFromOrder(selectedOrder);
 
+      if (!isValidKeetaAddress(makerTokenAddress) || !isValidKeetaAddress(takerTokenAddress)) {
+        throw new Error('RFQ order is missing token address mappings.');
+      }
+
+      const storageAccountAddress = selectedOrder.storageAccount ?? selectedOrder.unsignedBlock;
+      if (!isValidKeetaAddress(storageAccountAddress)) {
+        throw new Error('Maker has not provisioned a funded storage account for this quote yet.');
+      }
+
+      const makerTokenMetadata = await getTokenMetadata(makerTokenAddress);
+      const takerTokenMetadata = await getTokenMetadata(takerTokenAddress);
+
+      if (!makerTokenMetadata || !takerTokenMetadata) {
+        throw new Error('Failed to fetch token metadata for the RFQ pair.');
+      }
+
+      const makerDecimals = makerTokenMetadata.decimals ?? 0;
+      const takerDecimals = takerTokenMetadata.decimals ?? 0;
+
+      const makerAmount = toBaseUnits(fillAmount, makerDecimals).toString();
+      const takerNotional = fillAmount * selectedOrder.price;
+      const takerAmount = toBaseUnits(takerNotional, takerDecimals).toString();
+
+      const receiveFn = (builder as { receive?: (...args: unknown[]) => unknown }).receive;
+      const sendFn = (builder as { send?: (...args: unknown[]) => unknown }).send;
+
+      if (typeof receiveFn !== 'function' || typeof sendFn !== 'function') {
+        throw new Error('Wallet builder does not support atomic swap operations.');
+      }
+
+      const storageAccount = { publicKeyString: storageAccountAddress };
+      const makerAccount = { publicKeyString: selectedOrder.maker.id };
+      const makerTokenRef = { publicKeyString: makerTokenAddress };
+      const takerTokenRef = { publicKeyString: takerTokenAddress };
+
+      await Promise.resolve(receiveFn.call(builder, storageAccount, makerAmount, makerTokenRef));
+      await Promise.resolve(sendFn.call(builder, makerAccount, takerAmount, takerTokenRef));
+
+      let computeResult: { blocks?: Array<Record<string, unknown>> } | undefined;
+      if (typeof (builder as { computeBuilderBlocks?: () => Promise<unknown> }).computeBuilderBlocks === 'function') {
+        computeResult = await (builder as any).computeBuilderBlocks();
+      } else if (typeof (builder as { computeBlocks?: () => Promise<unknown> }).computeBlocks === 'function') {
+        computeResult = await (builder as any).computeBlocks();
+      } else {
+        throw new Error('Wallet builder did not expose computeBuilderBlocks or computeBlocks.');
+      }
+
+      const unsignedBlockRecord = (computeResult?.blocks?.[0] ?? null) as Record<string, unknown> | null;
+      if (!unsignedBlockRecord) {
+        throw new Error('Wallet did not return an unsigned block for the declaration.');
+      }
+
+      let unsignedBlockHex =
+        typeof unsignedBlockRecord.bytesHex === 'string'
+          ? (unsignedBlockRecord.bytesHex as string)
+          : '';
+      const rawBytes = Array.isArray(unsignedBlockRecord.bytes)
+        ? (unsignedBlockRecord.bytes as number[])
+        : undefined;
+      if (!unsignedBlockHex && Array.isArray(rawBytes)) {
+        unsignedBlockHex = rawBytes.map((byte) => Number(byte).toString(16).padStart(2, '0')).join('');
+      }
+
+      if (!unsignedBlockHex) {
+        throw new Error('Wallet did not return unsigned block bytes.');
+      }
+
+      const declarationPayload = {
+        unsignedBlock: unsignedBlockHex,
+        blockHash: typeof unsignedBlockRecord.hash === 'string' ? (unsignedBlockRecord.hash as string) : null,
+        metadata: {
+          type: 'atomic_swap_declaration',
+          version: '1.0',
+          taker: {
+            address: publicKey,
+            receives: {
+              amount: makerAmount,
+              decimals: makerDecimals,
+              token: makerTokenAddress,
+              from: storageAccountAddress,
+            },
+            sends: {
+              amount: takerAmount,
+              decimals: takerDecimals,
+              token: takerTokenAddress,
+              to: selectedOrder.maker.id,
+            },
+          },
+          terms: {
+            atomic: true,
+            conditional: true,
+            expiry: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+          },
+          metadata: {
+            orderId: selectedOrder.id,
+            pair: selectedOrder.pair,
+            side: selectedOrder.side,
+            price: selectedOrder.price,
+            timestamp: Date.now(),
+          },
+        },
+      };
+
+      await declareIntention(selectedOrder.id, {
+        takerAddress: publicKey,
+        fillAmount,
+        unsignedAtomicSwapBlock: JSON.stringify(declarationPayload),
+      });
+
+      setHasActiveDeclaration(true);
+      setDeclarationStatus('pending');
+      setSuccessMessage('Atomic swap declaration sent! Maker will review and sign the transaction...');
+    } catch (error) {
+      setLocalError(error instanceof Error ? error.message : 'Failed to build atomic swap transaction');
+    } finally {
+      setIsDeclaring(false);
+    }
+  }, [
+    escrowInsights.lockedAmount,
+    fillAmount,
+    getTokenMetadata,
+    isConnected,
+    makerSymbolDisplay,
+    publicKey,
+    selectedOrder,
+    userClient,
+  ]);
   // Check for declaration status updates
   useEffect(() => {
   if (!hasActiveDeclaration || !selectedOrder) {
@@ -551,9 +566,9 @@ export function RFQTakerPanel({ mode, onModeChange }: RFQTakerPanelProps): React
   <div className="flex items-start justify-between gap-3">
   <div>
   <p className="text-xs uppercase tracking-wide text-muted">Selected Quote</p>
-          <h3 className="text-lg font-semibold text-foreground">{selectedOrder.pair}</h3>
+          <h3 className="text-lg font-semibold text-foreground">{pairLabel}</h3>
           <p className="text-xs text-muted">
-            Maker {selectedOrder.maker.displayName} · Reputation {selectedOrder.maker.reputationScore}
+            Maker {selectedOrder.maker.displayName} - Reputation {selectedOrder.maker.reputationScore}
           </p>
   </div>
   <button
@@ -569,16 +584,16 @@ export function RFQTakerPanel({ mode, onModeChange }: RFQTakerPanelProps): React
   <div className="grid grid-cols-2 gap-3 rounded-lg bg-surface-strong p-3 text-xs text-muted">
   <div>
   <p className="font-medium text-foreground">Price</p>
-  <p>${formatCurrency(selectedOrder.price)}</p>
+  <p>{`1 ${makerSymbolDisplay} = ${formatNumber(selectedOrder.price, selectedOrder.price > 10 ? 2 : 6)} ${takerSymbolDisplay}`}</p>
   </div>
   <div>
   <p className="font-medium text-foreground">Size</p>
-  <p>{formatToken(selectedOrder.size)} base</p>
+  <p>{formatToken(selectedOrder.size)} {makerSymbolDisplay}</p>
   </div>
   {selectedOrder.minFill && (
   <div>
   <p className="font-medium text-foreground">Min fill</p>
-  <p>{formatToken(selectedOrder.minFill)} base</p>
+  <p>{formatToken(selectedOrder.minFill)} {makerSymbolDisplay}</p>
   </div>
   )}
   <div>
@@ -600,7 +615,7 @@ export function RFQTakerPanel({ mode, onModeChange }: RFQTakerPanelProps): React
   </button>
   </div>
   {escrowError ? (
-  <p className="rounded bg-red-500/10 px-3 py-2 text-[11px] text-red-200">{escrowError}</p>
+  <p className="rounded bg-surface-strong px-3 py-2 text-[11px] text-foreground border border-hairline">{escrowError}</p>
   ) : (
   <div className="space-y-2 text-muted">
   <div className="flex items-center justify-between gap-2 text-[11px]">
@@ -611,7 +626,7 @@ export function RFQTakerPanel({ mode, onModeChange }: RFQTakerPanelProps): React
   <span>Locked funds</span>
   <span className="text-foreground">
   {escrowInsights.lockedAmount != null
-  ? `${formatToken(escrowInsights.lockedAmount)} ${selectedOrder.side === 'sell' ? quoteAsset : baseAsset}`
+  ? `${formatToken(escrowInsights.lockedAmount)} ${makerSymbolDisplay}`
   : 'Pending verification'}
   </span>
   </div>
@@ -629,21 +644,21 @@ export function RFQTakerPanel({ mode, onModeChange }: RFQTakerPanelProps): React
 
   {/* Atomic Swap Terms Display */}
   {fillAmount && fillAmount > 0 && (
-  <div className="rounded-lg border border-blue-500/30 bg-blue-500/10 p-3 text-xs">
-  <div className="font-semibold text-blue-400 mb-2">Atomic Swap Terms</div>
-  <div className="space-y-1 text-blue-300">
-  <div>Storage → You: {formatToken(fillAmount)} {selectedOrder.side === 'sell' ? selectedOrder.pair.split('/')[0] : selectedOrder.pair.split('/')[1]}</div>
-  <div>You → Maker: {formatToken(fillAmount * selectedOrder.price)} {selectedOrder.side === 'sell' ? selectedOrder.pair.split('/')[1] : selectedOrder.pair.split('/')[0]}</div>
-  <div>Rate: {selectedOrder.price} {selectedOrder.pair}</div>
+  <div className="rounded-lg border border-accent/30 bg-accent/10 p-3 text-xs">
+  <div className="font-semibold text-accent mb-2">Atomic Swap Terms</div>
+  <div className="space-y-1 text-foreground">
+  <div>Storage -&gt; You: {formatToken(fillAmount)} {makerSymbolDisplay}</div>
+  <div>You -&gt; Maker: {formatToken(fillAmount * selectedOrder.price)} {takerSymbolDisplay}</div>
+  <div>Rate: {`1 ${makerSymbolDisplay} = ${formatNumber(selectedOrder.price, selectedOrder.price > 10 ? 2 : 6)} ${takerSymbolDisplay}`}</div>
   </div>
-  <div className="mt-2 text-blue-400/70">
+  <div className="mt-2 text-accent/70">
   Both operations execute atomically - if either fails, both fail. No partial execution possible. The maker will sign and publish this transaction after reviewing your declaration.
   </div>
   </div>
   )}
 
   <label className="space-y-2">
-  <span className="text-xs font-medium text-muted">Fill amount (base asset)</span>
+  <span className="text-xs font-medium text-muted">Fill amount ({makerSymbolDisplay})</span>
   <input
   type="number"
   min={selectedOrder.minFill ?? 0}
@@ -674,14 +689,14 @@ export function RFQTakerPanel({ mode, onModeChange }: RFQTakerPanelProps): React
   )}
 
   {localError && (
-  <div className="flex items-start gap-2 rounded-lg border border-red-500/40 bg-red-500/10 p-3 text-xs text-red-200">
+  <div className="flex items-start gap-2 rounded-lg border border-hairline bg-surface-strong p-3 text-xs text-foreground">
   <AlertTriangle className="mt-0.5 h-4 w-4" />
   <span>{localError}</span>
   </div>
   )}
 
   {successMessage && (
-  <div className="flex items-start gap-2 rounded-lg border border-green-500/40 bg-green-500/10 p-3 text-xs text-green-200">
+  <div className="flex items-start gap-2 rounded-lg border border-accent/30 bg-accent/10 p-3 text-xs text-accent">
   <CheckCircle2 className="mt-0.5 h-4 w-4" />
   <span>{successMessage}</span>
   </div>
@@ -707,12 +722,12 @@ export function RFQTakerPanel({ mode, onModeChange }: RFQTakerPanelProps): React
   )}
   </button>
   ) : declarationStatus === 'approved' ? (
-  <div className="flex items-center justify-center gap-2 rounded-lg border border-green-500/40 bg-green-500/10 px-4 py-3 text-sm text-green-200">
+  <div className="flex items-center justify-center gap-2 rounded-lg border border-accent/30 bg-accent/10 px-4 py-3 text-sm text-accent">
   <CheckCircle2 className="h-4 w-4" />
   Atomic Swap Executed Successfully!
   </div>
   ) : (
-  <div className="flex items-center justify-center gap-2 rounded-lg border border-yellow-500/40 bg-yellow-500/10 px-4 py-3 text-sm text-yellow-200">
+  <div className="flex items-center justify-center gap-2 rounded-lg border border-hairline bg-surface px-4 py-3 text-sm text-muted">
   <Loader2 className="h-4 w-4 animate-spin" />
   Waiting for Maker Approval...
   </div>
@@ -741,4 +756,6 @@ export function RFQTakerPanel({ mode, onModeChange }: RFQTakerPanelProps): React
 }
 
 export default RFQTakerPanel;
+
+
 

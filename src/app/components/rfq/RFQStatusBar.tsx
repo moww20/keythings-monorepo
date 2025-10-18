@@ -8,7 +8,7 @@ import { useRFQContext } from '@/app/contexts/RFQContext';
 
 function shorten(pubkey: string | null | undefined, chars = 4): string {
   if (!pubkey) {
-    return '—';
+    return '-';
   }
   if (pubkey.length <= chars * 2) {
     return pubkey;
@@ -17,17 +17,8 @@ function shorten(pubkey: string | null | undefined, chars = 4): string {
 }
 
 export function RFQStatusBar(): React.JSX.Element {
-  const {
-    isConnected,
-    isLocked,
-    publicKey,
-  } = useWallet();
-  const {
-    isFilling,
-    lastFillResult,
-    isVerifyingEscrow,
-    lastEscrowVerification,
-  } = useRFQContext();
+  const { isConnected, isLocked, publicKey } = useWallet();
+  const { isFilling, lastFillResult, isVerifyingEscrow, lastEscrowVerification } = useRFQContext();
 
   const fillStatus = useMemo(() => {
     if (isFilling) {
@@ -36,15 +27,15 @@ export function RFQStatusBar(): React.JSX.Element {
     if (lastFillResult) {
       if (lastFillResult.status === 'settled') {
         return {
-          label: `Settled in ${lastFillResult.latencyMs} ms`,
-          tone: 'text-green-300',
+          label: `Settled in ${lastFillResult.latencyMs}ms`,
+          tone: 'text-accent',
           icon: <ShieldCheck className="h-4 w-4" />,
         };
       }
       if (lastFillResult.status === 'rejected') {
         return {
           label: 'Maker rejected fill',
-          tone: 'text-red-300',
+          tone: 'text-muted',
           icon: <Zap className="h-4 w-4" />,
         };
       }
@@ -59,7 +50,7 @@ export function RFQStatusBar(): React.JSX.Element {
     if (lastEscrowVerification) {
       return {
         label: `Verified at ${new Date(lastEscrowVerification).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`,
-        tone: 'text-green-300',
+        tone: 'text-accent',
         icon: <ShieldCheck className="h-4 w-4" />,
       };
     }
@@ -70,13 +61,11 @@ export function RFQStatusBar(): React.JSX.Element {
     <div className="flex flex-wrap items-center gap-3 rounded-lg border border-hairline bg-surface px-4 py-3 text-xs">
       <div className="flex items-center gap-2 text-muted">
         {isLocked ? (
-          <Lock className="h-4 w-4 text-amber-400" />
+          <Lock className="h-4 w-4 text-muted" />
         ) : (
-          <Unlock className={`h-4 w-4 ${isConnected ? 'text-green-400' : 'text-muted'}`} />
+          <Unlock className={`h-4 w-4 ${isConnected ? 'text-accent' : 'text-muted'}`} />
         )}
-        <span className="font-medium text-foreground">
-          Wallet:
-        </span>
+        <span className="font-medium text-foreground">Wallet:</span>
         <span className="font-mono text-foreground">{isConnected ? shorten(publicKey) : 'Disconnected'}</span>
       </div>
       <div className={`flex items-center gap-2 ${escrowStatus.tone}`}>

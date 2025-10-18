@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import Image from 'next/image';
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -10,9 +10,10 @@ import { useWallet } from '@/app/contexts/WalletContext';
 import { useProcessedTokens } from '@/app/hooks/useProcessedTokens';
 import { StorageAccountManager } from '@/app/lib/storage-account-manager';
 import { createPermissionPayload } from '@/app/lib/storage-account-manager';
-import { getTakerTokenAddress, toBaseUnits } from '@/app/lib/token-utils';
+import { getMakerTokenAddressFromOrder, getTakerTokenAddress, getTakerTokenAddressFromOrder, toBaseUnits } from '@/app/lib/token-utils';
 import { useTokenMetadata } from '@/app/hooks/useTokenMetadata';
 import { fetchDeclarations, approveDeclaration } from '@/app/lib/rfq-api';
+import { encodeToBase64 } from '@/app/lib/encoding';
 
 const EXPIRY_PRESETS: Array<{ value: RFQQuoteDraft['expiryPreset']; label: string }> = [
   { value: '5m', label: '5 minutes' },
@@ -65,6 +66,20 @@ function shorten(address: string | undefined | null, chars = 4): string {
 
 type WizardStep = 'details' | 'controls' | 'review' | 'creating' | 'funding';
 
+function isValidKeetaAddress(value: string | null | undefined): value is string {
+  if (typeof value !== 'string') {
+    return false;
+  }
+  const trimmed = value.trim();
+  if (trimmed.length < 10) {
+    return false;
+  }
+  if (trimmed.toLowerCase().startsWith('placeholder')) {
+    return false;
+  }
+  return /^[a-z0-9_:-]+$/i.test(trimmed);
+}
+
 interface RFQMakerPanelProps {
   mode: 'rfq_taker' | 'rfq_maker';
   onModeChange: (mode: 'rfq_taker' | 'rfq_maker') => void;
@@ -86,12 +101,15 @@ export function RFQMakerPanel({ mode, onModeChange }: RFQMakerPanelProps): React
   const [step, setStep] = useState<WizardStep>('details');
   const [storageAccountAddress, setStorageAccountAddress] = useState<string | null>(null);
   const [currentSubmission, setCurrentSubmission] = useState<RFQQuoteSubmission | null>(null);
+  const [isAwaitingManualAddress, setIsAwaitingManualAddress] = useState(false);
+  const [manualAddress, setManualAddress] = useState('');
+  const [manualAddressError, setManualAddressError] = useState<string | null>(null);
 
   // Declaration management state
   const [declarations, setDeclarations] = useState<RFQDeclaration[]>([]);
   const [isLoadingDeclarations, setIsLoadingDeclarations] = useState(false);
   const [isApprovingDeclaration, setIsApprovingDeclaration] = useState<string | null>(null);
-  
+
   // Token selection state
   const [selectedToken, setSelectedToken] = useState<string | null>(null);
   const [isSelectingToken, setIsSelectingToken] = useState(false);
@@ -101,7 +119,7 @@ export function RFQMakerPanel({ mode, onModeChange }: RFQMakerPanelProps): React
     if (!Array.isArray(tokens) || tokens.length === 0) {
       return [];
     }
-    
+
     return tokens
       .filter((token) => {
         // Filter out tokens with zero balance - use the raw balance string, not formattedAmount
@@ -272,21 +290,21 @@ export function RFQMakerPanel({ mode, onModeChange }: RFQMakerPanelProps): React
     console.log('[RFQMakerPanel] handleFundStorage called');
     console.log('[RFQMakerPanel] storageAccountAddress:', storageAccountAddress);
     console.log('[RFQMakerPanel] currentSubmission:', currentSubmission);
-    
+
     if (!userClient || !publicKey) {
       setError('Connect your wallet before funding the RFQ order.');
       return;
     }
-    
+
     if (!storageAccountAddress || !storageAccountAddress.startsWith('keeta_')) {
       console.log('[RFQMakerPanel] Storage account validation failed - redirecting to review step');
       setError('Storage account not created. Please click "Fund Quote" first to create the storage account.');
       setStep('review');
       return;
     }
-    
+
     console.log('[RFQMakerPanel] Storage account validation passed:', storageAccountAddress);
-    
+
     if (!currentSubmission) {
       setError('Missing order submission data. Please try creating the order again.');
       return;
@@ -305,52 +323,52 @@ export function RFQMakerPanel({ mode, onModeChange }: RFQMakerPanelProps): React
       console.log('[RFQMakerPanel] Step 2/2: Setting RFQ order metadata...');
       console.log('[RFQMakerPanel] Storage account:', storageAccountAddress);
       console.log('[RFQMakerPanel] Current submission:', JSON.stringify(currentSubmission));
-      
+
       // Type guard: Ensure currentSubmission is not null (already validated above)
       if (!currentSubmission) {
         throw new Error('Current submission is null. This should not happen.');
       }
-      
+
       // Build transaction to set RFQ order metadata
       console.log('[RFQMakerPanel] Building RFQ metadata transaction...');
-      
+
       const builder = userClient.initBuilder();
       if (!builder) {
         throw new Error('Failed to initialize transaction builder');
       }
-      
+
       if (typeof builder.setInfo !== 'function') {
         throw new Error('Builder does not support setInfo operations');
       }
-      
+
       // Validate storage account address
       if (!storageAccountAddress || storageAccountAddress === '_PLACEHOLDER_') {
         throw new Error('Invalid storage account address. Please create the storage account first.');
       }
-      
+
       // Create serializable object for the storage account (following CreatePoolModal pattern)
       const toAccount = JSON.parse(JSON.stringify({ publicKeyString: storageAccountAddress }));
-      
+
       console.log('[RFQMakerPanel] toAccount:', JSON.stringify(toAccount));
-      
+
       // Fund the storage account with the maker's tokens
       console.log('[RFQMakerPanel] Funding storage account with maker tokens...');
-      
+
       // Get selected token information
       if (!selectedToken) {
         throw new Error('Please select a token to trade');
       }
-      
+
       const selectedTokenInfo = availableTokens.find(t => t.address === selectedToken);
       if (!selectedTokenInfo) {
         throw new Error('Selected token not found in available tokens');
       }
-      
+
       // For RFQ, the maker provides the selected token, taker provides KTA (base token)
       const makerTokenAddress = selectedTokenInfo.address;
       const makerTokenDecimals = selectedTokenInfo.decimals;
-      const makerAmount = toBaseUnits(parseFloat(currentSubmission.size), makerTokenDecimals);
-      
+      const makerAmount = toBaseUnits(parseFloat(currentSubmission.size), makerTokenDecimals).toString();
+
       // Taker always provides KTA (base token)
       const baseTokenAddressCandidate = (userClient?.baseToken as { publicKeyString?: string } | undefined)?.publicKeyString;
       const baseTokenAddress = typeof baseTokenAddressCandidate === 'string' ? baseTokenAddressCandidate : null;
@@ -367,8 +385,8 @@ export function RFQMakerPanel({ mode, onModeChange }: RFQMakerPanelProps): React
         throw new Error('Failed to fetch taker token (KTA) metadata from blockchain');
       }
       const takerTokenDecimals = takerTokenMetadata.decimals;
-      const takerAmount = toBaseUnits(parseFloat(currentSubmission.size) * parseFloat(currentSubmission.price), takerTokenDecimals);
-      
+      const takerAmount = toBaseUnits(parseFloat(currentSubmission.size) * parseFloat(currentSubmission.price), takerTokenDecimals).toString();
+
       // Set metadata with RFQ order details and atomic swap terms
       const metadataJson = JSON.stringify({
         // Existing fields
@@ -381,7 +399,7 @@ export function RFQMakerPanel({ mode, onModeChange }: RFQMakerPanelProps): React
         makerAddress: publicKey,
         allowlistLabel: currentSubmission.allowlistLabel,
         autoSignProfileId: currentSubmission.autoSignProfileId,
-        
+
         // NEW: Atomic swap constraints
         atomicSwap: {
           makerToken: makerTokenAddress,      // Token maker is offering
@@ -392,10 +410,10 @@ export function RFQMakerPanel({ mode, onModeChange }: RFQMakerPanelProps): React
           recipient: publicKey,                 // Where taker must send tokens
         },
       });
-      
+
       // Encode metadata as base64 (required by Keeta SDK)
-      const metadataBase64 = Buffer.from(metadataJson).toString('base64');
-      
+      const metadataBase64 = encodeToBase64(metadataJson);
+
       // Set storage account info with metadata and permissions
       // According to Keeta docs, defaultPermission grants public access
       builder.setInfo({
@@ -404,47 +422,47 @@ export function RFQMakerPanel({ mode, onModeChange }: RFQMakerPanelProps): React
         metadata: metadataBase64,
         // Grant storage permissions (no public SEND_ON_BEHALF in declaration-based flow)
         // STORAGE_DEPOSIT: anyone can deposit tokens
-        // STORAGE_CAN_HOLD: storage can hold tokens  
+        // STORAGE_CAN_HOLD: storage can hold tokens
         // SEND_ON_BEHALF: will be granted per-taker after declaration approval
         defaultPermission: createPermissionPayload(['STORAGE_DEPOSIT', 'STORAGE_CAN_HOLD']),
       }, { account: toAccount });
-      
+
       console.log('[RFQMakerPanel] ✅ Storage account configured with storage permissions (SEND_ON_BEHALF will be granted per-taker)');
-      
+
       console.log('[RFQMakerPanel] Depositing', currentSubmission.size, 'tokens to storage account');
       console.log('[RFQMakerPanel] Token address:', makerTokenAddress);
       console.log('[RFQMakerPanel] Amount in base units:', makerAmount);
-      
+
       // Create serializable token object
       const makerTokenRef = JSON.parse(JSON.stringify({ publicKeyString: makerTokenAddress }));
-      
+
       // Add send operation to deposit tokens to storage account
       if (typeof builder.send !== 'function') {
         throw new Error('Builder does not support send operations');
       }
-      
+
       builder.send(toAccount, makerAmount, makerTokenRef);
       console.log('[RFQMakerPanel] ✅ Token deposit operation added to builder');
       console.log('[RFQMakerPanel] ✅ Storage account configured with public withdrawal permissions for atomic swaps');
-      
+
       // Compute blocks before publishing (required by Keeta SDK for send operations)
       console.log('[RFQMakerPanel] Computing transaction blocks...');
       if (typeof (builder as any).computeBlocks === 'function') {
         await (builder as any).computeBlocks();
         console.log('[RFQMakerPanel] ✅ Blocks computed');
       }
-      
+
       console.log('[RFQMakerPanel] ⚠️ Please approve the RFQ funding transaction in your wallet extension!');
       console.warn('🔐 SECURITY: Wallet approval required for RFQ funding');
       console.warn(`🔐 You are about to deposit ${currentSubmission.size} tokens to the RFQ order`);
       console.warn('🔐 Please review and approve the transaction in your Keeta Wallet extension');
-      
+
       // SECURITY: This publishBuilder call MUST trigger wallet approval
       // User must explicitly approve the RFQ funding transaction
       const fundingResult = await userClient.publishBuilder(builder);
       console.log('[RFQMakerPanel] ✅ RFQ funding transaction signed and funded');
       console.log('[RFQMakerPanel] Transaction result:', fundingResult);
-      
+
       // Wait for Keeta settlement (400ms)
       console.log('[RFQMakerPanel] Waiting for Keeta settlement (400ms)...');
       await new Promise(resolve => setTimeout(resolve, 600));
@@ -465,11 +483,11 @@ export function RFQMakerPanel({ mode, onModeChange }: RFQMakerPanelProps): React
       );
       setProgressMessage(null); // Clear progress message since process is complete
       setStep('details');
-      
+
       // Reset state
       setStorageAccountAddress(null);
       setCurrentSubmission(null);
-      
+
     } catch (err) {
       console.error('[RFQMakerPanel] Error funding storage account:', err);
       const errorMessage = err instanceof Error ? err.message : 'Failed to fund RFQ order. Please try again.';
@@ -514,89 +532,117 @@ export function RFQMakerPanel({ mode, onModeChange }: RFQMakerPanelProps): React
     setSuccess(null);
     setStep('creating');
     setProgressMessage('Creating storage account for your RFQ order...');
+    setIsAwaitingManualAddress(false);
+    setManualAddress('');
+    setManualAddressError(null);
 
     try {
-      console.log('[RFQMakerPanel] Step 1/2: Creating RFQ storage account...');
-      console.log('[RFQMakerPanel] ⚠️ Please approve the transaction in your wallet extension!');
-      
+      const operatorCandidateRaw = (process.env.NEXT_PUBLIC_EXCHANGE_OPERATOR_PUBKEY ?? '').trim();
+      const operatorAccount = isValidKeetaAddress(operatorCandidateRaw) ? operatorCandidateRaw : null;
+
+      const tokenInfo = selectedToken
+        ? availableTokens.find((token) => token.address === selectedToken)
+        : undefined;
+      if (!tokenInfo) {
+        throw new Error('Select a funding token before creating an RFQ storage account.');
+      }
+
+      const takerTokenCandidate = getTakerTokenAddress(submission.pair, submission.side);
+      const baseTokenCandidate =
+        (userClient.baseToken as { publicKeyString?: string } | undefined)?.publicKeyString;
+      const envAllowedTokens = (process.env.NEXT_PUBLIC_RFQ_ALLOWED_TOKENS ?? '')
+        .split(',')
+        .map((token) => token.trim())
+        .filter(isValidKeetaAddress);
+
+      const primaryTokens = [tokenInfo.address, takerTokenCandidate, baseTokenCandidate];
+      const allowedTokens = Array.from(
+        new Set([...primaryTokens, ...envAllowedTokens].filter(isValidKeetaAddress)),
+      );
+
+      if (allowedTokens.length === 0 && isValidKeetaAddress(tokenInfo.address)) {
+        allowedTokens.push(tokenInfo.address);
+      }
+
+      if (allowedTokens.length === 0) {
+        throw new Error('Unable to determine allowed tokens for RFQ escrow. Verify token addresses for the selected pair.');
+      }
+
       const manager = new StorageAccountManager(userClient);
-      
+
       let rfqStorageAddress: string;
       try {
-        // Add timeout since wallet extension might not respond even after approval
-        const createPromise = manager.createStorageAccount('RFQ', []);
-        const timeoutPromise = new Promise<never>((_, reject) => 
-          setTimeout(() => reject(new Error('TIMEOUT')), 30000) // 30 second timeout
+        const createPromise = manager.createStorageAccount(operatorAccount, allowedTokens);
+        const timeoutPromise = new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('TIMEOUT')), 30000),
         );
-        
+
         rfqStorageAddress = await Promise.race([createPromise, timeoutPromise]);
-        console.log('[RFQMakerPanel] ✅ Storage account created:', rfqStorageAddress);
-        
-        // Validate that we got a real Keeta address, not a placeholder
-        if (!rfqStorageAddress || !rfqStorageAddress.startsWith('keeta_')) {
+        if (!isValidKeetaAddress(rfqStorageAddress)) {
           throw new Error(`Invalid storage account address received: ${rfqStorageAddress}`);
         }
       } catch (error) {
         if (error instanceof Error && error.message === 'TIMEOUT') {
-          // Timeout - but transaction might have succeeded
-          console.warn('[RFQMakerPanel] ⚠️ Wallet response timeout - transaction may still have succeeded');
-          
-          // Ask user if they approved and if they see the storage account in wallet
-          const proceed = confirm(
-            'Storage account creation timed out.\n\n' +
-            'Did you approve the transaction in your wallet?\n\n' +
-            'Click OK if you approved it and want to continue.\n' +
-            'Click Cancel to stop and try again later.'
-          );
-          
-          if (!proceed) {
-            throw new Error('RFQ order creation cancelled by user');
-          }
-          
-          // User confirmed - but we still need a real address
-          // Ask them to manually enter the storage account address
-          const manualAddress = prompt(
-            'Please enter the storage account address from your wallet:\n\n' +
-            'Look for a new storage account in your wallet that starts with "keeta_"\n\n' +
-            'Enter the full address:'
-          );
-          
-          if (!manualAddress || !manualAddress.startsWith('keeta_')) {
-            throw new Error('Invalid storage account address provided. Must start with "keeta_"');
-          }
-          
-          rfqStorageAddress = manualAddress;
-          console.log('[RFQMakerPanel] User provided manual address:', rfqStorageAddress);
-        } else {
-          throw error;
+          setIsAwaitingManualAddress(true);
+          setManualAddress('');
+          setManualAddressError(null);
+          setProgressMessage('Wallet confirmation timed out. Paste the storage account address from your Keeta wallet to continue.');
+          return;
         }
+        throw error;
       }
-      
+
+      setIsAwaitingManualAddress(false);
+      setManualAddress('');
+      setManualAddressError(null);
       setStorageAccountAddress(rfqStorageAddress);
-      
-      // Wait for settlement
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
-      // Storage account created successfully - move to step 4 (publish quote)
-      console.log('[RFQMakerPanel] Storage account created successfully! Ready for step 4: Publish Quote');
+
+      await new Promise((resolve) => setTimeout(resolve, 500));
       setStep('funding');
       setProgressMessage('Storage account created! Click "Publish Quote" to complete the RFQ setup.');
-      
+
     } catch (err) {
       console.error('[RFQMakerPanel] Error creating storage account:', err);
       const errorMessage = err instanceof Error ? err.message : 'Failed to create storage account. Please try again.';
       setError(errorMessage);
       setStep('details');
       setProgressMessage(null);
+      setIsAwaitingManualAddress(false);
     } finally {
       setIsPublishing(false);
     }
-  }, [draft, isConnected, makerProfile, pair, publicKey, userClient, validateControlsStep, validateDetailsStep]);
+  }, [draft, isConnected, makerProfile, pair, publicKey, userClient, validateControlsStep, validateDetailsStep, availableTokens, selectedToken]);
+
+  const handleManualAddressSubmit = useCallback(() => {
+    if (!isAwaitingManualAddress) {
+      return;
+    }
+
+    const trimmed = manualAddress.trim();
+    if (!isValidKeetaAddress(trimmed)) {
+      setManualAddressError('Enter a valid Keeta storage account address.');
+      return;
+    }
+
+    setStorageAccountAddress(trimmed);
+    setIsAwaitingManualAddress(false);
+    setManualAddressError(null);
+    setProgressMessage('Storage account confirmed. Click "Publish Quote" to complete funding.');
+    setStep('funding');
+  }, [isAwaitingManualAddress, manualAddress]);
+
+  const handleManualAddressCancel = useCallback(() => {
+    setIsAwaitingManualAddress(false);
+    setManualAddress('');
+    setManualAddressError(null);
+    setProgressMessage(null);
+    setIsPublishing(false);
+  }, []);
 
   // Declaration management functions
   const loadDeclarations = useCallback(async () => {
     if (!selectedOrder) return;
-    
+
     setIsLoadingDeclarations(true);
     try {
       const fetchedDeclarations = await fetchDeclarations(selectedOrder.id);
@@ -609,129 +655,101 @@ export function RFQMakerPanel({ mode, onModeChange }: RFQMakerPanelProps): React
     }
   }, [selectedOrder]);
 
-  const handleApproveDeclaration = useCallback(async (declaration: RFQDeclaration) => {
-    if (!selectedOrder) {
-      setError('Missing order data');
-      return;
+
+const handleApproveDeclaration = useCallback(async (declaration: RFQDeclaration) => {
+  if (!selectedOrder) {
+    setError('Missing order data');
+    return;
+  }
+
+  if (!userClient) {
+    setError('Wallet not connected');
+    return;
+  }
+
+  setIsApprovingDeclaration(declaration.id);
+  setError(null);
+
+  try {
+    setProgressMessage('Preparing atomic swap transaction for signing...');
+
+    if (!declaration.unsignedAtomicSwapBlock) {
+      throw new Error('No unsigned atomic swap block found in declaration');
     }
 
-    setIsApprovingDeclaration(declaration.id);
-    setError(null);
-
+    let parsedPayload: Record<string, unknown>;
     try {
-      // Show progress message during atomic swap execution
-      setProgressMessage('Preparing atomic swap transaction for signing...');
-      
-      // Get the unsigned atomic swap block from the declaration
-      if (!declaration.unsignedAtomicSwapBlock) {
-        throw new Error('No unsigned atomic swap block found in declaration');
-      }
-      
-      // Parse the declaration data (it's JSON containing the block and metadata)
-      let declarationData;
-      try {
-        declarationData = JSON.parse(declaration.unsignedAtomicSwapBlock);
-      } catch (parseError) {
-        throw new Error('Failed to parse atomic swap declaration data');
-      }
-      
-      // Extract the block bytes and metadata
-      const unsignedBlockHex = declarationData.unsignedBlock;
-      const blockHash = declarationData.blockHash;
-      const metadata = declarationData.metadata;
-      
-      if (!unsignedBlockHex) {
-        throw new Error('No unsigned block hex found in declaration');
-      }
-      
-      // Convert hex back to bytes
-      const unsignedBlockBytes = Buffer.from(unsignedBlockHex, 'hex');
-      
-      console.log('[RFQMakerPanel] Received unsigned atomic swap block:', unsignedBlockBytes.length, 'bytes');
-      console.log('[RFQMakerPanel] Block hash:', blockHash);
-      console.log('[RFQMakerPanel] Metadata:', metadata);
-      
-      // Show progress message
-      setProgressMessage('Wallet popup will appear for transaction signing...');
-      
-      // Trigger wallet popup to sign the atomic swap transaction
-      // The wallet will show the transaction details for Maker to review
-      if (!userClient) {
-        throw new Error('Wallet not connected');
-      }
-      
-              // We have valid metadata, so we can reconstruct the atomic swap transaction
-              console.log('[RFQMakerPanel] Processing atomic swap from metadata');
-              
-              // Reconstruct the transaction using the metadata we already parsed
-              const builder = userClient.initBuilder();
-              
-              // Reconstruct the atomic swap operations from the metadata
-              const takerData = metadata.taker;
-              
-              console.log('[RFQMakerPanel] Reconstructing atomic swap from metadata:', takerData);
-              
-              // Convert string addresses to proper account objects for the wallet extension
-              // The wallet extension will handle the conversion internally
-              
-              // 1. Taker receives from storage account (this is what maker funded)
-              const storageAccount = JSON.parse(JSON.stringify({ publicKeyString: takerData.receives.from }));
-              const receiveAmount = takerData.receives.amount;
-              const receiveToken = JSON.parse(JSON.stringify({ publicKeyString: takerData.receives.token }));
-              const receiveDecimals = takerData.receives.decimals || 0;
-              
-              // 2. Taker sends to maker
-              const makerAccount = JSON.parse(JSON.stringify({ publicKeyString: takerData.sends.to }));
-              const sendAmount = takerData.sends.amount;
-              const sendToken = JSON.parse(JSON.stringify({ publicKeyString: takerData.sends.token }));
-              const sendDecimals = takerData.sends.decimals || 0;
-              
-              console.log('[RFQMakerPanel] Building receive operation:');
-              console.log('[RFQMakerPanel] - from storage:', storageAccount);
-              console.log('[RFQMakerPanel] - amount (base units):', receiveAmount);
-              console.log('[RFQMakerPanel] - decimals:', receiveDecimals);
-              console.log('[RFQMakerPanel] - token:', receiveToken);
-              
-              // Build the receive operation (taker receives from storage)
-              (builder as any).receive(storageAccount, receiveAmount, receiveToken);
-              
-              console.log('[RFQMakerPanel] Building send operation:');
-              console.log('[RFQMakerPanel] - to maker:', makerAccount);
-              console.log('[RFQMakerPanel] - amount (base units):', sendAmount);
-              console.log('[RFQMakerPanel] - decimals:', sendDecimals);
-              console.log('[RFQMakerPanel] - token:', sendToken);
-              
-              // Build the send operation (taker sends to maker)
-              (builder as any).send(makerAccount, sendAmount, sendToken);
-              
-              console.log('[RFQMakerPanel] Atomic swap transaction reconstructed successfully');
-              
-              // Debug: Check builder operations before publishing
-              console.log('[RFQMakerPanel] Builder operations:', (builder as any)._operations);
-              console.log('[RFQMakerPanel] Builder operations length:', (builder as any)._operations?.length || 0);
-              
-              // The wallet will show the transaction details and ask for Maker's signature
-              const result = await userClient.publishBuilder(builder);
-              
-              setProgressMessage(null); // Clear progress message
-              setSuccess(`Atomic swap executed successfully! Transaction hash: ${String(result).substring(0, 20)}...`);
-              
-              // Now approve the declaration in the backend (just for tracking)
-              await approveDeclaration(selectedOrder.id, {
-                declarationId: declaration.id,
-                approved: true,
-              });
-              
-              // Refresh declarations
-              await loadDeclarations();
-    } catch (error) {
-      console.error('Failed to approve declaration:', error);
-      setError(error instanceof Error ? error.message : 'Failed to approve declaration');
-      setProgressMessage(null); // Clear progress message on error
-    } finally {
-      setIsApprovingDeclaration(null);
+      parsedPayload = JSON.parse(declaration.unsignedAtomicSwapBlock) as Record<string, unknown>;
+    } catch {
+      throw new Error('Failed to parse atomic swap declaration data');
     }
-  }, [selectedOrder, loadDeclarations, userClient]);
+
+    const metadata = parsedPayload.metadata as Record<string, unknown> | undefined;
+    const takerSection = metadata?.taker as Record<string, unknown> | undefined;
+    const takerReceives = takerSection?.receives as Record<string, unknown> | undefined;
+    const takerSends = takerSection?.sends as Record<string, unknown> | undefined;
+
+    if (!takerReceives || !takerSends) {
+      throw new Error('Declaration metadata is missing taker operation details.');
+    }
+
+    const makerTokenAddress = getMakerTokenAddressFromOrder(selectedOrder);
+    const takerTokenAddress = getTakerTokenAddressFromOrder(selectedOrder);
+
+    if (takerReceives.token !== makerTokenAddress || takerSends.token !== takerTokenAddress) {
+      throw new Error('Declaration tokens do not match the RFQ order.');
+    }
+
+    const storageAccountAddress = (takerReceives.from as string | null | undefined) ?? selectedOrder.storageAccount ?? selectedOrder.unsignedBlock;
+    if (!isValidKeetaAddress(storageAccountAddress)) {
+      throw new Error('Declaration is missing a valid storage account reference.');
+    }
+
+    const receiveAmount = String(takerReceives.amount ?? '');
+    const sendAmount = String(takerSends.amount ?? '');
+
+    if (receiveAmount.length === 0 || sendAmount.length === 0) {
+      throw new Error('Declaration amounts are incomplete.');
+    }
+
+    const builder = userClient.initBuilder();
+    if (!builder) {
+      throw new Error('Wallet did not provide a transaction builder for approval.');
+    }
+
+    const receiveFn = (builder as { receive?: (...args: unknown[]) => unknown }).receive;
+    const sendFn = (builder as { send?: (...args: unknown[]) => unknown }).send;
+
+    if (typeof receiveFn !== 'function' || typeof sendFn !== 'function') {
+      throw new Error('Wallet builder does not support required operations.');
+    }
+
+    const storageAccount = { publicKeyString: storageAccountAddress };
+    const makerAccount = { publicKeyString: selectedOrder.maker.id };
+    const makerTokenRef = { publicKeyString: makerTokenAddress };
+    const takerTokenRef = { publicKeyString: takerTokenAddress };
+
+    await Promise.resolve(receiveFn.call(builder, storageAccount, receiveAmount, makerTokenRef));
+    await Promise.resolve(sendFn.call(builder, makerAccount, sendAmount, takerTokenRef));
+
+    await userClient.publishBuilder(builder);
+
+    setProgressMessage(null);
+    setSuccess('Atomic swap executed successfully.');
+
+    await approveDeclaration(selectedOrder.id, {
+      declarationId: declaration.id,
+      approved: true,
+    });
+
+    await loadDeclarations();
+  } catch (error) {
+    setError(error instanceof Error ? error.message : 'Failed to approve declaration');
+    setProgressMessage(null);
+  } finally {
+    setIsApprovingDeclaration(null);
+  }
+}, [selectedOrder, loadDeclarations, userClient]);
 
   const handleRejectDeclaration = useCallback(async (declaration: RFQDeclaration) => {
     if (!selectedOrder) {
@@ -746,7 +764,7 @@ export function RFQMakerPanel({ mode, onModeChange }: RFQMakerPanelProps): React
       });
 
       setSuccess(`Declaration rejected for taker ${shorten(declaration.takerAddress)}.`);
-      
+
       // Refresh declarations
       await loadDeclarations();
     } catch (error) {
@@ -871,20 +889,20 @@ export function RFQMakerPanel({ mode, onModeChange }: RFQMakerPanelProps): React
 
       {/* Error Banner */}
       {error && (
-        <div className="p-4 rounded-lg bg-red-500/10 border border-red-500/30 flex items-start gap-3">
-          <AlertTriangle className="h-5 w-5 text-red-500 flex-shrink-0 mt-0.5" />
+        <div className="flex items-start gap-3 rounded-lg border border-hairline bg-surface-strong p-4">
+          <AlertTriangle className="h-5 w-5 text-accent flex-shrink-0 mt-0.5" />
           <div className="flex-1">
-            <p className="text-sm text-red-500">{error}</p>
+            <p className="text-sm text-foreground">{error}</p>
           </div>
         </div>
       )}
 
       {/* Success Banner */}
       {success && (
-        <div className="p-4 rounded-lg bg-green-500/10 border border-green-500/30 flex items-start gap-3">
-          <CheckCircle2 className="h-5 w-5 text-green-500 flex-shrink-0 mt-0.5" />
+        <div className="flex items-start gap-3 rounded-lg border border-accent/30 bg-accent/10 p-4">
+          <CheckCircle2 className="h-5 w-5 text-accent flex-shrink-0 mt-0.5" />
           <div className="flex-1">
-            <p className="text-sm text-green-500">{success}</p>
+            <p className="text-sm text-accent">{success}</p>
           </div>
         </div>
       )}
@@ -899,6 +917,48 @@ export function RFQMakerPanel({ mode, onModeChange }: RFQMakerPanelProps): React
         </div>
       )}
 
+      {isAwaitingManualAddress && (
+        <div className="space-y-3 rounded-lg border border-hairline bg-surface p-4">
+          <div className="space-y-1">
+            <p className="text-sm font-semibold text-foreground">Confirm storage account</p>
+            <p className="text-xs text-muted">
+              Paste the storage account address shown in your Keeta wallet to continue funding this RFQ.
+            </p>
+          </div>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <input
+              type="text"
+              value={manualAddress}
+              onChange={(event) => {
+                setManualAddress(event.target.value);
+                setManualAddressError(null);
+              }}
+              placeholder="keeta_..."
+              className="w-full rounded-lg border border-hairline bg-surface px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-accent/40"
+            />
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={handleManualAddressSubmit}
+                className="inline-flex items-center justify-center gap-2 rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent/90 transition-colors"
+              >
+                Use Address
+              </button>
+              <button
+                type="button"
+                onClick={handleManualAddressCancel}
+                className="inline-flex items-center justify-center gap-2 rounded-md border border-hairline bg-surface px-4 py-2 text-sm font-medium text-muted hover:text-foreground hover:bg-surface-strong transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+          {manualAddressError && (
+            <p className="text-xs text-accent">{manualAddressError}</p>
+          )}
+        </div>
+      )}
+
       {/* Step 1: Quote Details */}
       {step === 'details' && (
         <div className="space-y-4">
@@ -906,13 +966,13 @@ export function RFQMakerPanel({ mode, onModeChange }: RFQMakerPanelProps): React
             <div className="mb-3 flex items-center justify-between text-xs text-muted">
               <span>Trading Pair</span>
               <span className="text-foreground font-medium">
-                {selectedToken && availableTokens.find(t => t.address === selectedToken) 
+                {selectedToken && availableTokens.find(t => t.address === selectedToken)
                   ? `${availableTokens.find(t => t.address === selectedToken)?.symbol}/KTA`
                   : 'Select Token'
                 }
               </span>
             </div>
-            
+
             {/* Token Selector */}
             <div className="mb-4">
               <div className="mb-2 flex items-center justify-between">
@@ -934,7 +994,7 @@ export function RFQMakerPanel({ mode, onModeChange }: RFQMakerPanelProps): React
                 </div>
               ) : tokensError ? (
                 <div className="space-y-2">
-                  <div className="text-sm text-red-500">
+                  <div className="text-sm text-accent">
                     Error loading tokens: {tokensError}
                   </div>
                   <button
@@ -966,10 +1026,10 @@ export function RFQMakerPanel({ mode, onModeChange }: RFQMakerPanelProps): React
                       {(() => {
                         const token = availableTokens.find(t => t.address === selectedToken);
                         if (!token) return null;
-                        
+
                         // Get the full token data from processed tokens
                         const fullToken = tokens.find(t => t.address === selectedToken);
-                        
+
                         return (
                           <>
                             {/* Token Icon */}
@@ -984,9 +1044,9 @@ export function RFQMakerPanel({ mode, onModeChange }: RFQMakerPanelProps): React
                                   className="w-6 h-6 rounded-full object-cover"
                                 />
                               ) : fullToken?.fallbackIcon ? (
-                                <div 
+                                <div
                                   className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold"
-                                  style={{ 
+                                  style={{
                                     backgroundColor: fullToken.fallbackIcon.bgColor || '#6aa8ff',
                                     color: fullToken.fallbackIcon.textColor || '#ffffff'
                                   }}
@@ -999,7 +1059,7 @@ export function RFQMakerPanel({ mode, onModeChange }: RFQMakerPanelProps): React
                                 </span>
                               )}
                             </div>
-                            
+
                             {/* Token Info */}
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-2">
@@ -1010,7 +1070,7 @@ export function RFQMakerPanel({ mode, onModeChange }: RFQMakerPanelProps): React
                                 Balance: {token.balance} {token.symbol}
                               </div>
                             </div>
-                            
+
                             {/* Change Button */}
                             <button
                               type="button"
@@ -1024,7 +1084,7 @@ export function RFQMakerPanel({ mode, onModeChange }: RFQMakerPanelProps): React
                       })()}
                     </div>
                   )}
-                  
+
                   {/* Token Selection Dropdown */}
                   {(!selectedToken || isSelectingToken) && (
                     <div className="space-y-2">
@@ -1041,12 +1101,12 @@ export function RFQMakerPanel({ mode, onModeChange }: RFQMakerPanelProps): React
                           Cancel
                         </button>
                       )}
-                      
+
                       {/* Token List */}
                       <div className="max-h-48 overflow-y-auto space-y-2">
                       {availableTokens.map((token) => {
                         const fullToken = tokens.find(t => t.address === token.address);
-                        
+
                         return (
                           <button
                             key={token.address}
@@ -1069,9 +1129,9 @@ export function RFQMakerPanel({ mode, onModeChange }: RFQMakerPanelProps): React
                                   className="w-6 h-6 rounded-full object-cover"
                                 />
                               ) : fullToken?.fallbackIcon ? (
-                                <div 
+                                <div
                                   className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold"
-                                  style={{ 
+                                  style={{
                                     backgroundColor: fullToken.fallbackIcon.bgColor || '#6aa8ff',
                                     color: fullToken.fallbackIcon.textColor || '#ffffff'
                                   }}
@@ -1084,7 +1144,7 @@ export function RFQMakerPanel({ mode, onModeChange }: RFQMakerPanelProps): React
                                 </span>
                               )}
                             </div>
-                            
+
                             {/* Token Info */}
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-2">
@@ -1095,7 +1155,7 @@ export function RFQMakerPanel({ mode, onModeChange }: RFQMakerPanelProps): React
                                 Balance: {token.balance} {token.symbol}
                               </div>
                             </div>
-                            
+
                             {/* Select Arrow */}
                             <svg className="h-4 w-4 text-muted flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
@@ -1109,7 +1169,7 @@ export function RFQMakerPanel({ mode, onModeChange }: RFQMakerPanelProps): React
                 </div>
               )}
             </div>
-            
+
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="mb-1 block text-xs font-medium text-muted">Side</label>
@@ -1242,8 +1302,8 @@ export function RFQMakerPanel({ mode, onModeChange }: RFQMakerPanelProps): React
       {/* Step 4: Publish Quote */}
       {step === 'funding' && (
         <div className="text-center">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-green-500/10 border border-green-500/30 mb-4">
-            <CheckCircle2 className="w-8 h-8 text-green-500" />
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-accent/10 border border-accent/30 mb-4">
+            <CheckCircle2 className="w-8 h-8 text-accent" />
           </div>
           <h3 className="text-lg font-semibold text-foreground mb-2">Storage Account Created!</h3>
           <p className="text-sm text-muted mb-6">
@@ -1307,7 +1367,7 @@ export function RFQMakerPanel({ mode, onModeChange }: RFQMakerPanelProps): React
                 onClick={() => {
                   if (validateControlsStep()) {
                     setCurrentSubmission({
-                      pair: selectedToken && availableTokens.find(t => t.address === selectedToken) 
+                      pair: selectedToken && availableTokens.find(t => t.address === selectedToken)
                         ? `${availableTokens.find(t => t.address === selectedToken)?.symbol}/KTA`
                         : pair,
                       side: draft.side,
@@ -1425,7 +1485,7 @@ export function RFQMakerPanel({ mode, onModeChange }: RFQMakerPanelProps): React
           <button
             type="button"
             onClick={handleCancelSelected}
-            className="w-full px-3 py-2 text-xs font-medium text-red-500 border border-red-500/30 rounded-lg hover:bg-red-500/10 transition-colors"
+            className="w-full px-3 py-2 text-xs font-medium text-muted border border-hairline rounded-lg hover:bg-surface transition-colors"
           >
             Cancel Quote
           </button>
@@ -1450,7 +1510,7 @@ export function RFQMakerPanel({ mode, onModeChange }: RFQMakerPanelProps): React
               )}
             </button>
           </div>
-          
+
           {declarations.length === 0 ? (
             <div className="text-center py-4 text-xs text-muted">
               No pending declarations
@@ -1463,34 +1523,38 @@ export function RFQMakerPanel({ mode, onModeChange }: RFQMakerPanelProps): React
                     <span className="text-xs font-medium text-foreground">
                       Taker: {shorten(declaration.takerAddress)}
                     </span>
-                    <span className={`text-xs px-2 py-1 rounded-full ${
-                      declaration.status === 'pending' ? 'bg-yellow-500/20 text-yellow-400' :
-                      declaration.status === 'approved' ? 'bg-green-500/20 text-green-400' :
-                      'bg-red-500/20 text-red-400'
-                    }`}>
+                    <span
+                      className={`text-xs px-2 py-1 rounded-full ${
+                        declaration.status === 'pending'
+                          ? 'bg-surface-strong text-muted'
+                          : declaration.status === 'approved'
+                            ? 'bg-accent/15 text-accent'
+                            : 'bg-surface text-muted'
+                      }`}
+                    >
                       {declaration.status}
                     </span>
                   </div>
-                  
+
                   <div className="text-xs text-muted mb-3">
                     <div>Fill Amount: {declaration.fillAmount} base</div>
                     <div>Declared: {new Date(declaration.declaredAt).toLocaleTimeString()}</div>
                     {declaration.unsignedAtomicSwapBlock && selectedOrder && (
-                      <div className="mt-2 p-2 rounded border border-blue-500/30 bg-blue-500/10">
-                        <div className="font-medium text-blue-400 mb-1">Atomic Swap Terms</div>
-                        <div>Storage → Taker: {declaration.fillAmount} {selectedOrder.side === 'sell' ? selectedOrder.pair.split('/')[0] : selectedOrder.pair.split('/')[1]}</div>
-                        <div>Taker → Maker: {declaration.fillAmount * selectedOrder.price} {selectedOrder.side === 'sell' ? selectedOrder.pair.split('/')[1] : selectedOrder.pair.split('/')[0]}</div>
+                      <div className="mt-2 rounded border border-accent/30 bg-accent/10 p-2 text-foreground">
+                        <div className="font-medium text-accent mb-1">Atomic Swap Terms</div>
+                        <div>Storage -&gt; Taker: {declaration.fillAmount} {selectedOrder.side === 'sell' ? selectedOrder.pair.split('/') [0] : selectedOrder.pair.split('/') [1]}</div>
+                        <div>Taker -&gt; Maker: {declaration.fillAmount * selectedOrder.price} {selectedOrder.side === 'sell' ? selectedOrder.pair.split('/') [1] : selectedOrder.pair.split('/') [0]}</div>
                       </div>
                     )}
                   </div>
-                  
+
                   {declaration.status === 'pending' && (
-                    <div className="flex gap-2">
+                    <div className="flex items-center gap-2">
                       <button
                         type="button"
                         onClick={() => handleApproveDeclaration(declaration)}
                         disabled={isApprovingDeclaration === declaration.id}
-                        className="flex-1 px-3 py-1 text-xs font-medium text-green-400 border border-green-500/30 rounded hover:bg-green-500/10 transition-colors disabled:opacity-50"
+                        className="flex-1 px-3 py-1 text-xs font-medium text-accent border border-accent/40 rounded hover:bg-accent/10 transition-colors disabled:opacity-50"
                       >
                         {isApprovingDeclaration === declaration.id ? (
                           <>
@@ -1504,7 +1568,7 @@ export function RFQMakerPanel({ mode, onModeChange }: RFQMakerPanelProps): React
                       <button
                         type="button"
                         onClick={() => handleRejectDeclaration(declaration)}
-                        className="flex-1 px-3 py-1 text-xs font-medium text-red-400 border border-red-500/30 rounded hover:bg-red-500/10 transition-colors"
+                        className="flex-1 px-3 py-1 text-xs font-medium text-muted border border-hairline rounded hover:bg-surface-strong transition-colors"
                       >
                         Reject
                       </button>

@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useMemo } from 'react';
 
@@ -70,7 +70,7 @@ export function RFQDepthChart(): React.JSX.Element {
               </div>
               <div className="h-2 overflow-hidden rounded-full bg-surface-strong">
                 <div
-                  className={`${isSell ? 'bg-red-500/60' : 'bg-green-500/60'} h-full`}
+                  className={` h-full`}
                   style={{ width: `${width}%` }}
                   aria-hidden="true"
                 />

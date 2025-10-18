@@ -71,7 +71,21 @@ export function getTokenAddressForSymbol(symbol: string): string {
   // Fallback to environment variables
   const directKey = `NEXT_PUBLIC_${normalized}_TOKEN_ADDRESS`;
   const pubkeyKey = `NEXT_PUBLIC_${normalized}_TOKEN_PUBKEY`;
-  return getEnvString(directKey, getEnvString(pubkeyKey, `PLACEHOLDER_${normalized}`));
+  const envAddress = getEnvString(directKey, getEnvString(pubkeyKey, ''));
+  
+  // If we have a valid address from environment, return it
+  if (envAddress && !envAddress.startsWith('PLACEHOLDER_') && envAddress.length > 10) {
+    return envAddress;
+  }
+  
+  // For KTA/BASE tokens, try to get from wallet context
+  if (normalized === 'KTA' || normalized === 'BASE') {
+    // Return empty string to let the calling code handle it with wallet context
+    return '';
+  }
+  
+  // For other tokens, return empty string instead of placeholder
+  return '';
 }
 
 export function getTokenDecimalsForSymbol(symbol: string): number {
@@ -153,21 +167,76 @@ export function getTakerTokenDecimalsFromOrder(order: RFQOrder): number {
   return getTakerTokenDecimals(order.pair, order.side);
 }
 
-export function toBaseUnits(amount: number, decimals: number): bigint {
-  if (!Number.isFinite(amount)) {
-    throw new Error('Amount must be a finite number');
+function ensureNonNegativeInteger(value: number): void {
+  if (!Number.isInteger(value) || value < 0) {
+    throw new Error('Decimals must be a non-negative integer');
   }
-  const multiplier = 10 ** Math.max(decimals, 0);
-  const scaled = Math.floor(amount * multiplier);
-  return BigInt(scaled);
+}
+
+function normaliseAmountInput(
+  amount: number | string,
+  decimals: number,
+): { isNegative: boolean; digits: string; fraction: string } {
+  const raw = typeof amount === 'number' ? amount.toString() : amount;
+  if (typeof raw !== 'string' || raw.trim().length === 0) {
+    throw new Error('Amount must be provided as a number or numeric string');
+  }
+
+  let trimmed = raw.trim();
+
+  if (/e/i.test(trimmed)) {
+    const numeric = Number(trimmed);
+    if (!Number.isFinite(numeric)) {
+      throw new Error(`Invalid numeric amount: ${amount}`);
+    }
+
+    const precision = Math.min(Math.max(decimals + 4, 8), 24);
+    trimmed = numeric.toFixed(precision).replace(/\.?0+$/, '');
+  }
+
+  const match = trimmed.match(/^(-?)(\d*)(?:\.(\d+))?$/);
+  if (!match) {
+    throw new Error(`Invalid numeric amount: ${amount}`);
+  }
+
+  const [, sign, whole = '', fraction = ''] = match;
+  return {
+    isNegative: sign === '-',
+    digits: whole.replace(/^0+(?=\d)/, '') || '0',
+    fraction,
+  };
+}
+
+export function toBaseUnits(amount: number | string, decimals: number): bigint {
+  ensureNonNegativeInteger(decimals);
+  const { isNegative, digits, fraction } = normaliseAmountInput(amount, decimals);
+
+  if (isNegative) {
+    throw new Error('Amounts must be positive for token transfers');
+  }
+
+  if (decimals === 0) {
+    return BigInt(digits);
+  }
+
+  const paddedFraction = (fraction + '0'.repeat(decimals)).slice(0, decimals);
+  const combined = `${digits}${paddedFraction}`;
+  return BigInt(combined);
 }
 
 export function fromBaseUnits(amount: bigint, decimals: number): number {
-  if (decimals <= 0) {
+  ensureNonNegativeInteger(decimals);
+
+  if (decimals === 0) {
     return Number(amount);
   }
-  const divisor = 10 ** decimals;
-  return Number(amount) / divisor;
+
+  const base = BigInt(10) ** BigInt(decimals);
+  const whole = amount / base;
+  const remainder = amount % base;
+  const fraction = remainder.toString().padStart(decimals, '0').replace(/0+$/, '');
+  const asString = fraction.length > 0 ? `${whole.toString()}.${fraction}` : whole.toString();
+  return Number.parseFloat(asString);
 }
 
 /**
@@ -574,4 +643,3 @@ export async function processTokenForDisplay(
     hasMetadata: Boolean(metadata && (metadataName || metadataTicker || iconFromMetadata)),
   };
 }
-

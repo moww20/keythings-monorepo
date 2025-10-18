@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { BadgeCheck, Clock3, ShieldAlert, ShieldCheck, Zap } from 'lucide-react';
+import { Clock3, ShieldAlert, ShieldCheck, Zap } from 'lucide-react';
 
 import { useRFQContext } from '@/app/contexts/RFQContext';
 import type { RFQOrder, RFQOrderStatus } from '@/app/types/rfq';
@@ -15,10 +15,10 @@ const STATUS_LABELS: Record<RFQOrderStatus, string> = {
 };
 
 const STATUS_BADGES: Record<RFQOrderStatus, string> = {
-  open: 'bg-green-500/15 text-green-400',
-  pending_fill: 'bg-amber-500/15 text-amber-400',
-  filled: 'bg-blue-500/15 text-blue-400',
-  expired: 'bg-red-500/15 text-red-400',
+  open: 'bg-accent/15 text-accent',
+  pending_fill: 'bg-surface-strong text-muted',
+  filled: 'bg-surface text-muted',
+  expired: 'bg-surface text-muted',
 };
 
 function formatRelativeTime(iso: string): string {
@@ -170,14 +170,14 @@ function RFQOrderCard({ order, isSelected, onSelect }: RFQOrderCardProps): React
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted">
             <span className="inline-flex items-center gap-1">
               {order.maker.verified ? (
-                <ShieldCheck className="h-3 w-3 text-green-400" />
+                <ShieldCheck className="h-3 w-3 text-accent" />
               ) : (
-                <ShieldAlert className="h-3 w-3 text-amber-400" />
+                <ShieldAlert className="h-3 w-3 text-muted" />
               )}
               {order.maker.displayName} · Rep {order.maker.reputationScore}
             </span>
             <span className="inline-flex items-center gap-1">
-              <Clock3 className={`h-3 w-3 ${isExpired ? 'text-red-400' : 'text-muted'}`} />
+              <Clock3 className="h-3 w-3 text-muted" />
               {relativeExpiry}
             </span>
             <span className="inline-flex items-center gap-1 font-mono">
@@ -187,7 +187,7 @@ function RFQOrderCard({ order, isSelected, onSelect }: RFQOrderCardProps): React
           </div>
         </div>
         {order.allowlisted && order.maker.allowlistLabel && (
-          <span className="rounded-full bg-purple-500/15 px-3 py-1 text-[11px] font-semibold text-purple-300">
+          <span className="rounded-full bg-surface-strong px-3 py-1 text-[11px] font-semibold text-muted">
             {order.maker.allowlistLabel}
           </span>
         )}

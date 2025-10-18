@@ -8,6 +8,7 @@ import type {
 } from "@/types/keeta";
 import type { RFQStorageAccountDetails, RFQStorageCreationResult } from '@/app/types/rfq-blockchain';
 import { toBaseUnits } from './token-utils';
+import { encodeToBase64 } from './encoding';
 
 function isPublicKeyLike(value: unknown): value is KeetaPublicKeyLike {
   return Boolean(value) && typeof (value as KeetaPublicKeyLike).toString === "function";
@@ -171,12 +172,8 @@ export class StorageAccountManager {
     this.userClient = userClient;
   }
 
-  async createStorageAccount(exchangeOperatorPubkey: string, allowedTokens: string[]): Promise<string> {
+  async createStorageAccount(exchangeOperatorPubkey: string | null, allowedTokens: string[]): Promise<string> {
     console.log('Creating storage account...');
-
-    if (!exchangeOperatorPubkey || typeof exchangeOperatorPubkey !== "string") {
-      throw new Error("exchangeOperatorPubkey must be a non-empty string");
-    }
 
     const builder = this.userClient.initBuilder();
     if (!builder) {
@@ -191,9 +188,11 @@ export class StorageAccountManager {
     const isValidAddress = (addr: string) => 
       addr && !addr.startsWith('PLACEHOLDER_') && addr.length > 10;
 
-    // Only grant permissions if we have valid (non-placeholder) addresses
-    if (isValidAddress(exchangeOperatorPubkey)) {
-      const operatorAccount = normalizeAccountRef(exchangeOperatorPubkey);
+    const hasOperator = typeof exchangeOperatorPubkey === "string" && isValidAddress(exchangeOperatorPubkey);
+
+    // Only grant permissions if we have a valid operator address
+    if (hasOperator) {
+      const operatorAccount = normalizeAccountRef(exchangeOperatorPubkey as string);
       
       for (const token of allowedTokens) {
         if (!isValidAddress(token)) {
@@ -209,7 +208,7 @@ export class StorageAccountManager {
         }
       }
     } else {
-      console.log('Skipping permission grants - operator address is placeholder');
+      console.log('Skipping permission grants - no exchange operator configured');
     }
 
     const receipt = await this.userClient.publishBuilder(builder);
@@ -348,9 +347,7 @@ export class StorageAccountManager {
 
     // Encode metadata as base64 (Keeta SDK requires base64 format)
     const metadataJson = JSON.stringify({ created: Date.now(), type: "dex" });
-    const metadataBase64 = typeof btoa !== 'undefined' 
-      ? btoa(metadataJson)
-      : Buffer.from(metadataJson).toString('base64');
+    const metadataBase64 = encodeToBase64(metadataJson);
     
     const metadata = {
       name: "DEX_STORAGE_ACCOUNT",
@@ -364,7 +361,7 @@ export class StorageAccountManager {
 
   private encodeMetadata(data: Record<string, unknown>): string {
     const json = JSON.stringify(data);
-    return typeof btoa !== 'undefined' ? btoa(json) : Buffer.from(json).toString('base64');
+    return encodeToBase64(json);
   }
 
   private async grantSendOnBehalf(
