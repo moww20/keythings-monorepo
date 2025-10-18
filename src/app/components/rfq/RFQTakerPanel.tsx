@@ -1,4 +1,4 @@
-'use client';
+"use client";
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { ChangeEvent } from 'react';
@@ -14,6 +14,7 @@ import {
 } from '@/app/lib/token-utils';
 import { declareIntention, fetchDeclarations } from '@/app/lib/rfq-api';
 import type { RFQDeclaration, DeclarationStatus } from '@/app/types/rfq';
+import { RFQOrdersPanel } from '@/app/components/rfq/RFQOrdersPanel';
 
 function formatCurrency(value?: number): string {
   if (!value || Number.isNaN(value)) {
@@ -94,12 +95,18 @@ const EscrowMetadataSchema = z
   .passthrough();
 
 interface RFQTakerPanelProps {
-  mode: 'rfq_taker' | 'rfq_maker';
-  onModeChange: (mode: 'rfq_taker' | 'rfq_maker') => void;
+  mode: 'rfq_taker' | 'rfq_maker' | 'rfq_orders';
+  onModeChange: (mode: 'rfq_taker' | 'rfq_maker' | 'rfq_orders') => void;
+  onPairChange?: (pair: string) => void;
+  hideInternalTabs?: boolean;
 }
 
-export function RFQTakerPanel({ mode, onModeChange }: RFQTakerPanelProps): React.JSX.Element {
+export function RFQTakerPanel({ mode, onModeChange, onPairChange, hideInternalTabs }: RFQTakerPanelProps): React.JSX.Element {
   const {
+  pair,
+  availablePairs,
+  recommendedPair,
+  orders,
   selectedOrder,
   fillAmount,
   setFillAmount,
@@ -537,51 +544,108 @@ export function RFQTakerPanel({ mode, onModeChange }: RFQTakerPanelProps): React
 
   // Always show the toggle interface, even when no orders are available
 
-  return (
-  <div className="flex h-full flex-col gap-4 rounded-lg border border-hairline bg-surface p-4">
-  {/* RFQ Mode Toggle */}
-  <div className="flex items-center justify-between gap-1 rounded-full bg-surface-strong px-2 py-1 text-xs">
-  <button
-  type="button"
-  onClick={() => onModeChange('rfq_taker')}
-  className={`flex-1 rounded-full px-3 py-1 font-medium transition-colors ${
-  mode === 'rfq_taker' ? 'bg-accent text-white' : 'text-muted hover:text-foreground'
-  }`}
-  >
-  RFQ Taker
-  </button>
-  <button
-  type="button"
-  onClick={() => onModeChange('rfq_maker')}
-  className={`flex-1 rounded-full px-3 py-1 font-medium transition-colors ${
-  mode === 'rfq_maker' ? 'bg-accent text-white' : 'text-muted hover:text-foreground'
-  }`}
-  >
-  RFQ Maker
-  </button>
+  const showPairRecommendation = recommendedPair && recommendedPair !== pair && onPairChange;
+
+  const content = (
+    <>
+  <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+    <div>
+      <h2 className="text-base font-semibold text-foreground">RFQ Taker</h2>
+      <p className="text-[11px] text-muted">Live quotes</p>
+    </div>
+    <div className="flex flex-wrap items-center gap-1 text-[11px] text-muted">
+      <span className="font-medium text-foreground/80">Markets</span>
+      {availablePairs.map((candidate) => (
+        <button
+          key={candidate}
+          type="button"
+          onClick={() => onPairChange?.(candidate)}
+          className={`rounded-full px-2 py-1 transition-colors ${
+            candidate === pair ? 'bg-accent/20 text-foreground' : 'bg-surface-strong text-muted hover:text-foreground'
+          }`}
+        >
+          {candidate}
+        </button>
+      ))}
+    </div>
+  </div>
+  {showPairRecommendation && orders.length === 0 && (
+    <div className="rounded-md border border-dashed border-accent/40 bg-accent/10 p-3 text-xs text-accent">
+      No quotes for <strong>{pair}</strong> yet. Try
+      <button
+        type="button"
+        onClick={() => onPairChange?.(recommendedPair!)}
+        className="ml-1 rounded-full bg-accent px-2.5 py-0.5 text-[11px] font-semibold text-white hover:bg-accent/90"
+      >
+        {recommendedPair}
+      </button>
+    </div>
+  )}
+  {!hideInternalTabs && (
+  <div className="sticky top-0 z-10 -mx-4 -mt-4 border-b border-hairline bg-surface/95 backdrop-blur">
+    <div className="flex items-center gap-0 px-4">
+      <button
+        type="button"
+        onClick={() => onModeChange('rfq_taker')}
+        className={`relative px-4 py-3 text-sm font-medium transition-colors ${
+          mode === 'rfq_taker' ? 'text-accent' : 'text-muted hover:text-foreground'
+        }`}
+      >
+        RFQ Taker
+        {mode === 'rfq_taker' && (
+          <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-accent" />
+        )}
+      </button>
+      <button
+        type="button"
+        onClick={() => onModeChange('rfq_maker')}
+        className={`relative px-4 py-3 text-sm font-medium transition-colors ${
+          mode === 'rfq_maker' ? 'text-accent' : 'text-muted hover:text-foreground'
+        }`}
+      >
+        RFQ Maker
+        {mode === 'rfq_maker' && (
+          <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-accent" />
+        )}
+      </button>
+      <button
+        type="button"
+        onClick={() => onModeChange('rfq_orders')}
+        className={`relative px-4 py-3 text-sm font-medium transition-colors ${
+          mode === 'rfq_orders' ? 'text-accent' : 'text-muted hover:text-foreground'
+        }`}
+      >
+        RFQ Orders
+        {mode === 'rfq_orders' && (
+          <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-accent" />
+        )}
+      </button>
+    </div>
+  </div>
+  )}
+
+  {mode === 'rfq_orders' && !hideInternalTabs ? (
+    <RFQOrdersPanel mode={mode} onModeChange={onModeChange} />
+  ) : selectedOrder ? (
+  <div className="flex flex-col gap-4">
+  <div className="flex flex-col gap-1">
+    <div className="flex items-center justify-between gap-3">
+      <div>
+        <h3 className="text-lg font-semibold text-foreground">{pairLabel}</h3>
+        <p className="text-xs text-muted">Maker {selectedOrder.maker.displayName} · Rep {selectedOrder.maker.reputationScore}</p>
+      </div>
+      <button
+        type="button"
+        onClick={handleCopyUnsignedBlock}
+        className="inline-flex items-center gap-1 rounded-full border border-hairline px-2.5 py-1 text-[11px] font-medium text-muted transition-colors hover:border-accent hover:text-foreground"
+      >
+        <ClipboardCopy className="h-3 w-3" />
+        {copied ? 'Copied' : 'Escrow'}
+      </button>
+    </div>
   </div>
 
-  {selectedOrder ? (
-  <>
-  <div className="flex items-start justify-between gap-3">
-  <div>
-  <p className="text-xs uppercase tracking-wide text-muted">Selected Quote</p>
-          <h3 className="text-lg font-semibold text-foreground">{pairLabel}</h3>
-          <p className="text-xs text-muted">
-            Maker {selectedOrder.maker.displayName} - Reputation {selectedOrder.maker.reputationScore}
-          </p>
-  </div>
-  <button
-  type="button"
-  onClick={handleCopyUnsignedBlock}
-  className="inline-flex items-center gap-2 rounded-full border border-hairline px-3 py-1 text-[11px] font-medium text-muted transition-colors hover:border-accent hover:text-foreground"
-  >
-  <ClipboardCopy className="h-3 w-3" />
-  {copied ? 'Copied!' : 'Escrow ref'}
-  </button>
-  </div>
-
-  <div className="grid grid-cols-2 gap-3 rounded-lg bg-surface-strong p-3 text-xs text-muted">
+  <div className="grid grid-cols-2 gap-3 rounded-lg bg-surface-strong/80 p-3 text-xs text-muted">
   <div>
   <p className="font-medium text-foreground">Price</p>
   <p>{`1 ${makerSymbolDisplay} = ${formatNumber(selectedOrder.price, selectedOrder.price > 10 ? 2 : 6)} ${takerSymbolDisplay}`}</p>
@@ -602,7 +666,7 @@ export function RFQTakerPanel({ mode, onModeChange }: RFQTakerPanelProps): React
   </div>
   </div>
 
-  <div className="space-y-2 rounded-lg border border-hairline bg-surface px-3 py-2 text-xs">
+  <div className="space-y-3 rounded-lg border border-hairline bg-surface px-3 py-3 text-xs">
   <div className="flex items-center justify-between">
   <p className="font-medium text-foreground">Escrow verification</p>
   <button
@@ -645,34 +709,33 @@ export function RFQTakerPanel({ mode, onModeChange }: RFQTakerPanelProps): React
   {/* Atomic Swap Terms Display */}
   {fillAmount && fillAmount > 0 && (
   <div className="rounded-lg border border-accent/30 bg-accent/10 p-3 text-xs">
-  <div className="font-semibold text-accent mb-2">Atomic Swap Terms</div>
-  <div className="space-y-1 text-foreground">
-  <div>Storage -&gt; You: {formatToken(fillAmount)} {makerSymbolDisplay}</div>
-  <div>You -&gt; Maker: {formatToken(fillAmount * selectedOrder.price)} {takerSymbolDisplay}</div>
-  <div>Rate: {`1 ${makerSymbolDisplay} = ${formatNumber(selectedOrder.price, selectedOrder.price > 10 ? 2 : 6)} ${takerSymbolDisplay}`}</div>
-  </div>
-  <div className="mt-2 text-accent/70">
-  Both operations execute atomically - if either fails, both fail. No partial execution possible. The maker will sign and publish this transaction after reviewing your declaration.
-  </div>
+    <div className="font-semibold text-accent mb-1">Swap preview</div>
+    <div className="space-y-1 text-foreground">
+      <div>Storage → you: {formatToken(fillAmount)} {makerSymbolDisplay}</div>
+      <div>You → maker: {formatToken(fillAmount * selectedOrder.price)} {takerSymbolDisplay}</div>
+      <div>Rate: 1 {makerSymbolDisplay} = {formatNumber(selectedOrder.price, selectedOrder.price > 10 ? 2 : 6)} {takerSymbolDisplay}</div>
+    </div>
+    <p className="mt-2 text-accent/70">Both transfers publish together. If either fails, the swap cancels.</p>
   </div>
   )}
 
-  <label className="space-y-2">
-  <span className="text-xs font-medium text-muted">Fill amount ({makerSymbolDisplay})</span>
-  <input
-  type="number"
-  min={selectedOrder.minFill ?? 0}
-  max={selectedOrder.size}
-  step="0.0001"
-  value={fillAmount ?? ''}
-  onChange={handleFillAmountChange}
-  className="w-full rounded-lg border border-hairline bg-background px-3 py-2 text-sm text-foreground focus:border-accent focus:outline-none"
-  placeholder="0.00"
-  />
+  <label className="space-y-1">
+    <span className="text-xs font-medium text-muted">Fill amount</span>
+    <input
+      type="number"
+      min={selectedOrder.minFill ?? 0}
+      max={selectedOrder.size}
+      step="0.0001"
+      value={fillAmount ?? ''}
+      onChange={handleFillAmountChange}
+      className="w-full rounded-lg border border-hairline bg-background px-3 py-2 text-sm text-foreground focus:border-accent focus:outline-none"
+      placeholder="0.00"
+    />
+    <span className="text-[11px] text-muted">Token: {makerSymbolDisplay}</span>
   </label>
 
   {settlementPreview && (
-  <div className="rounded-lg border border-hairline bg-surface-strong p-3 text-xs text-muted">
+  <div className="rounded-lg border border-hairline bg-surface-strong/80 p-3 text-xs text-muted">
   <div className="flex items-center justify-between">
   <span>Gross notional</span>
   <span className="text-foreground">${formatCurrency(settlementPreview.grossUsd)}</span>
@@ -704,44 +767,43 @@ export function RFQTakerPanel({ mode, onModeChange }: RFQTakerPanelProps): React
 
   {/* Declaration Flow Buttons */}
   {!hasActiveDeclaration ? (
-  <button
-  type="button"
-  onClick={handleDeclareIntention}
-  disabled={!isConnected || isDeclaring}
-  className={`flex items-center justify-center gap-2 rounded-lg px-4 py-3 text-sm font-semibold text-white transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
-  isConnected ? 'bg-accent hover:bg-accent/90' : 'bg-muted'
-  }`}
-  >
-  {isDeclaring ? (
-  <>
-  <Loader2 className="h-4 w-4 animate-spin" />
-  Declaring...
-  </>
-  ) : (
-  'Declare Intention to Fill'
-  )}
-  </button>
+    <button
+      type="button"
+      onClick={handleDeclareIntention}
+      disabled={!isConnected || isDeclaring}
+      className={`flex items-center justify-center gap-2 rounded-lg px-4 py-3 text-sm font-semibold text-white transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+        isConnected ? 'bg-accent hover:bg-accent/90' : 'bg-muted'
+      }`}
+    >
+      {isDeclaring ? (
+        <>
+          <Loader2 className="h-4 w-4 animate-spin" />
+          Sending…
+        </>
+      ) : (
+        'Declare intention'
+      )}
+    </button>
   ) : declarationStatus === 'approved' ? (
-  <div className="flex items-center justify-center gap-2 rounded-lg border border-accent/30 bg-accent/10 px-4 py-3 text-sm text-accent">
-  <CheckCircle2 className="h-4 w-4" />
-  Atomic Swap Executed Successfully!
-  </div>
+    <div className="flex items-center justify-center gap-2 rounded-lg border border-accent/30 bg-accent/10 px-4 py-3 text-sm text-accent">
+      <CheckCircle2 className="h-4 w-4" />
+      Swap executed
+    </div>
   ) : (
-  <div className="flex items-center justify-center gap-2 rounded-lg border border-hairline bg-surface px-4 py-3 text-sm text-muted">
-  <Loader2 className="h-4 w-4 animate-spin" />
-  Waiting for Maker Approval...
-  </div>
+    <div className="flex items-center justify-center gap-2 rounded-lg border border-hairline bg-surface px-4 py-3 text-sm text-muted">
+      <Loader2 className="h-4 w-4 animate-spin" />
+      Waiting on maker…
+    </div>
   )}
 
   <p className="text-[11px] text-muted">
-    {!hasActiveDeclaration 
-    ? "Declare your intention to fill this quote. You'll create an unsigned atomic swap transaction that the maker will review and sign."
-    : declarationStatus === 'approved'
-    ? "Your atomic swap declaration has been approved and the transaction has been executed on-chain!"
-    : "Your atomic swap declaration is pending maker approval. The maker will review your unsigned transaction and sign it if approved."
-    }
+    {!hasActiveDeclaration
+      ? 'Submit your fill request. The maker reviews and signs before the swap settles.'
+      : declarationStatus === 'approved'
+        ? 'Maker approved your swap and published the transaction.'
+        : 'Awaiting maker approval. We will refresh the status automatically.'}
   </p>
-  </>
+  </div>
   ) : (
   <div className="flex items-center justify-center gap-3 rounded-lg border border-dashed border-hairline bg-surface px-4 py-6 text-center">
   <Info className="h-6 w-6 text-muted" />
@@ -751,7 +813,17 @@ export function RFQTakerPanel({ mode, onModeChange }: RFQTakerPanelProps): React
   </div>
   </div>
   )}
-  </div>
+  </>
+  );
+
+  if (hideInternalTabs) {
+    return content;
+  }
+
+  return (
+    <div className="flex h-full flex-col gap-4 rounded-lg border border-hairline bg-surface p-4">
+      {content}
+    </div>
   );
 }
 
