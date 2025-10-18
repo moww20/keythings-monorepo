@@ -1031,6 +1031,68 @@ const cancelRFQOrder = async (
 
 ### Frontend Architecture
 
+#### Canonical Token Address Registry
+
+**Problem:** Early prototypes hard-coded `PLACEHOLDER_BASE`, `PLACEHOLDER_KTA`, and other sentinel strings in the RFQ flow. Those values leaked into both the UI and the backend, making it impossible to rely on the actual on-chain token addresses now published by Keeta.
+
+**Solution:** Introduce a dedicated registry that resolves token metadata by symbol, pair, or address. The registry is hydrated from an authenticated backend endpoint and cached in the frontend. All RFQ builders request addresses from this registry instead of embedding placeholders.
+
+**Key Behaviors:**
+
+- Fetch canonical token metadata (`address`, `decimals`, `symbol`, `displayName`) from `GET /rfq/token-registry` on app bootstrap.
+- Expose a `TokenRegistryContext` with helpers such as `resolveBySymbol('USDT')` or `resolvePair({ base: 'KTA', quote: 'USDT' })`.
+- Throw explicit errors if a requested token is missing—this bubbles up to the UI so we never silently fall back to placeholder strings.
+- Invalidate and refresh the registry when the backend signals new listings (WebSocket `token_registry.updated`).
+
+**Example Implementation:**
+
+```typescript
+// src/app/contexts/TokenRegistryContext.tsx
+
+export interface TokenMetadata {
+  symbol: string;
+  address: string;
+  decimals: number;
+  displayName: string;
+}
+
+const TokenRegistryContext = createContext<TokenRegistryValue | null>(null);
+
+export function TokenRegistryProvider({ children }: PropsWithChildren) {
+  const { data, error } = useQuery(['token-registry'], fetchTokenRegistry, {
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const value = useMemo(() => {
+    if (!data) {
+      return emptyRegistry();
+    }
+
+    return buildLookupTables(data.tokens);
+  }, [data]);
+
+  if (error) {
+    throw new Error('Failed to load token registry');
+  }
+
+  return (
+    <TokenRegistryContext.Provider value={value}>
+      {children}
+    </TokenRegistryContext.Provider>
+  );
+}
+
+export function useTokenRegistry() {
+  const context = useContext(TokenRegistryContext);
+  if (!context) {
+    throw new Error('useTokenRegistry must be used within TokenRegistryProvider');
+  }
+  return context;
+}
+```
+
+This context becomes the single source of truth for token addresses throughout the RFQ experience.
+
 #### WalletContext Enhancement
 
 **File:** `src/app/contexts/WalletContext.tsx`
@@ -1050,16 +1112,33 @@ interface WalletContextValue {
 
 **Implementation:**
 ```typescript
-const createRFQStorageAccount = useCallback(async (orderDetails: RFQOrderDetails) => {
+const { resolvePair } = useTokenRegistry();
+
+const createRFQStorageAccount = useCallback(async (submission: RFQQuoteSubmission) => {
   if (!userClient || !publicKey) {
     throw new Error('Wallet not connected');
   }
-  
+
+  const tokenMeta = resolvePair({
+    baseSymbol: submission.baseSymbol,
+    quoteSymbol: submission.quoteSymbol,
+    side: submission.side,
+  });
+
   const storageManager = new StorageAccountManager(userClient);
-  const storageAddress = await storageManager.createRFQStorage(orderDetails);
-  
+  const storageAddress = await storageManager.createRFQStorage({
+    pair: submission.pair,
+    side: submission.side,
+    price: submission.price,
+    size: submission.size,
+    minFill: submission.minFill,
+    expiry: submission.expiry,
+    tokenAddress: tokenMeta.lockedToken.address,
+    decimals: tokenMeta.lockedToken.decimals,
+  });
+
   return storageAddress;
-}, [userClient, publicKey]);
+}, [userClient, publicKey, resolvePair]);
 ```
 
 #### RFQContext Updates
@@ -1165,6 +1244,8 @@ export function fromBaseUnits(amount: bigint, decimals: number): number {
 
 ### Backend Architecture
 
+The backend continues to operate as an orchestration layer—**it never signs, never submits blocks, and it no longer exposes or depends on `EXCHANGE_OPERATOR_PUBKEY`**. All signature authority remains with end-user wallets or automated market-maker bots running client-side code. The backend’s responsibilities are limited to cataloguing orders, enriching them with off-chain data, and exposing canonical token metadata.
+
 #### RFQ API Endpoints
 
 **File:** `keythings-dapp-engine/src/rfq_api.rs`
@@ -1182,7 +1263,7 @@ pub async fn create_order(payload: web::Json<RFQOrder>) -> impl Responder {
     
     // Extract storage account address from unsigned_block field
     let storage_account = new_order.unsigned_block.clone();
-    
+
     // Index the on-chain order
     let mut keeta_manager = KEETA_RFQ_MANAGER.lock().unwrap();
     match keeta_manager.index_rfq_order(&storage_account, new_order.clone()).await {
@@ -1266,18 +1347,40 @@ NEXT_PUBLIC_RFQ_API_URL=http://localhost:8080
 NEXT_PUBLIC_KEETA_NETWORK=test
 NEXT_PUBLIC_KEETA_RPC_URL=https://rpc.test.keeta.network
 
-# Keeta Token Addresses (Testnet)
-NEXT_PUBLIC_KTA_TOKEN_ADDRESS=keeta_base_token
-NEXT_PUBLIC_USDT_TOKEN_ADDRESS=keeta_1abc123...
-NEXT_PUBLIC_BASE_TOKEN_ADDRESS=keeta_1def456...
-
-# Token Decimals
-NEXT_PUBLIC_KTA_DECIMALS=6
-NEXT_PUBLIC_USDT_DECIMALS=6
-NEXT_PUBLIC_BASE_DECIMALS=6
+# Token Registry Endpoint (canonical mapping of symbol → address)
+NEXT_PUBLIC_TOKEN_REGISTRY_URL=https://api.dev.keythings.com/rfq/token-registry
 
 # Wallet Extension Configuration
 NEXT_PUBLIC_WALLET_EXTENSION_ID=keeta-wallet-extension
+```
+
+**Sample Registry Response:**
+
+```json
+{
+  "tokens": [
+    {
+      "symbol": "KTA",
+      "address": "keeta_14d8f...",
+      "decimals": 6,
+      "displayName": "Keeta Token"
+    },
+    {
+      "symbol": "USDT",
+      "address": "keeta_27b1c...",
+      "decimals": 6,
+      "displayName": "Tether USD"
+    }
+  ],
+  "pairs": [
+    {
+      "pair": "KTA/USDT",
+      "base": "KTA",
+      "quote": "USDT",
+      "makerLocks": "USDT"
+    }
+  ]
+}
 ```
 
 ---
@@ -1290,10 +1393,12 @@ NEXT_PUBLIC_WALLET_EXTENSION_ID=keeta-wallet-extension
 
 **Implementation:**
 1. ✅ Users sign all transactions via Keeta Wallet Extension
-2. ✅ Backend only indexes on-chain data
+2. ✅ Backend only indexes on-chain data and distributes registry metadata
 3. ✅ Storage accounts owned by makers (OWNER permission)
 4. ✅ Backend cannot move funds (no private keys)
 5. ✅ All fund movements visible on Keeta blockchain
+
+**Deprecation Notice:** Historical references to an `EXCHANGE_OPERATOR_PUBKEY` have been eliminated. The orchestration service does not possess or require an operator account—doing so would break the zero-custody guarantee and create unnecessary compliance obligations.
 
 **Comparison with Custodial Exchanges:**
 
