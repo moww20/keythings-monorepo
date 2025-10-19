@@ -30,6 +30,7 @@ import {
   getMakerTokenAddress,
   getMakerTokenAddressFromOrder,
   getTakerTokenAddressFromOrder,
+  toBaseUnits,
 } from '@/app/lib/token-utils';
 import type {
   RFQFillRequestResult,
@@ -42,8 +43,20 @@ import type { OrderSide } from '@/app/types/rfq';
 import { useWallet } from '@/app/contexts/WalletContext';
 import type { RFQStorageAccountDetails, StorageAccountState } from '@/app/types/rfq-blockchain';
 
+const TAKER_DECLARATIONS_STORAGE_PREFIX = 'rfq_taker_declarations:';
+
+interface TokenDescriptor {
+  symbol: string;
+  address?: string;
+  decimals?: number;
+  isListed?: boolean;
+}
+
 interface RFQContextValue {
+  tokenA: TokenDescriptor | null;
+  tokenB: TokenDescriptor | null;
   pair: string;
+  side: OrderSide;
   availablePairs: string[];
   recommendedPair?: string;
   orders: RFQOrder[];
@@ -64,17 +77,40 @@ interface RFQContextValue {
   isVerifyingEscrow: boolean;
   refreshEscrowState: () => Promise<void>;
   lastEscrowVerification: number | null;
+  takerDeclaredOrderIds: string[];
+  registerTakerDeclaration: (orderId: string) => void;
 }
 
 const RFQContext = createContext<RFQContextValue | undefined>(undefined);
 
-export function RFQProvider({ pair, children }: { pair: string; children: ReactNode }): React.JSX.Element {
+function normalizeSymbol(value: string | null | undefined): string {
+  if (!value) {
+    return '';
+  }
+  return value.trim().toUpperCase();
+}
+
+export interface RFQProviderProps {
+  tokenA: TokenDescriptor | null;
+  tokenB: TokenDescriptor | null;
+  children: ReactNode;
+}
+
+export function RFQProvider({ tokenA, tokenB, children }: RFQProviderProps): React.JSX.Element {
+  const normalizedTokenA = useMemo(() => (tokenA ? { ...tokenA, symbol: normalizeSymbol(tokenA.symbol) } : null), [tokenA]);
+  const normalizedTokenB = useMemo(() => (tokenB ? { ...tokenB, symbol: normalizeSymbol(tokenB.symbol) } : null), [tokenB]);
+  const derivedPair = normalizedTokenA && normalizedTokenB
+    ? `${normalizedTokenA.symbol}/${normalizedTokenB.symbol}`
+    : '';
+  const derivedSide: OrderSide = 'sell';
+
   const {
     publicKey,
     getTokenMetadata,
     fillRFQOrder: walletFillRFQOrder,
     cancelRFQOrder: walletCancelRFQOrder,
     verifyStorageAccount: walletVerifyStorageAccount,
+    userClient,
   } = useWallet();
   const walletIdentity = publicKey ?? '';
   const [orders, setOrders] = useState<RFQOrder[]>([]);
@@ -87,15 +123,98 @@ export function RFQProvider({ pair, children }: { pair: string; children: ReactN
   const [escrowError, setEscrowError] = useState<string | null>(null);
   const [isVerifyingEscrow, setIsVerifyingEscrow] = useState(false);
   const [lastEscrowVerification, setLastEscrowVerification] = useState<number | null>(null);
-  const [availablePairs, setAvailablePairs] = useState<string[]>([pair]);
+
+  const escrowMetadata = escrowState?.metadata;
+  const [availablePairs, setAvailablePairs] = useState<string[]>(derivedPair ? [derivedPair] : []);
   const [recommendedPair, setRecommendedPair] = useState<string | undefined>(undefined);
+  const [takerDeclaredOrderIds, setTakerDeclaredOrderIds] = useState<string[]>([]);
+
+  const persistTakerDeclaredOrderIds = useCallback(
+    (ids: string[]) => {
+      if (typeof window === 'undefined' || !walletIdentity) {
+        return;
+      }
+      window.localStorage.setItem(
+        `${TAKER_DECLARATIONS_STORAGE_PREFIX}${walletIdentity}`,
+        JSON.stringify(ids),
+      );
+    },
+    [walletIdentity],
+  );
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+    if (!walletIdentity) {
+      setTakerDeclaredOrderIds([]);
+      return;
+    }
+    const key = `${TAKER_DECLARATIONS_STORAGE_PREFIX}${walletIdentity}`;
+    const stored = window.localStorage.getItem(key);
+    if (!stored) {
+      setTakerDeclaredOrderIds([]);
+      return;
+    }
+    try {
+      const parsed = JSON.parse(stored);
+      if (Array.isArray(parsed)) {
+        setTakerDeclaredOrderIds(parsed.filter((value) => typeof value === 'string'));
+      } else {
+        setTakerDeclaredOrderIds([]);
+      }
+    } catch {
+      setTakerDeclaredOrderIds([]);
+    }
+  }, [walletIdentity]);
+
+  useEffect(() => {
+    if (!walletIdentity) {
+      return;
+    }
+    const currentOrderIds = new Set(orders.map((order) => order.id));
+    const matchingOrderIds = orders
+      .filter((order) => order.takerAddress === walletIdentity)
+      .map((order) => order.id);
+    if (matchingOrderIds.length === 0 && takerDeclaredOrderIds.every((id) => currentOrderIds.has(id))) {
+      return;
+    }
+    setTakerDeclaredOrderIds((previous) => {
+      const retained = previous.filter((id) => currentOrderIds.has(id));
+      const merged = Array.from(new Set([...retained, ...matchingOrderIds]));
+      persistTakerDeclaredOrderIds(merged);
+      return merged;
+    });
+  }, [orders, persistTakerDeclaredOrderIds, takerDeclaredOrderIds, walletIdentity]);
+
+  const registerTakerDeclaration = useCallback(
+    (orderId: string) => {
+      setTakerDeclaredOrderIds((previous) => {
+        if (previous.includes(orderId)) {
+          return previous;
+        }
+        const next = [...previous, orderId];
+        persistTakerDeclaredOrderIds(next);
+        return next;
+      });
+    },
+    [persistTakerDeclaredOrderIds],
+  );
 
   const refreshOrders = useCallback(async () => {
-    console.debug('[RFQContext] refreshOrders:start', { pair });
+    if (!derivedPair) {
+      setOrders([]);
+      setMakers([]);
+      setSelectedOrderId(null);
+      setFillAmountState(undefined);
+      return;
+    }
+
+    console.debug('[RFQContext] refreshOrders:start', { pair: derivedPair });
     try {
-      const [orderList, makerList] = await Promise.all([fetchRfqOrders(pair), fetchRfqMakers()]);
+      const [orderList, makerList] = await Promise.all([fetchRfqOrders(derivedPair), fetchRfqMakers()]);
       console.debug('[RFQContext] refreshOrders:data', {
-        pair,
+        pair: derivedPair,
         orderCount: orderList.length,
         makerCount: makerList.length,
         firstOrder: orderList[0],
@@ -104,22 +223,43 @@ export function RFQProvider({ pair, children }: { pair: string; children: ReactN
       setMakers(makerList);
 
       if (orderList.length === 0) {
-        console.debug('[RFQContext] refreshOrders:empty', { pair });
+        console.debug('[RFQContext] refreshOrders:empty', { pair: derivedPair });
         const allOrders = await fetchRfqOrders();
         const pairs = Array.from(new Set(allOrders.map((order) => order.pair))).filter(Boolean);
-        setAvailablePairs(pairs.length > 0 ? pairs : [pair]);
-        const firstDifferentPair = pairs.find((candidate) => candidate !== pair);
+        setAvailablePairs((prev) => {
+          const next = new Set(prev);
+          if (derivedPair) {
+            next.add(derivedPair);
+          }
+          pairs.forEach((candidate) => next.add(candidate));
+          return Array.from(next);
+        });
+        const firstDifferentPair = pairs.find((candidate) => candidate !== derivedPair);
         setRecommendedPair(firstDifferentPair);
         setSelectedOrderId(null);
         setFillAmountState(undefined);
+        if (walletIdentity) {
+          const takerMatches = allOrders
+            .filter((order) => order.takerAddress === walletIdentity)
+            .map((order) => order.id);
+          if (takerMatches.length > 0) {
+            setTakerDeclaredOrderIds((previous) => {
+              const merged = Array.from(new Set([...previous, ...takerMatches]));
+              persistTakerDeclaredOrderIds(merged);
+              return merged;
+            });
+          }
+        }
         return;
       }
 
       const defaultOrder = orderList.find((order) => order.status === 'open') ?? orderList[0];
-      console.debug('[RFQContext] refreshOrders:defaultOrder', { pair, defaultOrderId: defaultOrder?.id });
+      console.debug('[RFQContext] refreshOrders:defaultOrder', { pair: derivedPair, defaultOrderId: defaultOrder?.id });
       setAvailablePairs((previous) => {
         const next = new Set(previous);
-        next.add(pair);
+        if (derivedPair) {
+          next.add(derivedPair);
+        }
         orderList.forEach((order: RFQOrder) => {
           if (order.pair) {
             next.add(order.pair);
@@ -130,15 +270,27 @@ export function RFQProvider({ pair, children }: { pair: string; children: ReactN
       setRecommendedPair(undefined);
       setSelectedOrderId(defaultOrder?.id ?? null);
       setFillAmountState(defaultOrder ? defaultOrder.minFill ?? defaultOrder.size : undefined);
+      if (walletIdentity) {
+        const takerMatches = orderList
+          .filter((order) => order.takerAddress === walletIdentity)
+          .map((order) => order.id);
+        if (takerMatches.length > 0) {
+          setTakerDeclaredOrderIds((previous) => {
+            const merged = Array.from(new Set([...previous, ...takerMatches]));
+            persistTakerDeclaredOrderIds(merged);
+            return merged;
+          });
+        }
+      }
     } catch (error) {
       console.error('[RFQ] Failed to refresh orders:', error);
     }
-  }, [pair]);
+  }, [derivedPair, walletIdentity, persistTakerDeclaredOrderIds]);
 
   useEffect(() => {
-    console.debug('[RFQContext] useEffect(refreshOrders) invoked', { pair });
+    console.debug('[RFQContext] useEffect(refreshOrders) invoked', { pair: derivedPair });
     void refreshOrders();
-  }, [refreshOrders, pair]);
+  }, [refreshOrders, derivedPair]);
 
   useEffect(() => {
     let cancelled = false;
@@ -324,7 +476,11 @@ export function RFQProvider({ pair, children }: { pair: string; children: ReactN
       console.log('[RFQContext] storageAccountAddress type:', typeof storageAccountAddress);
       console.log('[RFQContext] storageAccountAddress starts with keeta_:', storageAccountAddress?.startsWith('keeta_'));
       console.log('[RFQContext] submission:', submission);
-      
+
+      if (!derivedPair) {
+        throw new Error('Select Token A and Token B before creating RFQ quotes.');
+      }
+
       if (!walletIdentity) {
         throw new Error('Connect your wallet before publishing RFQ orders.');
       }
@@ -342,7 +498,7 @@ export function RFQProvider({ pair, children }: { pair: string; children: ReactN
 
       const minFillValue = submission.minFill ? Number.parseFloat(submission.minFill) : undefined;
       const expiryIso = new Date(Date.now() + getExpiryMs(submission.expiryPreset)).toISOString();
-      const makerTokenAddress = getMakerTokenAddress(submission.pair, submission.side);
+      const makerTokenAddress = getMakerTokenAddress(derivedPair, derivedSide);
       
       // Get token metadata from wallet context instead of deprecated function
       let makerTokenDecimals = 9; // Default fallback
@@ -358,8 +514,8 @@ export function RFQProvider({ pair, children }: { pair: string; children: ReactN
       }
 
       const storagePayload: RFQStorageAccountDetails = {
-        pair: submission.pair,
-        side: submission.side,
+        pair: derivedPair,
+        side: derivedSide,
         price,
         size,
         minFill: minFillValue,
@@ -379,8 +535,8 @@ export function RFQProvider({ pair, children }: { pair: string; children: ReactN
       const orderId = `order-${Date.now()}`;
       const newOrder: RFQOrder = {
         id: orderId,
-        pair: submission.pair,
-        side: submission.side,
+        pair: derivedPair,
+        side: derivedSide,
         price,
         size,
         minFill: minFillValue,
@@ -419,7 +575,7 @@ export function RFQProvider({ pair, children }: { pair: string; children: ReactN
       void refreshEscrowState();
       return createdOrder;
     },
-    [refreshEscrowState, walletIdentity, getTokenMetadata],
+    [derivedPair, walletIdentity, getTokenMetadata, refreshEscrowState],
   );
 
   const cancelQuote = useCallback(
@@ -439,29 +595,177 @@ export function RFQProvider({ pair, children }: { pair: string; children: ReactN
 
       if (remaining > 0) {
         const makerTokenAddress = getMakerTokenAddressFromOrder(order);
-        const normalizedTokenAddress =
-          typeof makerTokenAddress === 'string' ? makerTokenAddress.trim() : '';
+        const normalizedTokenAddress = typeof makerTokenAddress === 'string' ? makerTokenAddress.trim() : '';
         const isPlaceholderToken =
-          normalizedTokenAddress.length === 0 ||
-          normalizedTokenAddress.startsWith('PLACEHOLDER_');
-        const sanitizedTokenAddress = isPlaceholderToken ? '' : normalizedTokenAddress;
+          normalizedTokenAddress.length === 0 || normalizedTokenAddress.startsWith('PLACEHOLDER_');
+        const sanitizedTokenAddress = !isPlaceholderToken
+          ? normalizedTokenAddress
+          : (() => {
+              const storedMetadata = escrowMetadata;
+              const derivedFromEscrow = order.storageAccount && storedMetadata && typeof storedMetadata === 'object'
+                ? (storedMetadata as Record<string, unknown>)?.atomicSwap &&
+                  typeof (storedMetadata as Record<string, unknown>).atomicSwap === 'object'
+                  ? ((storedMetadata as { atomicSwap?: { makerToken?: unknown } }).atomicSwap?.makerToken as string | undefined)
+                  : undefined
+                : null;
+              if (derivedFromEscrow && typeof derivedFromEscrow === 'string') {
+                const trimmed = derivedFromEscrow.trim();
+                if (trimmed.length > 0 && !trimmed.startsWith('PLACEHOLDER_')) {
+                  console.debug('[rfq] Using storage metadata token reference for cancellation', {
+                    orderId,
+                    derivedFromEscrow: trimmed,
+                  });
+                  return trimmed;
+                }
+              }
+              return '';
+            })();
 
         let makerTokenDecimals = 9;
         if (!isPlaceholderToken && sanitizedTokenAddress) {
           const tokenMetadata = await getTokenMetadata(sanitizedTokenAddress);
           if (tokenMetadata) {
             makerTokenDecimals = tokenMetadata.decimals;
+          } else if (order.storageAccount) {
+            try {
+              const state = await walletVerifyStorageAccount(order.storageAccount);
+              const balanceEntry = state.balances?.find((entry) => entry.token === sanitizedTokenAddress);
+              if (balanceEntry && typeof balanceEntry.decimals === 'number') {
+                makerTokenDecimals = balanceEntry.decimals;
+              }
+            } catch (error) {
+              console.warn('[rfq] Failed to fetch storage balance metadata during cancellation', error);
+            }
           }
         }
 
         try {
-          await walletCancelRFQOrder({
-            order,
-            tokenAddress: sanitizedTokenAddress,
-            tokenDecimals: makerTokenDecimals,
-            fieldType: 'decimals',
-            amount: remaining,
-          });
+          const storageAddress = order.storageAccount ?? order.unsignedBlock;
+          if (!storageAddress) {
+            throw new Error('Storage account reference missing during cancellation.');
+          }
+
+          const makerAccount = order.maker.id;
+          const normalizedMakerAccount = typeof makerAccount === 'string' ? makerAccount.trim() : '';
+          if (!normalizedMakerAccount) {
+            throw new Error('Maker account missing during cancellation.');
+          }
+
+          if (!userClient) {
+            throw new Error('Wallet client unavailable for cancellation. Connect your wallet again.');
+          }
+
+          const builder = userClient.initBuilder?.();
+          if (!builder) {
+            throw new Error('Wallet client did not provide a builder for cancellation.');
+          }
+
+          const sendFn = (builder as { send?: (...args: unknown[]) => unknown }).send;
+          if (typeof sendFn !== 'function') {
+            throw new Error('Wallet builder does not expose a send method for cancellation.');
+          }
+
+          let makerAmount = toBaseUnits(remaining, makerTokenDecimals);
+
+          if (makerAmount <= BigInt(0)) {
+            console.info('[rfq] Cancellation skipped transfer because remaining amount is non-positive', {
+              orderId,
+              remaining,
+            });
+            makerAmount = BigInt(0);
+          }
+
+          let availableFromStorage: bigint | null = null;
+          let balanceInfoDiscovered = false;
+
+          if (makerAmount > BigInt(0)) {
+            if (typeof order.storageAccount === 'string') {
+              try {
+                const storageSnapshot = await walletVerifyStorageAccount(order.storageAccount);
+                const tokenEntry = storageSnapshot.balances?.find((entry) => entry.token === sanitizedTokenAddress);
+                if (tokenEntry) {
+                  availableFromStorage = BigInt(tokenEntry.amount ?? 0);
+                  balanceInfoDiscovered = true;
+                  if (availableFromStorage < makerAmount) {
+                    console.warn('[rfq] Storage balance lower than expected during cancellation; clamping transfer', {
+                      orderId,
+                      requested: makerAmount.toString(),
+                      available: availableFromStorage.toString(),
+                    });
+                    makerAmount = availableFromStorage;
+                  }
+                }
+              } catch (error) {
+                console.warn('[rfq] Unable to verify storage balance during cancellation', error);
+              }
+            }
+
+            if (!balanceInfoDiscovered && makerAmount > BigInt(0)) {
+              console.warn('[rfq] No storage balance entry found for maker token during cancellation; skipping token transfer', {
+                orderId,
+                sanitizedTokenAddress,
+              });
+              makerAmount = BigInt(0);
+            }
+          }
+
+          const storageAccountRef = { publicKeyString: storageAddress };
+          const makerAccountRef = { publicKeyString: normalizedMakerAccount };
+
+          const pendingOperations: Array<Promise<unknown>> = [];
+
+          const payFeeFn = (builder as { payPlatformFee?: (account: { publicKeyString: string } | string, amount?: bigint | number) => unknown }).payPlatformFee;
+          if (typeof payFeeFn === 'function') {
+            try {
+              pendingOperations.push(
+                Promise.resolve(
+                  payFeeFn.call(
+                    builder,
+                    makerAccountRef,
+                  ),
+                ),
+              );
+            } catch (error) {
+              console.warn('[rfq] Failed to enqueue platform fee payment during cancellation', error);
+            }
+          }
+
+          if (makerAmount > BigInt(0)) {
+            pendingOperations.push(
+              Promise.resolve(
+                sendFn.call(
+                  builder,
+                  makerAccountRef,
+                  makerAmount,
+                  sanitizedTokenAddress || undefined,
+                  undefined,
+                  { account: storageAccountRef },
+                ),
+              ),
+            );
+          } else {
+            console.info('[rfq] No tokens to return during cancellation; skipping send operation', {
+              orderId,
+              availableFromStorage: availableFromStorage?.toString() ?? null,
+              remaining,
+              sanitizedTokenAddress,
+            });
+            console.info('[rfq] No tokens to return during cancellation; skipping send operation', { orderId });
+          }
+
+          await Promise.all(pendingOperations);
+
+          if (pendingOperations.length === 0 || makerAmount === BigInt(0)) {
+            console.info('[rfq] Cancellation completed without submitting a builder (no token movements required)', {
+              orderId,
+            });
+          } else {
+            const receipt = await userClient.publishBuilder?.(builder);
+            if (!receipt) {
+              throw new Error('Wallet failed to publish cancellation transaction.');
+            }
+            console.debug('[rfq] Cancellation builder published', { orderId, receipt });
+          }
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
           if (message.includes('Resulting balance becomes negative')) {
@@ -487,18 +791,15 @@ export function RFQProvider({ pair, children }: { pair: string; children: ReactN
       }
       void refreshEscrowState();
     },
-    [
-      orders,
-      refreshEscrowState,
-      selectedOrderId,
-      walletCancelRFQOrder,
-      getTokenMetadata,
-    ],
+    [escrowMetadata, getTokenMetadata, refreshEscrowState, selectedOrderId, userClient, walletVerifyStorageAccount, orders],
   );
 
   const value = useMemo<RFQContextValue>(
     () => ({
-      pair,
+      tokenA: normalizedTokenA,
+      tokenB: normalizedTokenB,
+      pair: derivedPair,
+      side: derivedSide,
       availablePairs,
       recommendedPair,
       orders,
@@ -519,9 +820,14 @@ export function RFQProvider({ pair, children }: { pair: string; children: ReactN
       isVerifyingEscrow,
       refreshEscrowState,
       lastEscrowVerification,
+      takerDeclaredOrderIds,
+      registerTakerDeclaration,
     }),
     [
-      pair,
+      normalizedTokenA,
+      normalizedTokenB,
+      derivedPair,
+      derivedSide,
       availablePairs,
       recommendedPair,
       orders,
@@ -542,6 +848,8 @@ export function RFQProvider({ pair, children }: { pair: string; children: ReactN
       isVerifyingEscrow,
       refreshEscrowState,
       lastEscrowVerification,
+      takerDeclaredOrderIds,
+      registerTakerDeclaration,
     ],
   );
 

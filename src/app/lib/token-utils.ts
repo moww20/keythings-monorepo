@@ -125,16 +125,30 @@ export function getTokenDecimalsForSymbol(symbol: string): number {
   
   // Fallback to environment variables
   const decimalsKey = `NEXT_PUBLIC_${normalized}_DECIMALS`;
-  return getEnvNumber(decimalsKey, TOKEN_FALLBACK_DECIMALS);
+  const envDecimals = getEnvNumber(decimalsKey, TOKEN_FALLBACK_DECIMALS);
+  
+  // If we have a valid decimals from environment, return it
+  if (envDecimals !== TOKEN_FALLBACK_DECIMALS) {
+    return envDecimals;
+  }
+  
+  // If we reach this point, throw an error
+  throw new Error(`No decimals found for token: ${normalized}`);
 }
 
 export function getMakerTokenSymbol(pair: string, side: OrderSide): string {
-  const { base, quote } = splitPair(pair);
+  const [base, quote] = pair.split('/');
+  if (!base || !quote) {
+    throw new Error(`Invalid pair format: ${pair}`);
+  }
   return side === 'sell' ? base : quote;
 }
 
 export function getTakerTokenSymbol(pair: string, side: OrderSide): string {
-  const { base, quote } = splitPair(pair);
+  const [base, quote] = pair.split('/');
+  if (!base || !quote) {
+    throw new Error(`Invalid pair format: ${pair}`);
+  }
   return side === 'sell' ? quote : base;
 }
 

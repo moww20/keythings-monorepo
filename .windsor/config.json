@@ -1,0 +1,49 @@
+{
+  "name": "keythings-monorepo",
+  "version": "1.0.0",
+  "description": "Configuration for AI agents working with KeyThings repository",
+  "agentGuidelines": {
+    "readme": "MANDATORY: Read and understand AGENTS.md before performing any actions in this repository.",
+    "buildProcess": "Run 'bun run build' only once after completing implementation, unless there are build errors to fix.",
+    "devServer": "Always use port 3000 for development as the Keeta Wallet extension only works with localhost:3000.",
+    "architecture": "Follow non-custodial architecture principles - backend should never hold user funds or private keys.",
+    "designSystem": "Adhere to the design system standards defined in AGENTS.md, including spacing, colors, and component patterns.",
+    "security": "Follow all security guidelines, especially regarding wallet operations and sensitive data handling.",
+    "documentation": {
+      "postResolutionUpdate": {
+        "required": true,
+        "targetFile": "AGENTS.md",
+        "sections": [
+          "## 🧠 SELF-LEARNING & CONTINUOUS IMPROVEMENT",
+          "## 🛠️ Issue Resolution Log"
+        ],
+        "format": "## [Date] Issue: [Brief Description]\n\n**Problem:** [Describe the issue]\n**Solution:** [Explain the fix]\n**Impact:** [How this improves the codebase]\n**Prevention:** [How to avoid similar issues]\n\n---"
+      }
+    },
+    "keetaSdk": {
+      "useMcpForSdk": true,
+      "requiredFor": [
+        "Wallet operations",
+        "Transaction building",
+        "Account management",
+        "Token operations",
+        "Smart contract interactions"
+      ],
+      "guidelines": [
+        "Always use Keeta MCP when implementing or modifying SDK functions",
+        "Verify all wallet operations through the MCP layer",
+        "Follow the MCP service patterns for consistency",
+        "Include proper error handling for MCP interactions",
+        "Document any MCP-specific behavior in code comments"
+      ]
+    }
+  },
+  "requiredFiles": [
+    "AGENTS.md",
+    "README.md"
+  ],
+  "ignoredPatterns": [
+    "node_modules/",
+    ".git/"
+  ]
+}

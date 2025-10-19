@@ -142,6 +142,26 @@ interface WalletContextValue {
   cancelRFQOrder: (details: RFQCancelDetails) => Promise<RFQCancelResult>;
   verifyStorageAccount: (storageAddress: string) => Promise<StorageAccountState>;
   getStorageAccountPermissions: (storageAddress: string) => Promise<StorageAccountPermission[]>;
+  signAtomicSwapDeclaration: (params: {
+    unsignedBlockHex?: string | null;
+    unsignedBlockJson?: unknown;
+  }) => Promise<{ published: boolean; blockHash?: string | null; signedBlock?: string | null }>;
+  grantStoragePermission: (
+    storageAddress: string,
+    operatorAddress: string,
+    tokenAddress: string,
+  ) => Promise<void>;
+  revokeStoragePermission: (
+    storageAddress: string,
+    operatorAddress: string,
+  ) => Promise<void>;
+  withdrawFromStorage: (
+    storageAddress: string,
+    destinationAddress: string,
+    tokenAddress: string,
+    amount: string,
+    decimals: number,
+  ) => Promise<string>;
 }
 
 const WalletContext = createContext<WalletContextValue | null>(null);
@@ -767,8 +787,135 @@ export function WalletProvider({ children }: WalletProviderProps) {
     [userClient, walletAddress],
   );
 
+  const signAtomicSwapDeclaration = useCallback(
+    async ({ unsignedBlockHex, unsignedBlockJson }: { unsignedBlockHex?: string | null; unsignedBlockJson?: unknown }) => {
+      if (!userClient) {
+        throw new Error('Keeta wallet client unavailable. Connect your wallet first.');
+      }
+
+      const builder = userClient.initBuilder?.();
+      if (!builder) {
+        throw new Error('Wallet client does not support initBuilder(). Update your Keeta Wallet.');
+      }
+
+      let blockBytes: Uint8Array | undefined;
+
+      if (typeof unsignedBlockHex === 'string' && unsignedBlockHex.length > 0) {
+        try {
+          const cleaned = unsignedBlockHex.trim().toLowerCase().startsWith('0x')
+            ? unsignedBlockHex.trim().slice(2)
+            : unsignedBlockHex.trim();
+          const matches = cleaned.match(/[0-9a-f]{2}/gi) ?? [];
+          blockBytes = new Uint8Array(matches.map((pair) => parseInt(pair, 16)));
+        } catch (error) {
+          console.warn('[WalletContext] Failed to parse unsigned block hex', error);
+        }
+      }
+
+      if (!blockBytes && unsignedBlockJson) {
+        try {
+          const text = typeof unsignedBlockJson === 'string' ? unsignedBlockJson : JSON.stringify(unsignedBlockJson);
+          blockBytes = new TextEncoder().encode(text);
+        } catch (error) {
+          console.warn('[WalletContext] Failed to encode unsigned block JSON', error);
+        }
+      }
+
+      if (!blockBytes) {
+        throw new Error('No unsigned block payload available for signing.');
+      }
+
+      const loadFn = (builder as { loadUnsignedBlock?: (payload: Uint8Array) => unknown }).loadUnsignedBlock;
+      if (typeof loadFn !== 'function') {
+        throw new Error('Wallet builder missing loadUnsignedBlock(). Update Keeta Wallet.');
+      }
+
+      await Promise.resolve(loadFn.call(builder, blockBytes));
+
+      const receipt = await userClient.publishBuilder?.(builder);
+      const blockHash = extractBlockHash(receipt);
+      let signedBlock: string | null = null;
+      if (typeof receipt === 'string') {
+        signedBlock = receipt;
+      } else if (receipt) {
+        try {
+          signedBlock = JSON.stringify(receipt);
+        } catch (error) {
+          console.warn('[WalletContext] Failed to serialize publishBuilder receipt', error);
+        }
+      }
+
+      return { published: true, blockHash: blockHash ?? null, signedBlock };
+    },
+    [userClient],
+  );
+
+  const grantStoragePermission = useCallback(
+    async (storageAddress: string, operatorAddress: string, tokenAddress: string) => {
+      if (!userClient) {
+        throw new Error('Wallet client not initialized. Connect your wallet first.');
+      }
+      if (!storageAddress || !operatorAddress || !tokenAddress) {
+        throw new Error('Storage address, operator address, and token address are required.');
+      }
+
+      const manager = new StorageAccountManager(userClient);
+      await manager.grantTokenPermission(storageAddress, operatorAddress, tokenAddress);
+    },
+    [userClient],
+  );
+
+  const revokeStoragePermission = useCallback(
+    async (storageAddress: string, operatorAddress: string) => {
+      if (!userClient) {
+        throw new Error('Wallet client not initialized. Connect your wallet first.');
+      }
+      if (!storageAddress || !operatorAddress) {
+        throw new Error('Storage address and operator address are required.');
+      }
+
+      const manager = new StorageAccountManager(userClient);
+      await manager.revokeOperatorPermissions(storageAddress, operatorAddress);
+    },
+    [userClient],
+  );
+
+  const withdrawFromStorage = useCallback(
+    async (
+      storageAddress: string,
+      destinationAddress: string,
+      tokenAddress: string,
+      amount: string,
+      decimals: number,
+    ): Promise<string> => {
+      if (!userClient) {
+        throw new Error('Wallet client not initialized. Connect your wallet first.');
+      }
+      if (!storageAddress || !destinationAddress || !tokenAddress) {
+        throw new Error('Storage address, destination address, and token address are required.');
+      }
+      const numericAmount = Number.parseFloat(amount);
+      if (!Number.isFinite(numericAmount) || numericAmount <= 0) {
+        throw new Error('Withdrawal amount must be greater than zero.');
+      }
+
+      const amountInBaseUnits = toBaseUnits(numericAmount, decimals);
+      const manager = new StorageAccountManager(userClient);
+      return manager.selfWithdraw(
+        storageAddress,
+        destinationAddress,
+        tokenAddress,
+        amountInBaseUnits,
+      );
+    },
+    [userClient],
+  );
+
   const verifyStorageAccount = useCallback(
     async (storageAddress: string): Promise<StorageAccountState> => {
+      if (!userClient) {
+        throw new Error('Wallet client not initialized');
+      }
       if (!storageAddress) {
         throw new Error('Storage account address is required for verification.');
       }
@@ -815,6 +962,16 @@ export function WalletProvider({ children }: WalletProviderProps) {
         };
       });
 
+      console.log('[WalletContext] Storage state snapshot', {
+        address: storageAddress,
+        balanceCount: balances.length,
+        tokens: balances.map((balance) => ({
+          token: balance.token,
+          decimals: balance.decimals,
+          normalizedAmount: balance.normalizedAmount,
+        })),
+      });
+
       let permissions: StorageAccountPermission[] = [];
       if (userClient && typeof userClient.listACLsByEntity === 'function') {
         try {
@@ -844,6 +1001,31 @@ export function WalletProvider({ children }: WalletProviderProps) {
     },
     [userClient],
   );
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    const globalWindow = window as unknown as { __KEYTHINGS_DEVTOOLS__?: Record<string, unknown> };
+    const devtools = (globalWindow.__KEYTHINGS_DEVTOOLS__ ??= {});
+    const previousWalletScope = (devtools.wallet as Record<string, unknown> | undefined) ?? {};
+
+    const maybeAccountState = userClient as unknown as {
+      getAccountState?: (account: string) => Promise<unknown>;
+    } | null;
+
+    const getAccountStateFn = typeof maybeAccountState?.getAccountState === 'function'
+      ? (account: string) => maybeAccountState!.getAccountState!(account)
+      : null;
+
+    devtools.wallet = {
+      ...previousWalletScope,
+      userClient: userClient ?? null,
+      verifyStorageAccount,
+      getAccountState: getAccountStateFn,
+    } satisfies Record<string, unknown>;
+  }, [userClient, verifyStorageAccount]);
 
   const signMessage = useCallback(async (message: string) => {
     if (typeof window === 'undefined') {
@@ -1009,6 +1191,10 @@ export function WalletProvider({ children }: WalletProviderProps) {
       cancelRFQOrder,
       verifyStorageAccount,
       getStorageAccountPermissions,
+      signAtomicSwapDeclaration,
+      grantStoragePermission,
+      revokeStoragePermission,
+      withdrawFromStorage,
     };
   }, [
     signMessage,
@@ -1026,6 +1212,10 @@ export function WalletProvider({ children }: WalletProviderProps) {
     cancelRFQOrder,
     verifyStorageAccount,
     getStorageAccountPermissions,
+    signAtomicSwapDeclaration,
+    grantStoragePermission,
+    revokeStoragePermission,
+    withdrawFromStorage,
   ]);
 
   return <WalletContext.Provider value={contextValue}>{children}</WalletContext.Provider>;

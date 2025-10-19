@@ -1,9 +1,27 @@
 'use client';
 
-import { useCallback, useEffect, useState, useRef } from 'react';
+import { useCallback, useEffect, useState, useRef, useMemo } from 'react';
 import { Wallet } from 'lucide-react';
 import EstimatedBalance from '../../components/EstimatedBalance';
 import { useWallet } from '../../contexts/WalletContext';
+
+type StorageAccount = {
+  entity: string;
+  principal: string;
+  target: string | null;
+  permissions: string[];
+  // Enriched metadata
+  name?: string;
+  description?: string;
+  metadata?: string;
+  ktaBalance?: string;
+  otherTokenBalance?: string;
+  otherTokenSymbol?: string;
+  created?: number;
+  detailsLoaded?: boolean;
+};
+
+const STORAGE_PAGE_SIZE = 8;
 
 function getTokenIconColors(bgColor: string, textColor: string) {
   return { backgroundColor: bgColor, color: textColor };
@@ -44,21 +62,63 @@ export default function HomePage() {
   const isFetchingPrice = useRef(false);
   
   // Storage accounts state with enriched metadata
-  const [storageAccounts, setStorageAccounts] = useState<Array<{
-    entity: string;
-    principal: string;
-    target: string | null;
-    permissions: string[];
-    // Enriched metadata
-    name?: string;
-    description?: string;
-    metadata?: string;
-    ktaBalance?: string;
-    otherTokenBalance?: string;
-    otherTokenSymbol?: string;
-    created?: number;
-  }>>([]);
+  const [allStorageAccounts, setAllStorageAccounts] = useState<StorageAccount[]>([]);
+  const [storageAccounts, setStorageAccounts] = useState<StorageAccount[]>([]);
+  const [currentStoragePage, setCurrentStoragePage] = useState(1);
   const [isLoadingStorage, setIsLoadingStorage] = useState(false);
+  const storageProviderRef = useRef<typeof window.keeta | null>(null);
+  const storageDetailsCacheRef = useRef(new Map<string, StorageAccount>());
+  const storageDetailsLoadingRef = useRef(new Set<string>());
+
+  const paginatedStorageAccounts = useMemo(() => {
+    const start = (currentStoragePage - 1) * STORAGE_PAGE_SIZE;
+    const end = start + STORAGE_PAGE_SIZE;
+    return allStorageAccounts.slice(start, end);
+  }, [allStorageAccounts, currentStoragePage]);
+
+  const totalStoragePages = useMemo(() => {
+    if (allStorageAccounts.length === 0) {
+      return 1;
+    }
+
+    return Math.ceil(allStorageAccounts.length / STORAGE_PAGE_SIZE);
+  }, [allStorageAccounts.length]);
+
+  const hasPreviousStoragePage = currentStoragePage > 1;
+  const hasNextStoragePage = currentStoragePage < totalStoragePages;
+
+  const storagePageRange = useMemo(() => {
+    if (allStorageAccounts.length === 0) {
+      return { start: 0, end: 0 };
+    }
+
+    const start = (currentStoragePage - 1) * STORAGE_PAGE_SIZE + 1;
+    const end = Math.min(currentStoragePage * STORAGE_PAGE_SIZE, allStorageAccounts.length);
+    return { start, end };
+  }, [allStorageAccounts.length, currentStoragePage]);
+
+  const storageTotalCount = allStorageAccounts.length;
+  const isStorageEmpty = !isLoadingStorage && storageTotalCount === 0;
+  const isStoragePageLoading = isLoadingStorage || (storageTotalCount > 0 && storageAccounts.length === 0);
+
+  useEffect(() => {
+    setStorageAccounts(paginatedStorageAccounts);
+  }, [paginatedStorageAccounts]);
+
+  useEffect(() => {
+    if (currentStoragePage > totalStoragePages) {
+      setCurrentStoragePage(totalStoragePages);
+    }
+  }, [currentStoragePage, totalStoragePages]);
+
+  const handleStoragePageChange = useCallback((newPage: number) => {
+    setCurrentStoragePage((prevPage) => {
+      if (newPage < 1 || newPage > totalStoragePages || newPage === prevPage) {
+        return prevPage;
+      }
+      return newPage;
+    });
+  }, [totalStoragePages]);
 
   const isWalletBusy = isWalletLoading || isWalletFetching;
   const tokensLoading = isTokensLoading || isTokensFetching;
@@ -69,6 +129,414 @@ export default function HomePage() {
     return token?.ticker || address.slice(-4).toUpperCase();
   }, [tokens]);
 
+  const enrichStorageAccount = useCallback(async (account: StorageAccount): Promise<StorageAccount> => {
+    const cached = storageDetailsCacheRef.current.get(account.entity);
+    if (cached?.detailsLoaded) {
+      return cached;
+    }
+    if (!storageProviderRef.current) {
+      return {
+        ...account,
+        detailsLoaded: true,
+      };
+    }
+    const provider = storageProviderRef.current;
+
+    if (!provider) {
+      console.warn('[Storage] Provider not available during enrichment');
+      return {
+        ...account,
+        detailsLoaded: true,
+      };
+    }
+
+    try {
+      // Try to get actual balances from the storage account
+      let ktaBalance = '0.00';
+      let otherTokenBalance = '0.00';
+      let otherTokenSymbol = 'Unknown';
+
+      // Get account info to fetch balances
+      const accountInfo = await provider.getAccountInfo?.(account.entity);
+      console.log(`[Storage] Account info for ${account.entity}:`, accountInfo);
+
+      if (accountInfo && typeof accountInfo === 'object') {
+        if ('balances' in accountInfo && Array.isArray((accountInfo as any).balances)) {
+          const balances = (accountInfo as any).balances;
+
+          const ktaToken = tokens.find(t => t.isBaseToken);
+          if (ktaToken) {
+            const ktaBalanceEntry = balances.find((b: any) => 
+              b.token === ktaToken.address || b.tokenAddress === ktaToken.address
+            );
+            if (ktaBalanceEntry) {
+              ktaBalance = typeof ktaBalanceEntry.balance === 'string'
+                ? ktaBalanceEntry.balance
+                : ktaBalanceEntry.balance?.toString() || '0.00';
+            }
+          }
+
+          const otherTokenBalanceEntry = balances.find((b: any) => {
+            const tokenAddress = b.token || b.tokenAddress;
+            return tokenAddress && !tokens.find(t => t.address === tokenAddress)?.isBaseToken;
+          });
+
+          if (otherTokenBalanceEntry) {
+            const tokenAddress = otherTokenBalanceEntry.token || otherTokenBalanceEntry.tokenAddress;
+            otherTokenBalance = typeof otherTokenBalanceEntry.balance === 'string'
+              ? otherTokenBalanceEntry.balance
+              : otherTokenBalanceEntry.balance?.toString() || '0.00';
+            otherTokenSymbol = getTokenSymbolFromAddress(tokenAddress);
+          }
+        } else if ('tokens' in accountInfo && Array.isArray((accountInfo as any).tokens)) {
+          const accountTokens = (accountInfo as any).tokens;
+
+          const ktaToken = tokens.find(t => t.isBaseToken);
+          if (ktaToken) {
+            const ktaEntry = accountTokens.find((t: any) => 
+              t.address === ktaToken.address || t.tokenAddress === ktaToken.address
+            );
+            if (ktaEntry) {
+              ktaBalance = typeof ktaEntry.balance === 'string'
+                ? ktaEntry.balance
+                : ktaEntry.balance?.toString() || '0.00';
+            }
+          }
+
+          const otherTokenEntry = accountTokens.find((t: any) => {
+            const tokenAddress = t.address || t.tokenAddress;
+            return tokenAddress && !tokens.find(wt => wt.address === tokenAddress)?.isBaseToken;
+          });
+
+          if (otherTokenEntry) {
+            const tokenAddress = otherTokenEntry.address || otherTokenEntry.tokenAddress;
+            otherTokenBalance = typeof otherTokenEntry.balance === 'string'
+              ? otherTokenEntry.balance
+              : otherTokenEntry.balance?.toString() || '0.00';
+            otherTokenSymbol = getTokenSymbolFromAddress(tokenAddress);
+          }
+        }
+      }
+
+      if (otherTokenSymbol === 'Unknown') {
+        console.log(`[Storage] Attempting to fetch pool info for storage account: ${account.entity}`);
+
+        try {
+          const poolResponse = await fetch('http://localhost:8080/api/pools/list');
+
+          if (!poolResponse.ok) {
+            console.error(`[Storage] Backend API returned status ${poolResponse.status}`);
+          } else {
+            const text = await poolResponse.text();
+            if (!text || text.trim() === '') {
+              console.warn('[Storage] Backend API returned empty response');
+            } else {
+              const poolsData = JSON.parse(text);
+              console.log('[Storage] Pools data from backend:', poolsData);
+
+              const matchingPool = poolsData.pools?.find((pool: any) => {
+                return pool.storage_account === account.entity || pool.pool_id === account.entity;
+              });
+
+              if (matchingPool) {
+                const formatPoolBalance = (balance: string, decimals: number = 9): string => {
+                  try {
+                    const num = parseFloat(balance) / Math.pow(10, decimals);
+                    return num.toFixed(2);
+                  } catch {
+                    return '0.00';
+                  }
+                };
+
+                const tokenASymbol = matchingPool.token_a;
+                const tokenBSymbol = matchingPool.token_b;
+                const isTokenAKta = tokenASymbol === 'KTA';
+                const otherSymbol = isTokenAKta ? tokenBSymbol : tokenASymbol;
+
+                otherTokenSymbol = otherSymbol;
+
+                const rawKtaBalance = (isTokenAKta ? matchingPool.reserve_a : matchingPool.reserve_b) || '0';
+                const rawOtherBalance = (isTokenAKta ? matchingPool.reserve_b : matchingPool.reserve_a) || '0';
+
+                const ktaToken = tokens.find(t => t.ticker === 'KTA');
+                const otherToken = tokens.find(t => t.ticker === otherSymbol);
+
+                ktaBalance = formatPoolBalance(rawKtaBalance, ktaToken?.decimals || 9);
+                otherTokenBalance = formatPoolBalance(rawOtherBalance, otherToken?.decimals || 9);
+              }
+            }
+          }
+        } catch (poolError) {
+          console.error('[Storage] Error fetching pool data:', poolError);
+        }
+      }
+
+      const enrichedAccount = {
+        ...account,
+        ktaBalance,
+        otherTokenBalance,
+        otherTokenSymbol,
+        detailsLoaded: true,
+      };
+      storageDetailsCacheRef.current.set(enrichedAccount.entity, enrichedAccount);
+      return enrichedAccount;
+    } catch (error) {
+      console.error(`[Storage] Error enriching account ${account.entity}:`, error);
+      const enrichedAccount = {
+        ...account,
+        detailsLoaded: true,
+      };
+      storageDetailsCacheRef.current.set(enrichedAccount.entity, enrichedAccount);
+      return enrichedAccount;
+    }
+  }, [tokens, getTokenSymbolFromAddress]);
+
+  useEffect(() => {
+    if (paginatedStorageAccounts.length === 0) {
+      return;
+    }
+
+    paginatedStorageAccounts.forEach((account) => {
+      if (account.detailsLoaded || storageDetailsLoadingRef.current.has(account.entity)) {
+        return;
+      }
+
+      storageDetailsLoadingRef.current.add(account.entity);
+
+      enrichStorageAccount(account)
+        .then((updatedAccount) => {
+          setAllStorageAccounts((previous) => {
+            const index = previous.findIndex((item) => item.entity === updatedAccount.entity);
+            if (index === -1) {
+              return previous;
+            }
+
+            const next = [...previous];
+            next[index] = updatedAccount;
+            return next;
+          });
+        })
+        .catch((error) => {
+          console.error(`[Storage] Failed to enrich account ${account.entity}:`, error);
+        })
+        .finally(() => {
+          storageDetailsLoadingRef.current.delete(account.entity);
+        });
+    });
+  }, [paginatedStorageAccounts, enrichStorageAccount]);
+
+  const renderStorageContent = useCallback(() => {
+    if (isStoragePageLoading) {
+      return (
+        <div className="virtualized-card-list">
+          <div className="token-card-list">
+            <div className="virtual-table-empty flex items-center justify-center min-h-[300px]">
+              <div className="flex flex-col items-center gap-3">
+                <svg className="animate-spin h-8 w-8 text-accent" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                <span className="text-muted">Loading storage accounts...</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    if (isStorageEmpty) {
+      return (
+        <div className="virtualized-card-list">
+          <div className="token-card-list">
+            <div className="virtual-table-empty flex items-center justify-center min-h-[300px]">
+              <div className="flex flex-col items-center gap-3 text-center">
+                <Wallet className="h-12 w-12 text-muted opacity-50" />
+                <div>
+                  <p className="text-muted mb-2">No storage accounts found</p>
+                  <p className="text-sm text-faint">
+                    {isTradingEnabled 
+                      ? 'Your storage accounts will appear here' 
+                      : 'Enable trading to create a storage account'}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    if (storageAccounts.length === 0) {
+      return (
+        <div className="virtualized-card-list">
+          <div className="token-card-list">
+            <div className="virtual-table-empty flex items-center justify-center min-h-[300px]">
+              <div className="flex flex-col items-center gap-3">
+                <Wallet className="h-12 w-12 text-muted opacity-50" />
+                <span className="text-muted">No storage accounts on this page</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="w-full">
+        <table className="w-full">
+          <thead>
+            <tr className="border-b border-hairline">
+              <th className="text-left py-4 px-6 text-muted text-sm font-medium">
+                <div className="flex items-center gap-1">
+                  Storage Account
+                  <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M7 14l5-5 5 5z" />
+                  </svg>
+                </div>
+              </th>
+              <th className="text-right py-4 px-6 text-muted text-sm font-medium">
+                <div className="flex items-center justify-end gap-1">
+                  Status
+                  <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M7 14l5-5 5 5z" />
+                  </svg>
+                </div>
+              </th>
+              <th className="text-right py-4 px-6 text-muted text-sm font-medium">
+                <div className="flex items-center justify-end gap-1">
+                  Balance
+                  <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M7 14l5-5 5 5z" />
+                  </svg>
+                </div>
+              </th>
+              <th className="text-right py-4 px-6 text-muted text-sm font-medium">
+                <div className="flex items-center justify-end gap-1">
+                  Permissions
+                  <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+              </th>
+              <th className="text-right py-4 px-6 text-muted text-sm font-medium">
+                Owner
+              </th>
+              <th className="text-right py-4 px-6 text-muted text-sm font-medium">
+                Actions
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {storageAccounts.map((account, index) => (
+              <tr 
+                key={account.entity} 
+                className={`hover:bg-surface/50 transition-colors ${index !== storageAccounts.length - 1 ? 'border-b border-hairline' : ''}`}
+              >
+                <td className="py-4 px-6">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-full bg-accent/20 flex items-center justify-center flex-shrink-0">
+                      <Wallet className="h-4 w-4 text-accent" />
+                    </div>
+                    <div>
+                      <div className="text-foreground font-medium">{account.name || 'Storage Account'}</div>
+                      <div className="text-muted text-sm font-mono">
+                        {account.entity.slice(0, 10)}...{account.entity.slice(-6)}
+                      </div>
+                      {account.description && (
+                        <div className="text-xs text-faint mt-1">{account.description}</div>
+                      )}
+                    </div>
+                  </div>
+                </td>
+                <td className="py-4 px-6 text-right">
+                  <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-500/10 text-green-500 border border-green-500/20">
+                    Active
+                  </span>
+                </td>
+                <td className="py-4 px-6 text-right">
+                  <div className="space-y-1">
+                    <div className="text-foreground font-medium">
+                      {account.detailsLoaded ? `${account.ktaBalance || '0.00'} KTA` : 'Loading...'}
+                    </div>
+                    <div className="text-muted text-sm">
+                      {account.detailsLoaded ? `${account.otherTokenBalance || '0.00'} ${account.otherTokenSymbol || 'BASE'}` : 'Loading...'}
+                    </div>
+                  </div>
+                </td>
+                <td className="py-4 px-6 text-right">
+                  <div className="flex flex-wrap gap-1 justify-end">
+                    {account.permissions.slice(0, 2).map((perm, idx) => (
+                      <span 
+                        key={idx}
+                        className="inline-flex items-center px-2 py-1 rounded text-xs bg-surface text-muted border border-hairline"
+                      >
+                        {perm}
+                      </span>
+                    ))}
+                    {account.permissions.length > 2 && (
+                      <span className="inline-flex items-center px-2 py-1 rounded text-xs text-faint">
+                        +{account.permissions.length - 2}
+                      </span>
+                    )}
+                  </div>
+                </td>
+                <td className="py-4 px-6 text-right">
+                  <div className="text-muted text-sm font-mono">
+                    {account.principal ? `${account.principal.slice(0, 8)}...${account.principal.slice(-4)}` : '—'}
+                  </div>
+                </td>
+                <td className="py-4 px-6 text-right">
+                  <button className="text-accent hover:text-foreground transition-colors text-sm">
+                    Manage
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {storageTotalCount > 0 && (
+          <div className="px-6 py-4 border-t border-hairline flex items-center justify-between text-sm text-muted">
+            <span>
+              Showing {storagePageRange.start}-{storagePageRange.end} of {storageTotalCount}
+            </span>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => handleStoragePageChange(currentStoragePage - 1)}
+                disabled={!hasPreviousStoragePage}
+                className="inline-flex items-center gap-2 px-3 py-1.5 rounded-md border border-hairline text-sm font-medium text-muted transition-colors hover:text-foreground hover:bg-surface disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Previous
+              </button>
+              <span className="text-muted">
+                Page {currentStoragePage} of {totalStoragePages}
+              </span>
+              <button
+                type="button"
+                onClick={() => handleStoragePageChange(currentStoragePage + 1)}
+                disabled={!hasNextStoragePage}
+                className="inline-flex items-center gap-2 px-3 py-1.5 rounded-md border border-hairline text-sm font-medium text-muted transition-colors hover:text-foreground hover:bg-surface disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }, [
+    isStoragePageLoading,
+    isStorageEmpty,
+    storageAccounts,
+    isTradingEnabled,
+    storageTotalCount,
+    storagePageRange,
+    handleStoragePageChange,
+    currentStoragePage,
+    totalStoragePages,
+    hasPreviousStoragePage,
+    hasNextStoragePage,
+  ]);
 
   const handleReceive = useCallback(() => {
     console.log('Receive clicked');
@@ -95,17 +563,24 @@ export default function HomePage() {
         
         if (!provider) {
           console.warn('Keeta provider not available');
+          setAllStorageAccounts([]);
           setStorageAccounts([]);
           return;
+        }
+
+        if (storageProviderRef.current !== provider) {
+          storageProviderRef.current = provider;
         }
 
         // Use provider's listStorageAccounts method directly
         if (typeof provider.listStorageAccounts !== 'function') {
           console.warn('[Storage] listStorageAccounts not available on provider');
+          setAllStorageAccounts([]);
           setStorageAccounts([]);
           return;
         }
 
+        storageDetailsCacheRef.current.clear();
         const acls = await provider.listStorageAccounts();
         console.log('[Storage] Total storage ACLs fetched:', Array.isArray(acls) ? acls.length : 0);
         console.log('[Storage] Raw ACL data:', acls);
@@ -159,6 +634,7 @@ export default function HomePage() {
               otherTokenBalance: '0.00',
               otherTokenSymbol: 'BASE', // Default to BASE, will be updated if other tokens found
             created: Date.now(),
+            detailsLoaded: false,
           };
           } catch (mappingError) {
             console.error(`[Storage] Error mapping ACL ${index + 1}:`, mappingError);
@@ -174,228 +650,77 @@ export default function HomePage() {
         })));
         
         // Analyze ACL data to determine which tokens are stored in each storage account
-        const accountsWithBalances = await Promise.all(enrichedAccounts.map(async (account) => {
-          try {
-            // Get account info to fetch balances
-            const accountInfo = await provider.getAccountInfo?.(account.entity);
-            console.log(`[Storage] Account info for ${account.entity}:`, accountInfo);
-            
-            // Try to get actual balances from the storage account
-            let ktaBalance = '0.00';
-            let otherTokenBalance = '0.00';
-            let otherTokenSymbol = 'Unknown';
-            
-            // Check if accountInfo contains balance information
-            if (accountInfo && typeof accountInfo === 'object') {
-              console.log(`[Storage] Parsing account info for ${account.entity}:`, accountInfo);
-              console.log(`[Storage] Account info keys:`, Object.keys(accountInfo));
-              console.log(`[Storage] Has balances?`, 'balances' in accountInfo);
-              console.log(`[Storage] Has tokens?`, 'tokens' in accountInfo);
-              
-              // Try to extract balance information from accountInfo
-              // This depends on the structure of the accountInfo object
-              if ('balances' in accountInfo && Array.isArray((accountInfo as any).balances)) {
-                const balances = (accountInfo as any).balances;
-                
-                // Find KTA balance (base token)
-                const ktaToken = tokens.find(t => t.isBaseToken);
-                if (ktaToken) {
-                  const ktaBalanceEntry = balances.find((b: any) => 
-                    b.token === ktaToken.address || b.tokenAddress === ktaToken.address
-                  );
-                  if (ktaBalanceEntry) {
-                    ktaBalance = typeof ktaBalanceEntry.balance === 'string' 
-                      ? ktaBalanceEntry.balance 
-                      : ktaBalanceEntry.balance?.toString() || '0.00';
-                  }
-                }
-                
-                // Find other token balance (non-KTA)
-                const otherTokenBalanceEntry = balances.find((b: any) => {
-                  const tokenAddress = b.token || b.tokenAddress;
-                  return tokenAddress && !tokens.find(t => t.address === tokenAddress)?.isBaseToken;
-                });
-                
-                if (otherTokenBalanceEntry) {
-                  const tokenAddress = otherTokenBalanceEntry.token || otherTokenBalanceEntry.tokenAddress;
-                  otherTokenBalance = typeof otherTokenBalanceEntry.balance === 'string'
-                    ? otherTokenBalanceEntry.balance
-                    : otherTokenBalanceEntry.balance?.toString() || '0.00';
-                  console.log(`[Storage] Other token address found:`, tokenAddress);
-                  otherTokenSymbol = getTokenSymbolFromAddress(tokenAddress);
-                  console.log(`[Storage] Resolved token symbol:`, otherTokenSymbol);
-                }
-              } else if ('tokens' in accountInfo && Array.isArray((accountInfo as any).tokens)) {
-                // Alternative structure: tokens array
-                const accountTokens = (accountInfo as any).tokens;
-                
-                // Find KTA
-                const ktaToken = tokens.find(t => t.isBaseToken);
-                if (ktaToken) {
-                  const ktaEntry = accountTokens.find((t: any) => 
-                    t.address === ktaToken.address || t.tokenAddress === ktaToken.address
-                  );
-                  if (ktaEntry) {
-                    ktaBalance = typeof ktaEntry.balance === 'string' 
-                      ? ktaEntry.balance 
-                      : ktaEntry.balance?.toString() || '0.00';
-                  }
-                }
-                
-                // Find other token
-                const otherTokenEntry = accountTokens.find((t: any) => {
-                  const tokenAddress = t.address || t.tokenAddress;
-                  return tokenAddress && !tokens.find(wt => wt.address === tokenAddress)?.isBaseToken;
-                });
-                
-                if (otherTokenEntry) {
-                  const tokenAddress = otherTokenEntry.address || otherTokenEntry.tokenAddress;
-                  otherTokenBalance = typeof otherTokenEntry.balance === 'string'
-                    ? otherTokenEntry.balance
-                    : otherTokenEntry.balance?.toString() || '0.00';
-                  console.log(`[Storage] Other token address found (tokens array):`, tokenAddress);
-                  otherTokenSymbol = getTokenSymbolFromAddress(tokenAddress);
-                  console.log(`[Storage] Resolved token symbol (tokens array):`, otherTokenSymbol);
-                }
-              }
+        const accountsWithBalances = await Promise.all(
+          enrichedAccounts.map(async (account, index) => {
+            if (index >= STORAGE_PAGE_SIZE) {
+              return account;
             }
-            
-            // If no balance info in accountInfo, try to get pool information from backend
-            // Storage accounts are typically associated with liquidity pools
-            if (otherTokenSymbol === 'Unknown') {
-              console.log(`[Storage] Attempting to fetch pool info for storage account: ${account.entity}`);
-              
-              try {
-                // Query backend API for pool information
-                const poolResponse = await fetch('http://localhost:8080/api/pools/list');
-                
-                // Check if response is OK and has content
-                if (!poolResponse.ok) {
-                  console.error(`[Storage] Backend API returned status ${poolResponse.status}`);
-                } else {
-                  // Check if response has content before parsing
-                  const text = await poolResponse.text();
-                  if (!text || text.trim() === '') {
-                    console.warn(`[Storage] Backend API returned empty response`);
-                  } else {
-                
-                const poolsData = JSON.parse(text);
-                console.log(`[Storage] Pools data from backend:`, poolsData);
-                console.log(`[Storage] Looking for storage account:`, account.entity);
-                console.log(`[Storage] Available pool storage accounts:`, poolsData.pools?.map((p: any) => p.storage_account));
-                
-                // Find the pool that uses this storage account
-                const matchingPool = poolsData.pools?.find((pool: any) => {
-                  console.log(`[Storage] Checking pool:`, pool.id, 'storage_account:', pool.storage_account);
-                  return pool.storage_account === account.entity || pool.pool_id === account.entity;
-                });
-                
-                if (matchingPool) {
-                  console.log(`[Storage] Found matching pool:`, matchingPool);
-                  
-                  // Helper function to format pool balance from base units to display units
-                  const formatPoolBalance = (balance: string, decimals: number = 9): string => {
-                    try {
-                      const num = parseFloat(balance) / Math.pow(10, decimals);
-                      return num.toFixed(2);
-                    } catch {
-                      return '0.00';
-                    }
-                  };
-                  
-                  // Extract token symbols from pool data
-                  // token_a and token_b are token symbols (e.g., "KTA", "BASE"), not addresses
-                  const tokenASymbol = matchingPool.token_a;
-                  const tokenBSymbol = matchingPool.token_b;
-                  
-                  console.log(`[Storage] Token symbols from pool: ${tokenASymbol} / ${tokenBSymbol}`);
-                  
-                  // Determine which is KTA and which is the other token
-                  const isTokenAKta = tokenASymbol === 'KTA';
-                  const otherSymbol = isTokenAKta ? tokenBSymbol : tokenASymbol;
-                  
-                  otherTokenSymbol = otherSymbol;
-                  console.log(`[Storage] Determined token pair: KTA / ${otherTokenSymbol}`);
-                  
-                  // Get balances from pool reserves (in base units)
-                  const rawKtaBalance = (isTokenAKta ? matchingPool.reserve_a : matchingPool.reserve_b) || '0';
-                  const rawOtherBalance = (isTokenAKta ? matchingPool.reserve_b : matchingPool.reserve_a) || '0';
-                  
-                  // Find token decimals for proper formatting
-                  const ktaToken = tokens.find(t => t.ticker === 'KTA');
-                  const otherToken = tokens.find(t => t.ticker === otherSymbol);
-                  
-                  ktaBalance = formatPoolBalance(rawKtaBalance, ktaToken?.decimals || 9);
-                  otherTokenBalance = formatPoolBalance(rawOtherBalance, otherToken?.decimals || 9);
-                  
-                  console.log(`[Storage] Pool reserves: ${ktaBalance} KTA / ${otherTokenBalance} ${otherTokenSymbol}`);
-                }
-                  }
-                }
-              } catch (poolError) {
-                console.error(`[Storage] Error fetching pool data:`, poolError);
-              }
-            }
-            
-            console.log(`[Storage] Final balances for ${account.entity}:`, {
-              ktaBalance,
-              otherTokenBalance,
-              otherTokenSymbol
-            });
-            
-            return {
-              ...account,
-              ktaBalance,
-              otherTokenBalance,
-              otherTokenSymbol,
-            };
-          } catch (balanceError) {
-            console.error(`[Storage] Error fetching balance for ${account.entity}:`, balanceError);
-            return account; // Return account without balance updates
-          }
-        }));
-        
-        setStorageAccounts(accountsWithBalances);
+            const updatedAccount = await enrichStorageAccount(account);
+            return updatedAccount;
+          })
+        );
+
+        setAllStorageAccounts(accountsWithBalances);
+        setCurrentStoragePage(1);
+        storageDetailsLoadingRef.current.clear();
       } catch (error) {
         console.error('Failed to fetch storage accounts:', error);
+        setAllStorageAccounts([]);
         setStorageAccounts([]);
       } finally {
         setIsLoadingStorage(false);
       }
     }
-    
+
     fetchStorageAccounts();
-  }, [activeTab, isUnlocked, isTradingEnabled, tokens, getTokenSymbolFromAddress]);
+  }, [activeTab, isUnlocked, isTradingEnabled, tokens, getTokenSymbolFromAddress, enrichStorageAccount]);
 
   const fetchKtaPrice = useCallback(async () => {
     if (!window.keeta || isFetchingPrice.current) {
       console.debug('fetchKtaPrice: Skipping - no wallet or already fetching');
       return;
     }
-    
+
     isFetchingPrice.current = true;
     setIsLoadingPrice(true);
+
     try {
-      const priceData = await window.keeta?.getKtaPrice?.();
+      const provider = window.keeta;
+      let priceData: unknown = null;
+
+      if (typeof provider?.getKtaPrice === 'function') {
+        priceData = await provider.getKtaPrice();
+      } else if (typeof provider?.request === 'function') {
+        try {
+          priceData = await provider.request({ method: 'keeta_getKtaPrice' });
+        } catch (requestError) {
+          console.warn('Wallet provider request failed for keeta_getKtaPrice:', requestError);
+          priceData = null;
+        }
+      } else {
+        console.warn('Wallet provider does not expose getKtaPrice or request. Skipping price fetch.');
+        setKtaPriceData(null);
+        return;
+      }
+
       console.log('Price data received:', priceData);
-      if (priceData && typeof priceData === 'object' && priceData !== null) {
-        // The API returns the full price object with usd, usd_24h_change, etc.
-        const data = priceData as any;
+      if (priceData && typeof priceData === 'object') {
+        const data = priceData as Record<string, unknown>;
         if ('usd' in data) {
           const transformedData = {
-            usd: data.usd,
-            usd_24h_change: data.usd_24h_change || 0,
-            usd_market_cap: data.usd_market_cap,
-            usd_24h_vol: data.usd_24h_vol,
+            usd: Number(data.usd) || 0,
+            usd_24h_change: Number(data.usd_24h_change) || 0,
+            usd_market_cap: typeof data.usd_market_cap === 'number' ? data.usd_market_cap : undefined,
+            usd_24h_vol: Number(data.usd_24h_vol) || 0,
           };
           console.log('Setting KTA price data:', transformedData);
           setKtaPriceData(transformedData);
-        } else {
-          console.log('No usd price in wallet API response');
+          return;
         }
-      } else {
-        console.log('No price data received from wallet API');
       }
+
+      console.log('No price data received from wallet API');
+      setKtaPriceData(null);
     } catch (error) {
       console.error('Failed to fetch KTA price:', error);
       setKtaPriceData(null);
@@ -875,7 +1200,12 @@ export default function HomePage() {
                         ) : token.fallbackIcon ? (
                           <div
                             className="w-8 h-8 rounded-full flex items-center justify-center"
-                            style={getTokenIconColors(token.fallbackIcon.bgColor || '#6aa8ff', token.fallbackIcon.textColor || '#ffffff')}
+                            style={{
+                              '--bg-color': token.fallbackIcon.bgColor || '#6aa8ff',
+                              '--text-color': token.fallbackIcon.textColor || '#ffffff',
+                              backgroundColor: 'var(--bg-color)',
+                              color: 'var(--text-color)'
+                            } as React.CSSProperties}
                           >
                             <span className="text-xs font-bold">{token.fallbackIcon.letter}</span>
                           </div>
@@ -946,181 +1276,7 @@ export default function HomePage() {
           )}
 
           {/* Storage Tab - Virtualized Card List */}
-          {activeTab === 'storage' && isLoadingStorage ? (
-            <div className="virtualized-card-list">
-              <div className="token-card-list">
-                <div className="virtual-table-empty flex items-center justify-center min-h-[300px]">
-                  <div className="flex flex-col items-center gap-3">
-                    <svg className="animate-spin h-8 w-8 text-accent" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                    <span className="text-muted">Loading storage accounts...</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          ) : activeTab === 'storage' && storageAccounts.length === 0 ? (
-            <div className="virtualized-card-list">
-              <div className="token-card-list">
-                <div className="virtual-table-empty flex items-center justify-center min-h-[300px]">
-                  <div className="flex flex-col items-center gap-3 text-center">
-                    <Wallet className="h-12 w-12 text-muted opacity-50" />
-                    <div>
-                      <p className="text-muted mb-2">No storage accounts found</p>
-                      <p className="text-sm text-faint">
-                        {isTradingEnabled 
-                          ? 'Your storage accounts will appear here' 
-                          : 'Enable trading to create a storage account'}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          ) : activeTab === 'storage' ? (
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-hairline">
-                  <th className="text-left py-4 px-6 text-muted text-sm font-medium">
-                    <div className="flex items-center gap-1">
-                      Storage Account
-                      <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
-                        <path d="M7 14l5-5 5 5z" />
-                      </svg>
-                        </div>
-                  </th>
-                  <th className="text-right py-4 px-6 text-muted text-sm font-medium">
-                    <div className="flex items-center justify-end gap-1">
-                      Status
-                      <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
-                        <path d="M7 14l5-5 5 5z" />
-                      </svg>
-                      </div>
-                  </th>
-                  <th className="text-right py-4 px-6 text-muted text-sm font-medium">
-                    <div className="flex items-center justify-end gap-1">
-                      Balance
-                      <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
-                        <path d="M7 14l5-5 5 5z" />
-                      </svg>
-                        </div>
-                  </th>
-                  <th className="text-right py-4 px-6 text-muted text-sm font-medium">
-                    <div className="flex items-center justify-end gap-1">
-                      Permissions
-                      <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
-                        <path d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                      </svg>
-                      </div>
-                  </th>
-                  <th className="text-right py-4 px-6 text-muted text-sm font-medium">
-                    Owner
-                  </th>
-                  <th className="text-right py-4 px-6 text-muted text-sm font-medium">
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {isLoadingStorage ? (
-                  <tr>
-                    <td colSpan={6} className="py-12 text-center">
-                      <div className="flex flex-col items-center gap-3">
-                        <svg className="animate-spin h-8 w-8 text-accent" fill="none" viewBox="0 0 24 24">
-                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                        </svg>
-                        <span className="text-muted">Loading storage accounts...</span>
-                    </div>
-                    </td>
-                  </tr>
-                ) : storageAccounts.length === 0 ? (
-                  <tr>
-                    <td colSpan={6} className="py-12 text-center">
-                      <div className="flex flex-col items-center gap-3">
-                        <Wallet className="h-12 w-12 text-muted opacity-50" />
-                        <div className="text-center">
-                          <p className="text-muted mb-2">No storage accounts found</p>
-                          <p className="text-sm text-faint">
-                            {isTradingEnabled 
-                              ? 'Your storage accounts will appear here' 
-                              : 'Enable trading to create a storage account'}
-                          </p>
-                        </div>
-                      </div>
-                    </td>
-                  </tr>
-                ) : (
-                  storageAccounts.map((account, index) => (
-                    <tr 
-                      key={account.entity} 
-                      className={`hover:bg-surface/50 transition-colors ${index !== storageAccounts.length - 1 ? 'border-b border-hairline' : ''}`}
-                    >
-                      <td className="py-4 px-6">
-                        <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 rounded-full bg-accent/20 flex items-center justify-center flex-shrink-0">
-                            <Wallet className="h-4 w-4 text-accent" />
-                          </div>
-                          <div>
-                            <div className="text-foreground font-medium">{account.name || 'Storage Account'}</div>
-                            <div className="text-muted text-sm font-mono">
-                              {account.entity.slice(0, 10)}...{account.entity.slice(-6)}
-                            </div>
-                        {account.description && (
-                              <div className="text-xs text-faint mt-1">{account.description}</div>
-                            )}
-                          </div>
-                        </div>
-                      </td>
-                      <td className="py-4 px-6 text-right">
-                        <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-500/10 text-green-500 border border-green-500/20">
-                            Active
-                          </span>
-                      </td>
-                      <td className="py-4 px-6 text-right">
-                        <div className="space-y-1">
-                          <div className="text-foreground font-medium">
-                            {account.ktaBalance || '0.00'} KTA
-                        </div>
-                          <div className="text-muted text-sm">
-                            {account.otherTokenBalance || '0.00'} {account.otherTokenSymbol || 'BASE'}
-                          </div>
-                        </div>
-                      </td>
-                      <td className="py-4 px-6 text-right">
-                        <div className="flex flex-wrap gap-1 justify-end">
-                            {account.permissions.slice(0, 2).map((perm, idx) => (
-                              <span 
-                                key={idx}
-                                className="inline-flex items-center px-2 py-1 rounded text-xs bg-surface text-muted border border-hairline"
-                              >
-                                {perm}
-                              </span>
-                            ))}
-                            {account.permissions.length > 2 && (
-                              <span className="inline-flex items-center px-2 py-1 rounded text-xs text-faint">
-                                +{account.permissions.length - 2}
-                              </span>
-                            )}
-                          </div>
-                      </td>
-                      <td className="py-4 px-6 text-right">
-                        <div className="text-muted text-sm font-mono">
-                          {account.principal ? `${account.principal.slice(0, 8)}...${account.principal.slice(-4)}` : '—'}
-                          </div>
-                      </td>
-                      <td className="py-4 px-6 text-right">
-                        <button className="text-accent hover:text-foreground transition-colors text-sm">
-                          Manage
-                        </button>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          ) : null}
+          {activeTab === 'storage' && renderStorageContent()}
 
           {/* Other Tabs */}
           {activeTab === 'nfts' && (

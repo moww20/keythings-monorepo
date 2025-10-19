@@ -53,8 +53,10 @@ export function WizardProgress<T extends string = string>({
             >
               {isComplete ? <CheckCircle2 className="h-4 w-4" /> : index + 1}
             </div>
-            <span className="text-[11px] font-medium leading-tight">{step.title}</span>
-            {step.description ? (
+            {step.title?.trim() ? (
+              <span className="text-[11px] font-medium leading-tight">{step.title}</span>
+            ) : null}
+            {step.description?.trim() ? (
               <span className="text-[10px] text-muted">{step.description}</span>
             ) : null}
           </div>

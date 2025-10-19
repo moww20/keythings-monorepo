@@ -395,6 +395,8 @@ export async function approveDeclaration(
       body: JSON.stringify({
         declaration_id: payload.declarationId,
         approved: payload.approved,
+        maker_block_hash: payload.makerBlockHash,
+        maker_signed_block: payload.makerSignedBlock,
       }),
     },
   );

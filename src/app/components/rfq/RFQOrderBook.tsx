@@ -5,7 +5,6 @@ import { Clock3, ShieldAlert, ShieldCheck, Zap } from 'lucide-react';
 
 import { useRFQContext } from '@/app/contexts/RFQContext';
 import type { RFQOrder, RFQOrderStatus } from '@/app/types/rfq';
-import type { OrderSide } from '@/app/types/rfq';
 import { getMakerTokenSymbol, getTakerTokenSymbol } from '@/app/lib/token-utils';
 
 const STATUS_LABELS: Record<RFQOrderStatus, string> = {
@@ -53,50 +52,32 @@ function formatNumber(value: number, fractionDigits = 2): string {
   });
 }
 
-function sideLabel(order: RFQOrder): string {
-  const makerSymbol = getMakerTokenSymbol(order.pair, order.side) || 'token';
-  const takerSymbol = getTakerTokenSymbol(order.pair, order.side) || 'token';
-  return order.side === 'sell'
-    ? `Maker sells ${makerSymbol} for ${takerSymbol}`
-    : `Maker buys ${makerSymbol} with ${takerSymbol}`;
-}
-
 interface RFQOrderBookProps {
   onPairChange?: (pair: string) => void;
 }
 
 export function RFQOrderBook({ onPairChange }: RFQOrderBookProps = {}): React.JSX.Element {
-  const { pair, buckets, selectedOrder, selectOrder, recommendedPair } = useRFQContext();
-  const [sideFilter, setSideFilter] = useState<OrderSide>('sell');
+  const { tokenA, tokenB, pair, buckets, selectedOrder, selectOrder, recommendedPair } = useRFQContext();
   const [statusFilter, setStatusFilter] = useState<RFQOrderStatus>('open');
 
   const orders = useMemo(() => {
     const relevant = buckets[statusFilter] ?? [];
-    return relevant
-      .filter((order) => (sideFilter ? order.side === sideFilter : true))
-      .sort((left, right) => (sideFilter === 'buy' ? right.price - left.price : left.price - right.price));
-  }, [buckets, sideFilter, statusFilter]);
+    return relevant.sort((left, right) => right.price - left.price);
+  }, [buckets, statusFilter]);
+
+  const headerLabel = useMemo(() => {
+    if (tokenA?.symbol && tokenB?.symbol) {
+      return `${tokenA.symbol} → ${tokenB.symbol}`;
+    }
+    return pair || 'Select tokens';
+  }, [pair, tokenA?.symbol, tokenB?.symbol]);
 
   return (
     <div className="flex h-full flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="space-y-1">
-          <h2 className="text-lg font-semibold text-foreground">RFQ Order Book · {pair}</h2>
+          <h2 className="text-lg font-semibold text-foreground">RFQ Order Book · {headerLabel}</h2>
           <p className="text-xs text-muted">Direct maker quotes updated in real time.</p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          {(['sell', 'buy'] as OrderSide[]).map((side) => (
-            <button
-              key={side}
-              type="button"
-              onClick={() => setSideFilter(side)}
-              className={`rounded-full px-3 py-1 text-xs font-semibold transition-colors ${
-                sideFilter === side ? 'bg-accent text-white' : 'bg-surface-strong text-muted hover:text-foreground'
-              }`}
-            >
-              {side === 'sell' ? 'Asks' : 'Bids'}
-            </button>
-          ))}
         </div>
       </div>
 
@@ -157,6 +138,9 @@ function RFQOrderCard({ order, isSelected, onSelect }: RFQOrderCardProps): React
   const escrowRef = order.storageAccount ?? order.unsignedBlock;
   const makerSymbol = getMakerTokenSymbol(order.pair, order.side) || 'token';
   const takerSymbol = getTakerTokenSymbol(order.pair, order.side) || 'token';
+  const sideLabel = order.side === 'sell'
+    ? `Maker sells ${makerSymbol} for ${takerSymbol}`
+    : `Maker buys ${makerSymbol} with ${takerSymbol}`;
 
   return (
     <button
@@ -174,7 +158,7 @@ function RFQOrderCard({ order, isSelected, onSelect }: RFQOrderCardProps): React
         <div className="space-y-1">
           <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
             <span>${formatNumber(order.price, order.price > 10 ? 2 : 4)}</span>
-            <span className="text-xs font-medium text-muted">{sideLabel(order)}</span>
+            <span className="text-xs font-medium text-muted">{sideLabel}</span>
           </div>
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">
             <span>

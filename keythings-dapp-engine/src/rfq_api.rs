@@ -108,6 +108,8 @@ pub struct RFQDeclarationResponse {
 pub struct RFQApprovalRequest {
     pub declaration_id: String,
     pub approved: bool,
+    pub maker_block_hash: Option<String>,
+    pub maker_signed_block: Option<String>,
 }
 
 // In-memory storage for RFQ orders, makers, and declarations
@@ -404,43 +406,58 @@ pub async fn approve_declaration(
         // If approved, execute the atomic swap
         if payload.approved {
             if let Some(unsigned_block_hex) = &declaration.unsigned_atomic_swap_block {
-                // Convert hex string back to bytes
+                if payload.maker_signed_block.is_none() {
+                    log::warn!(
+                        "[RFQ] Maker approved declaration {} without signed block. Skipping on-chain execution.",
+                        payload.declaration_id
+                    );
+                }
+
+                // Convert stored string back to bytes. Prefer hex decoding, but fall back to raw bytes for JSON payloads.
                 let unsigned_block_bytes = match decode_hex(unsigned_block_hex) {
                     Ok(bytes) => bytes,
-                    Err(e) => {
-                        log::error!("[RFQ] Failed to decode unsigned block for declaration {}: {}", 
-                                   payload.declaration_id, e);
-                        return HttpResponse::InternalServerError().json(serde_json::json!({
-                            "error": "Failed to decode unsigned block"
-                        }));
+                    Err(err) => {
+                        log::warn!(
+                            "[RFQ] Unsigned block is not pure hex ({}). Falling back to raw bytes for declaration {}",
+                            err,
+                            payload.declaration_id
+                        );
+                        unsigned_block_hex.as_bytes().to_vec()
                     }
                 };
                 
-                // Execute atomic swap using Keeta RFQ manager
-                let mut keeta_manager = KEETA_RFQ_MANAGER.lock().unwrap();
-                match keeta_manager.execute_atomic_swap(
-                    &order_id,
-                    &unsigned_block_bytes,
-                    "maker_signature_placeholder", // In real implementation, this would be the actual maker signature
-                ).await {
-                    Ok(transaction_hash) => {
-                        log::info!("[RFQ] Atomic swap executed for declaration {} with tx: {}", 
-                                   payload.declaration_id, transaction_hash);
-                        
-                        // Update order status to filled
-                        let mut orders = RFQ_ORDERS.lock().unwrap();
-                        if let Some(order) = orders.get_mut(&order_id) {
-                            order.status = "filled".to_string();
-                            order.updated_at = chrono::Utc::now().to_rfc3339();
+                // Execute atomic swap using Keeta RFQ manager only if signed block is provided
+                if payload.maker_signed_block.is_some() {
+                    let mut keeta_manager = KEETA_RFQ_MANAGER.lock().unwrap();
+                    match keeta_manager.execute_atomic_swap(
+                        &order_id,
+                        &unsigned_block_bytes,
+                        payload.maker_signed_block.as_deref().unwrap_or("maker_signature_placeholder"),
+                    ).await {
+                        Ok(transaction_hash) => {
+                            log::info!("[RFQ] Atomic swap executed for declaration {} with tx: {}", 
+                                       payload.declaration_id, transaction_hash);
+                            
+                            // Update order status to filled
+                            let mut orders = RFQ_ORDERS.lock().unwrap();
+                            if let Some(order) = orders.get_mut(&order_id) {
+                                order.status = "filled".to_string();
+                                order.updated_at = chrono::Utc::now().to_rfc3339();
+                            }
+                        }
+                        Err(e) => {
+                            log::error!("[RFQ] Failed to execute atomic swap for declaration {}: {}", 
+                                       payload.declaration_id, e);
+                            return HttpResponse::InternalServerError().json(serde_json::json!({
+                                "error": format!("Failed to execute atomic swap: {}", e)
+                            }));
                         }
                     }
-                    Err(e) => {
-                        log::error!("[RFQ] Failed to execute atomic swap for declaration {}: {}", 
-                                   payload.declaration_id, e);
-                        return HttpResponse::InternalServerError().json(serde_json::json!({
-                            "error": format!("Failed to execute atomic swap: {}", e)
-                        }));
-                    }
+                } else {
+                    log::info!(
+                        "[RFQ] Maker signature missing for declaration {}. Backend recorded approval without settlement.",
+                        payload.declaration_id
+                    );
                 }
             } else {
                 log::error!("[RFQ] No unsigned block found for approved declaration {}", payload.declaration_id);

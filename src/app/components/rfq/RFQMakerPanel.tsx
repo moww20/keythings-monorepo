@@ -1,21 +1,20 @@
 'use client';
 
 import Image from 'next/image';
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, CheckCircle2, Loader2, Zap } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { AlertTriangle, CheckCircle2, ChevronDown, Loader2, Zap } from 'lucide-react';
 
 import { useMakerProfiles, useRFQContext } from '@/app/contexts/RFQContext';
-import type { RFQDeclaration, RFQMakerMeta, RFQQuoteDraft, RFQQuoteSubmission } from '@/app/types/rfq';
+import type { RFQMakerMeta, RFQQuoteDraft, RFQQuoteSubmission } from '@/app/types/rfq';
 import { useWallet } from '@/app/contexts/WalletContext';
 import { useProcessedTokens } from '@/app/hooks/useProcessedTokens';
 import { StorageAccountManager } from '@/app/lib/storage-account-manager';
 import { createPermissionPayload } from '@/app/lib/storage-account-manager';
-import { getMakerTokenAddressFromOrder, getMakerTokenSymbol, getTakerTokenAddress, getTakerTokenAddressFromOrder, getTakerTokenSymbol, toBaseUnits } from '@/app/lib/token-utils';
+import { getMakerTokenSymbol, getTakerTokenAddress, getTakerTokenAddressFromOrder, getTakerTokenSymbol, toBaseUnits } from '@/app/lib/token-utils';
 import { WizardProgress, type WizardProgressStep } from '../WizardProgress';
 
 import { useTokenMetadata } from '@/app/hooks/useTokenMetadata';
 import { encodeToBase64 } from '@/app/lib/encoding';
-import { approveDeclaration, fetchDeclarations } from '@/app/lib/rfq-api';
 
 const EXPIRY_PRESETS: Array<{ value: RFQQuoteDraft['expiryPreset']; label: string }> = [
   { value: '5m', label: '5 minutes' },
@@ -26,7 +25,6 @@ const EXPIRY_PRESETS: Array<{ value: RFQQuoteDraft['expiryPreset']; label: strin
 ];
 
 interface MakerDraftState {
-  side: RFQQuoteDraft['side'];
   price: string;
   size: string;
   minFill: string;
@@ -36,7 +34,6 @@ interface MakerDraftState {
 }
 
 const DEFAULT_DRAFT: MakerDraftState = {
-  side: 'sell',
   price: '',
   size: '',
   minFill: '',
@@ -73,23 +70,19 @@ const RFQ_STEP_SEQUENCE: WizardStep[] = ['details', 'review', 'creating', 'fundi
 const RFQ_WIZARD_STEPS: WizardProgressStep<WizardStep>[] = [
   {
     id: 'details',
-    title: 'Quote Details',
-    description: 'Configure price & size',
+    title: '',
   },
   {
     id: 'review',
-    title: 'Review & Confirm',
-    description: 'Check summary before signing',
+    title: '',
   },
   {
     id: 'creating',
-    title: 'Create Storage',
-    description: 'Wallet builds escrow account',
+    title: '',
   },
   {
     id: 'funding',
-    title: 'Fund & Publish',
-    description: 'Deposit tokens & publish RFQ',
+    title: '',
   },
 ];
 
@@ -114,12 +107,13 @@ interface RFQMakerPanelProps {
 }
 
 export function RFQMakerPanel({ mode, onModeChange, hideInternalTabs }: RFQMakerPanelProps): React.JSX.Element {
-  const { pair, createQuote, cancelQuote, selectedOrder } = useRFQContext();
+  const { tokenA, tokenB, pair, createQuote, cancelQuote, selectedOrder } = useRFQContext();
   const makerProfiles = useMakerProfiles();
   const { publicKey, isConnected, userClient, getTokenMetadata } = useWallet();
   const { tokens, isLoading: isLoadingTokens, error: tokensError, refreshTokens } = useProcessedTokens();
 
   const [draft, setDraft] = useState<MakerDraftState>(DEFAULT_DRAFT);
+  const [showAllTokens, setShowAllTokens] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -135,9 +129,12 @@ export function RFQMakerPanel({ mode, onModeChange, hideInternalTabs }: RFQMaker
   const [manualAddressError, setManualAddressError] = useState<string | null>(null);
 
   const [baseSymbol, quoteSymbol] = useMemo(() => {
+    if (tokenA?.symbol && tokenB?.symbol) {
+      return [tokenA.symbol, tokenB.symbol];
+    }
     const [base = '', quote = ''] = pair.split('/').map((symbol) => symbol.trim());
     return [base, quote];
-  }, [pair]);
+  }, [pair, tokenA?.symbol, tokenB?.symbol]);
 
   const completedSteps = useMemo(() => {
     const index = RFQ_STEP_SEQUENCE.indexOf(step);
@@ -147,14 +144,8 @@ export function RFQMakerPanel({ mode, onModeChange, hideInternalTabs }: RFQMaker
     return RFQ_STEP_SEQUENCE.slice(0, index) as WizardStep[];
   }, [step]);
 
-  // Declaration management state
-  const [declarations, setDeclarations] = useState<RFQDeclaration[]>([]);
-  const [isLoadingDeclarations, setIsLoadingDeclarations] = useState(false);
-  const [isApprovingDeclaration, setIsApprovingDeclaration] = useState<string | null>(null);
-
   // Token selection state
   const [selectedToken, setSelectedToken] = useState<string | null>(null);
-  const [isSelectingToken, setIsSelectingToken] = useState(false);
 
   // Get available tokens from processed tokens (same as Dashboard)
   const availableTokens = useMemo(() => {
@@ -162,32 +153,85 @@ export function RFQMakerPanel({ mode, onModeChange, hideInternalTabs }: RFQMaker
       return [];
     }
 
-    const normalizedBase = (baseSymbol && baseSymbol.trim().length > 0
-      ? baseSymbol.trim().toUpperCase()
-      : 'KTA');
+    const normalizedBase = baseSymbol?.trim().toUpperCase() ?? '';
+    const normalizedQuote = quoteSymbol?.trim().toUpperCase() ?? '';
+    const relevantSymbols = new Set(
+      [normalizedBase, normalizedQuote]
+        .map((symbol) => symbol.trim())
+        .filter((symbol) => symbol.length > 0),
+    );
 
     return tokens
       .filter((token) => {
-        // Filter out tokens with zero balance - use the raw balance string, not formattedAmount
-        const balance = parseFloat(token.balance);
+        const balance = Number.parseFloat(token.balance);
+        if (!Number.isFinite(balance) || balance <= 0) {
+          return false;
+        }
+
+        if (showAllTokens || relevantSymbols.size === 0) {
+          return true;
+        }
+
         const symbol = token.ticker?.toUpperCase();
-        const isBaseAsset = normalizedBase.length > 0 && symbol === normalizedBase;
-        return balance > 0 && !isBaseAsset;
+        if (!symbol) {
+          return false;
+        }
+
+        return relevantSymbols.size === 0 || relevantSymbols.has(symbol);
       })
       .map((token) => ({
         address: token.address,
         symbol: token.ticker,
-        balance: token.formattedAmount, // Use the already formatted amount from Dashboard
+        balance: token.formattedAmount,
         decimals: token.decimals,
-        name: token.name
+        name: token.name,
       }))
       .sort((a, b) => {
-        // Sort by balance (highest first) - use the raw balance for sorting
-        const balanceA = parseFloat(tokens.find(t => t.address === a.address)?.balance || '0');
-        const balanceB = parseFloat(tokens.find(t => t.address === b.address)?.balance || '0');
+        const balanceA = Number.parseFloat(tokens.find((entry) => entry.address === a.address)?.balance ?? '0');
+        const balanceB = Number.parseFloat(tokens.find((entry) => entry.address === b.address)?.balance ?? '0');
         return balanceB - balanceA;
       });
-  }, [tokens, baseSymbol]);
+  }, [tokens, baseSymbol, quoteSymbol, showAllTokens]);
+
+  const selectedTokenInfo = useMemo(() => {
+    if (!selectedToken) {
+      return null;
+    }
+    return availableTokens.find((token) => token.address === selectedToken) ?? null;
+  }, [availableTokens, selectedToken]);
+
+  const selectedTokenMeta = useMemo(() => {
+    if (!selectedToken) {
+      return null;
+    }
+    return tokens.find((token) => token.address === selectedToken) ?? null;
+  }, [tokens, selectedToken]);
+
+  const [isTokenDropdownOpen, setIsTokenDropdownOpen] = useState(false);
+  const tokenDropdownRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const handleClickAway = (event: MouseEvent) => {
+      if (!tokenDropdownRef.current || !(event.target instanceof Node)) {
+        return;
+      }
+      if (!tokenDropdownRef.current.contains(event.target)) {
+        setIsTokenDropdownOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickAway);
+    return () => {
+      document.removeEventListener('mousedown', handleClickAway);
+    };
+  }, []);
+
+  const makerSymbolDisplay = useMemo(() => {
+    if (selectedOrder) {
+      return getMakerTokenSymbol(selectedOrder.pair, selectedOrder.side) || baseSymbol || 'Token';
+    }
+    return baseSymbol || 'Token';
+  }, [selectedOrder, baseSymbol]);
 
   // Auto-select first token when available and reset invalid selections
   useEffect(() => {
@@ -278,13 +322,9 @@ export function RFQMakerPanel({ mode, onModeChange, hideInternalTabs }: RFQMaker
     return selectedOrder.maker.id === publicKey ? selectedOrder : undefined;
   }, [selectedOrder, publicKey]);
 
-  const makerDraftSymbol = useMemo(() => {
-    return draft.side === 'sell' ? baseSymbol || 'base' : quoteSymbol || 'quote';
-  }, [draft.side, baseSymbol, quoteSymbol]);
+  const makerDraftSymbol = useMemo(() => baseSymbol || 'base', [baseSymbol]);
 
-  const takerDraftSymbol = useMemo(() => {
-    return draft.side === 'sell' ? quoteSymbol || 'quote' : baseSymbol || 'base';
-  }, [draft.side, baseSymbol, quoteSymbol]);
+  const takerDraftSymbol = useMemo(() => quoteSymbol || 'quote', [quoteSymbol]);
 
   const reviewSubmission = useMemo<RFQQuoteSubmission | null>(() => {
     if (step !== 'review') {
@@ -297,7 +337,7 @@ export function RFQMakerPanel({ mode, onModeChange, hideInternalTabs }: RFQMaker
 
     return {
       pair,
-      side: draft.side,
+      side: 'sell',
       price: draft.price,
       size: draft.size,
       minFill: draft.minFill || undefined,
@@ -306,7 +346,7 @@ export function RFQMakerPanel({ mode, onModeChange, hideInternalTabs }: RFQMaker
       autoSignProfileId: draft.autoSignProfileId || undefined,
       maker: makerProfile,
     };
-  }, [currentSubmission, draft.allowlistLabel, draft.autoSignProfileId, draft.expiryPreset, draft.price, draft.side, draft.size, draft.minFill, makerProfile, pair, step]);
+  }, [currentSubmission, draft.allowlistLabel, draft.autoSignProfileId, draft.expiryPreset, draft.price, draft.size, draft.minFill, makerProfile, pair, step]);
 
   const handleCopyOrderId = useCallback(() => {
     if (selectedMakerOrder) {
@@ -601,7 +641,7 @@ export function RFQMakerPanel({ mode, onModeChange, hideInternalTabs }: RFQMaker
 
     const submission: RFQQuoteSubmission = {
       pair,
-      side: draft.side,
+      side: 'sell',
       price: draft.price,
       size: draft.size,
       minFill: draft.minFill || undefined,
@@ -725,158 +765,6 @@ export function RFQMakerPanel({ mode, onModeChange, hideInternalTabs }: RFQMaker
     setIsPublishing(false);
   }, []);
 
-  // Declaration management functions
-  const loadDeclarations = useCallback(async () => {
-    if (!selectedOrder) return;
-
-    setIsLoadingDeclarations(true);
-    try {
-      const fetchedDeclarations = await fetchDeclarations(selectedOrder.id);
-      setDeclarations(fetchedDeclarations);
-    } catch (error) {
-      console.error('Failed to load declarations:', error);
-      setError('Failed to load declarations');
-    } finally {
-      setIsLoadingDeclarations(false);
-    }
-  }, [selectedOrder]);
-
-  const handleApproveDeclaration = useCallback(async (declaration: RFQDeclaration) => {
-    if (!selectedOrder) {
-      setError('Missing order data');
-      return;
-    }
-
-    if (!userClient) {
-      setError('Wallet not connected');
-      return;
-    }
-
-    setIsApprovingDeclaration(declaration.id);
-    setError(null);
-
-    try {
-      setProgressMessage('Preparing atomic swap transaction for signing...');
-
-      if (!declaration.unsignedAtomicSwapBlock) {
-        throw new Error('No unsigned atomic swap block found in declaration');
-      }
-
-      let parsedPayload: Record<string, unknown>;
-      try {
-        parsedPayload = JSON.parse(declaration.unsignedAtomicSwapBlock) as Record<string, unknown>;
-      } catch {
-        throw new Error('Failed to parse atomic swap declaration data');
-      }
-
-      const metadata = parsedPayload.metadata as Record<string, unknown> | undefined;
-      const takerSection = metadata?.taker as Record<string, unknown> | undefined;
-      const takerReceives = takerSection?.receives as Record<string, unknown> | undefined;
-      const takerSends = takerSection?.sends as Record<string, unknown> | undefined;
-
-      if (!takerReceives || !takerSends) {
-        throw new Error('Declaration metadata is missing taker operation details.');
-      }
-
-      const makerTokenAddress = getMakerTokenAddressFromOrder(selectedOrder);
-      const takerTokenAddress = getTakerTokenAddressFromOrder(selectedOrder);
-
-      if (takerReceives.token !== makerTokenAddress || takerSends.token !== takerTokenAddress) {
-        throw new Error('Declaration tokens do not match the RFQ order.');
-      }
-
-      const storageAccountAddress = (takerReceives.from as string | null | undefined) ?? selectedOrder.storageAccount ?? selectedOrder.unsignedBlock;
-      if (!isValidKeetaAddress(storageAccountAddress)) {
-        throw new Error('Declaration is missing a valid storage account reference.');
-      }
-
-      const receiveAmount = String(takerReceives.amount ?? '');
-      const sendAmount = String(takerSends.amount ?? '');
-
-      if (receiveAmount.length === 0 || sendAmount.length === 0) {
-        throw new Error('Declaration amounts are incomplete.');
-      }
-
-      const builder = userClient.initBuilder();
-      if (!builder) {
-        throw new Error('Wallet did not provide a transaction builder for approval.');
-      }
-
-      const receiveFn = (builder as { receive?: (...args: unknown[]) => unknown }).receive;
-      const sendFn = (builder as { send?: (...args: unknown[]) => unknown }).send;
-
-      if (typeof receiveFn !== 'function' || typeof sendFn !== 'function') {
-        throw new Error('Wallet builder does not support required operations.');
-      }
-
-      const storageAccount = { publicKeyString: storageAccountAddress };
-      const makerAccount = { publicKeyString: selectedOrder.maker.id };
-      const makerTokenRef = { publicKeyString: makerTokenAddress };
-      const takerTokenRef = { publicKeyString: takerTokenAddress };
-
-      await Promise.resolve(receiveFn.call(builder, storageAccount, receiveAmount, makerTokenRef));
-      await Promise.resolve(sendFn.call(builder, makerAccount, sendAmount, takerTokenRef));
-
-      await userClient.publishBuilder(builder);
-
-      setProgressMessage(null);
-      setSuccess('Atomic swap executed successfully.');
-
-      await approveDeclaration(selectedOrder.id, {
-        declarationId: declaration.id,
-        approved: true,
-      });
-
-      await loadDeclarations();
-    } catch (error) {
-      setError(error instanceof Error ? error.message : 'Failed to approve declaration');
-      setProgressMessage(null);
-    } finally {
-      setIsApprovingDeclaration(null);
-    }
-  }, [selectedOrder, loadDeclarations, userClient]);
-
-  const handleRejectDeclaration = useCallback(async (declaration: RFQDeclaration) => {
-    if (!selectedOrder) {
-      setError('Missing order data');
-      return;
-    }
-
-    try {
-      await approveDeclaration(selectedOrder.id, {
-        declarationId: declaration.id,
-        approved: false,
-      });
-
-      setSuccess(`Declaration rejected for taker ${shorten(declaration.takerAddress)}.`);
-
-      // Refresh declarations
-      await loadDeclarations();
-    } catch (error) {
-      console.error('Failed to reject declaration:', error);
-      setError(error instanceof Error ? error.message : 'Failed to reject declaration');
-    }
-  }, [selectedOrder, loadDeclarations]);
-
-  // Load declarations when selectedOrder changes
-  useEffect(() => {
-    if (selectedOrder) {
-      loadDeclarations();
-    }
-  }, [selectedOrder, loadDeclarations]);
-
-  // Auto-refresh declarations every 5 seconds when an order is selected
-  useEffect(() => {
-    if (!selectedOrder) return;
-
-    const interval = setInterval(() => {
-      console.log('[RFQMakerPanel] Auto-refreshing declarations...');
-      loadDeclarations();
-    }, 5000); // Poll every 5 seconds
-
-    return () => clearInterval(interval);
-  }, [selectedOrder, loadDeclarations]);
-
   // Helper function for expiry calculation
   function getExpiryMs(preset: '5m' | '15m' | '1h' | '4h' | '24h'): number {
     const msPerMinute = 60 * 1000;
@@ -923,20 +811,8 @@ export function RFQMakerPanel({ mode, onModeChange, hideInternalTabs }: RFQMaker
       )}
 
       <div className="flex items-center justify-between gap-3">
-        <div>
-          <p className="text-xs uppercase tracking-wide text-muted">Quote Builder</p>
-          <h3 className="text-lg font-semibold text-foreground">Publish RFQ</h3>
-          <p className="text-xs text-muted">Follow the guided steps to post partially signed quotes that auto-fill via maker webhook.</p>
-        </div>
-        <div className="rounded-full bg-surface-strong px-3 py-1 text-[11px] font-medium text-muted">
-          Maker profile · {trimPubkey(publicKey)}
-        </div>
+        <p className="text-xs text-muted">Publish an order and fund it.</p>
       </div>
-
-      <div className="rounded-lg border border-dashed border-hairline bg-surface px-3 py-2 text-xs text-muted">
-        Create and publish RFQ quotes to provide liquidity to the market. Complete each step to review details before signing.
-      </div>
-
       <WizardProgress
         steps={RFQ_WIZARD_STEPS}
         currentStep={step === 'creating' ? 'creating' : step}
@@ -966,7 +842,7 @@ export function RFQMakerPanel({ mode, onModeChange, hideInternalTabs }: RFQMaker
       {/* Progress Message */}
       {progressMessage && (
         <div className="p-4 rounded-lg bg-accent/10 border border-accent/30 flex items-start gap-3">
-          <Loader2 className="h-5 w-5 text-accent flex-shrink-0 animate-spin" />
+          <Loader2 className="h-5 w-5 text-accent animate-spin" />
           <div className="flex-1">
             <p className="text-sm text-accent">{progressMessage}</p>
           </div>
@@ -1059,7 +935,7 @@ export function RFQMakerPanel({ mode, onModeChange, hideInternalTabs }: RFQMaker
               ) : availableTokens.length === 0 ? (
                 <div className="space-y-2">
                   <div className="text-sm text-muted">
-                    No tokens found in your wallet. Please add some tokens to create a quote.
+                    No eligible tokens found. Fund your wallet with the quote asset to create a maker RFQ.
                   </div>
                   <button
                     type="button"
@@ -1070,147 +946,42 @@ export function RFQMakerPanel({ mode, onModeChange, hideInternalTabs }: RFQMaker
                   </button>
                 </div>
               ) : (
-                <div className="space-y-2">
-                  {/* Selected Token Display */}
-                  {selectedToken && !isSelectingToken && (
-                    <div className="flex items-center gap-3 p-3 rounded-lg border border-hairline bg-surface">
-                      {(() => {
-                        const token = availableTokens.find(t => t.address === selectedToken);
-                        if (!token) return null;
-
-                        // Get the full token data from processed tokens
-                        const fullToken = tokens.find(t => t.address === selectedToken);
-
-                        return (
-                          <>
-                            {/* Token Icon */}
-                            <div className="w-8 h-8 rounded-full bg-accent/20 flex items-center justify-center flex-shrink-0">
-                              {fullToken?.icon ? (
-                                <Image
-                                  src={fullToken.icon}
-                                  alt={token.symbol}
-                                  width={24}
-                                  height={24}
-                                  unoptimized
-                                  className="w-6 h-6 rounded-full object-cover"
-                                />
-                              ) : fullToken?.fallbackIcon ? (
-                                <div
-                                  className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold"
-                                  style={{
-                                    backgroundColor: fullToken.fallbackIcon.bgColor || '#6aa8ff',
-                                    color: fullToken.fallbackIcon.textColor || '#ffffff'
-                                  }}
-                                >
-                                  {fullToken.fallbackIcon.letter}
-                                </div>
-                              ) : (
-                                <span className="text-accent font-bold text-sm">
-                                  {token.symbol.charAt(0)}
-                                </span>
-                              )}
-                            </div>
-
-                            {/* Token Info */}
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2">
-                                <span className="font-medium text-foreground">{token.symbol}</span>
-                                <span className="text-xs text-muted">{token.name}</span>
-                              </div>
-                              <div className="text-sm text-muted">
-                                Balance: {token.balance} {token.symbol}
-                              </div>
-                            </div>
-
-                            {/* Change Button */}
-                            <button
-                              type="button"
-                              onClick={() => setIsSelectingToken(true)}
-                              className="text-xs text-accent hover:text-accent/80 transition-colors"
-                            >
-                              Change
-                            </button>
-                          </>
-                        );
-                      })()}
-                    </div>
-                  )}
-
-                  {/* Token Selection Dropdown */}
-                  {(!selectedToken || isSelectingToken) && (
-                    <div className="space-y-2">
-                      {/* Cancel Button (only show when changing selection) */}
-                      {isSelectingToken && selectedToken && (
-                        <button
-                          type="button"
-                          onClick={() => setIsSelectingToken(false)}
-                          className="w-full flex items-center justify-center gap-2 p-2 rounded-lg border border-hairline bg-surface hover:bg-surface-strong transition-colors text-sm text-muted"
-                        >
-                          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                          </svg>
-                          Cancel
-                        </button>
-                      )}
-
-                      {/* Token List */}
-                      <div className="max-h-48 overflow-y-auto space-y-2">
+                <div ref={tokenDropdownRef} className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setIsTokenDropdownOpen((previous) => !previous)}
+                    className="flex w-full items-center justify-between rounded-lg border border-hairline bg-[#1a1c22] px-3 py-2 text-left text-sm text-foreground transition-colors hover:border-accent/60 focus:border-accent focus:outline-none"
+                  >
+                    {selectedTokenInfo ? (
+                      <span className="truncate">
+                        {selectedTokenInfo.symbol} · {selectedTokenInfo.balance}
+                      </span>
+                    ) : (
+                      <span className="text-muted">Select a funding token</span>
+                    )}
+                    <ChevronDown className={`h-4 w-4 transition-transform ${isTokenDropdownOpen ? 'rotate-180' : ''}`} />
+                  </button>
+                  {isTokenDropdownOpen && (
+                    <div className="absolute z-20 mt-2 w-full overflow-hidden rounded-lg border border-hairline bg-[#1f2127] shadow-lg">
+                      <div className="max-h-60 overflow-y-auto py-1">
                         {availableTokens.map((token) => {
-                          const fullToken = tokens.find(t => t.address === token.address);
-
+                          const fullToken = tokens.find((entry) => entry.address === token.address);
+                          const isActive = token.address === selectedToken;
                           return (
                             <button
                               key={token.address}
                               type="button"
                               onClick={() => {
                                 setSelectedToken(token.address);
-                                setIsSelectingToken(false);
+                                setIsTokenDropdownOpen(false);
                               }}
-                              className="w-full flex items-center gap-3 p-3 rounded-lg border border-hairline bg-surface hover:bg-surface-strong transition-colors text-left"
+                              className={`flex w-full items-center px-3 py-2 text-left text-sm transition-colors ${
+                                isActive
+                                  ? 'bg-[#272a33] text-foreground'
+                                  : 'bg-[#1f2127] text-muted hover:bg-[#272a33] hover:text-foreground'
+                              }`}
                             >
-                              {/* Token Icon */}
-                              <div className="w-8 h-8 rounded-full bg-accent/20 flex items-center justify-center flex-shrink-0">
-                                {fullToken?.icon ? (
-                                  <Image
-                                    src={fullToken.icon}
-                                    alt={token.symbol}
-                                    width={24}
-                                    height={24}
-                                    unoptimized
-                                    className="w-6 h-6 rounded-full object-cover"
-                                  />
-                                ) : fullToken?.fallbackIcon ? (
-                                  <div
-                                    className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold"
-                                    style={{
-                                      backgroundColor: fullToken.fallbackIcon.bgColor || '#6aa8ff',
-                                      color: fullToken.fallbackIcon.textColor || '#ffffff'
-                                    }}
-                                  >
-                                    {fullToken.fallbackIcon.letter}
-                                  </div>
-                                ) : (
-                                  <span className="text-accent font-bold text-sm">
-                                    {token.symbol.charAt(0)}
-                                  </span>
-                                )}
-                              </div>
-
-                              {/* Token Info */}
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-2">
-                                  <span className="font-medium text-foreground">{token.symbol}</span>
-                                  <span className="text-xs text-muted">{token.name}</span>
-                                </div>
-                                <div className="text-sm text-muted">
-                                  Balance: {token.balance} {token.symbol}
-                                </div>
-                              </div>
-
-                              {/* Select Arrow */}
-                              <svg className="h-4 w-4 text-muted flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                              </svg>
+                              {token.symbol} · {token.balance}
                             </button>
                           );
                         })}
@@ -1221,68 +992,52 @@ export function RFQMakerPanel({ mode, onModeChange, hideInternalTabs }: RFQMaker
               )}
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-xs text-muted mb-0.5">Side</label>
-                <div className="relative">
-                  <select
-                    value={draft.side}
-                    onChange={(event) => setDraft((previous) => ({ ...previous, side: event.target.value as 'sell' | 'buy' }))}
-                    className="w-full rounded-lg border border-hairline bg-surface-strong px-3 py-2 pr-8 text-sm text-foreground focus:border-accent focus:outline-none appearance-none cursor-pointer"
-                    aria-label="Select order side"
-                  >
-                    <option value="sell" style={{ backgroundColor: 'var(--surface-strong)', color: 'var(--foreground)' }}>
-                      Sell (maker provides {baseSymbol || 'base'})
-                    </option>
-                    <option value="buy" style={{ backgroundColor: 'var(--surface-strong)', color: 'var(--foreground)' }}>
-                      Buy (maker provides {quoteSymbol || 'quote'})
-                    </option>
-                  </select>
-
-                  {/* Custom dropdown arrow */}
-                  <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
-                    <svg className="h-4 w-4 text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                    </svg>
-                  </div>
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-muted">Size</label>
+                  <input
+                    type="number"
+                    step="0.000001"
+                    value={draft.size}
+                    onChange={(e) => setDraft(prev => ({ ...prev, size: e.target.value }))}
+                    placeholder="0.00"
+                    className="w-full rounded-lg border border-hairline bg-surface px-3 py-2 text-sm text-foreground focus:border-accent focus:outline-none"
+                  />
+                  <p className="mt-1 text-[11px] text-muted">
+                    Size is entered in {baseSymbol || 'base token'} units.
+                  </p>
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-muted">Price</label>
+                  <input
+                    type="number"
+                    step="0.000001"
+                    value={draft.price}
+                    onChange={(e) => setDraft(prev => ({ ...prev, price: e.target.value }))}
+                    placeholder="0.00"
+                    className="w-full rounded-lg border border-hairline bg-surface px-3 py-2 text-sm text-foreground focus:border-accent focus:outline-none"
+                  />
+                  <p className="mt-1 text-[11px] text-muted">
+                    Price is quoted in {quoteSymbol || 'quote token'} per unit.
+                  </p>
                 </div>
               </div>
-              <div>
-                <label className="mb-1 block text-xs font-medium text-muted">Size</label>
-                <input
-                  type="number"
-                  step="0.000001"
-                  value={draft.size}
-                  onChange={(e) => setDraft(prev => ({ ...prev, size: e.target.value }))}
-                  placeholder="0.00"
-                  className="w-full rounded-lg border border-hairline bg-surface px-3 py-2 text-sm text-foreground focus:border-accent focus:outline-none"
-                />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-3 pt-3">
-              <div>
-                <label className="mb-1 block text-xs font-medium text-muted">Price</label>
-                <input
-                  type="number"
-                  step="0.000001"
-                  value={draft.price}
-                  onChange={(e) => setDraft(prev => ({ ...prev, price: e.target.value }))}
-                  placeholder="0.00"
-                  className="w-full rounded-lg border border-hairline bg-surface px-3 py-2 text-sm text-foreground focus:border-accent focus:outline-none"
-                />
-              </div>
+
               <div>
                 <label className="mb-1 block text-xs font-medium text-muted">Expires In</label>
                 <div className="relative">
                   <select
                     value={draft.expiryPreset}
-                    onChange={(e) => setDraft(prev => ({ ...prev, expiryPreset: e.target.value as RFQQuoteDraft['expiryPreset'] }))}
-                    className="w-full rounded-lg border border-hairline bg-surface-strong px-3 py-2 pr-8 text-sm text-foreground focus:border-accent focus:outline-none appearance-none cursor-pointer"
-                    aria-label="Select expiry time"
+                    onChange={(event) =>
+                      setDraft((previous) => ({ ...previous, expiryPreset: event.target.value as RFQQuoteDraft['expiryPreset'] }))
+                    }
+                    className="w-full rounded-lg border border-hairline bg-[#1a1c22] px-3 py-2 pr-8 text-sm text-foreground focus:border-accent focus:outline-none appearance-none cursor-pointer"
+                    aria-label="Select expiration"
                   >
-                    {EXPIRY_PRESETS.map((preset) => (
-                      <option key={preset.value} value={preset.value} style={{ backgroundColor: 'var(--surface-strong)', color: 'var(--foreground)' }}>
-                        {preset.label}
+                    {EXPIRY_PRESETS.map((option) => (
+                      <option key={option.value} value={option.value} style={{ backgroundColor: '#1f2127', color: 'var(--foreground)' }}>
+                        {option.label}
                       </option>
                     ))}
                   </select>
@@ -1464,19 +1219,6 @@ export function RFQMakerPanel({ mode, onModeChange, hideInternalTabs }: RFQMaker
         )}
       </div>
 
-
-      {/* Selected Order Info now shown in RFQ Orders */}
-
-      <div className="space-y-3 rounded-lg border border-hairline bg-surface-strong p-3 text-xs text-muted">
-        <div className="flex items-center justify-between">
-          <span>Fills completed</span>
-          <span className="text-foreground">{makerProfile.fillsCompleted}</span>
-        </div>
-        <div className="flex items-center justify-between">
-          <span>Failure rate</span>
-          <span className="text-foreground">{(makerProfile.failureRate * 100).toFixed(1)}%</span>
-        </div>
-      </div>
     </>
   );
 

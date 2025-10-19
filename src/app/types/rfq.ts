@@ -72,6 +72,7 @@ export interface RFQDeclaration {
   declaredAt: string;
   status: DeclarationStatus;
   unsignedAtomicSwapBlock?: string;
+  makerBlockHash?: string | null;
 }
 
 export interface RFQDeclarationRequest {
@@ -88,5 +89,7 @@ export interface RFQDeclarationResponse {
 export interface RFQApprovalRequest {
   declarationId: string;
   approved: boolean;
+  makerBlockHash?: string | null;
+  makerSignedBlock?: string | null;
 }
 
