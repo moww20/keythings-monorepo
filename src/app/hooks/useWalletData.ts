@@ -235,7 +235,7 @@ export function useWalletData() {
 
       if (typeof provider.request === 'function') {
         accounts = await provider.request({
-          method: 'eth_requestAccounts',
+          method: 'keeta_requestAccounts',
           // Don't request any additional permissions here
           params: [],
         });
