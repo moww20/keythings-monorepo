@@ -94,6 +94,11 @@ export function useExplorerData() {
         if (keeta.getAllBalances) {
           console.log('[EXPLORER_DATA] Getting balances...');
           try {
+            // First ensure we have read capabilities
+            if (keeta.requestCapabilities) {
+              console.log('[EXPLORER_DATA] Requesting read capabilities for balances...');
+              await keeta.requestCapabilities(['read']);
+            }
             const balances = await keeta.getAllBalances();
             console.log('[EXPLORER_DATA] Raw balances:', balances);
           
@@ -167,6 +172,11 @@ export function useExplorerData() {
       try {
         console.log('[EXPLORER_DATA] Attempting to get transaction history...');
         if (keeta.history && typeof keeta.history === 'function') {
+          // First ensure we have read capabilities
+          if (keeta.requestCapabilities) {
+            console.log('[EXPLORER_DATA] Requesting read capabilities for history...');
+            await keeta.requestCapabilities(['read']);
+          }
           const historyResult = await keeta.history({ depth: 10 });
           console.log('[EXPLORER_DATA] History result:', historyResult);
           
