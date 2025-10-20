@@ -93,35 +93,40 @@ export function useExplorerData() {
         // Try to get balances for any account, not just the current one
         if (keeta.getAllBalances) {
           console.log('[EXPLORER_DATA] Getting balances...');
-          const balances = await keeta.getAllBalances();
-          console.log('[EXPLORER_DATA] Raw balances:', balances);
+          try {
+            const balances = await keeta.getAllBalances();
+            console.log('[EXPLORER_DATA] Raw balances:', balances);
           
-          if (Array.isArray(balances)) {
-            tokens = balances.map((entry: any) => {
-              // Metadata may be base64-encoded JSON; decode best-effort
-              let name: string | null = null;
-              let ticker: string | null = null;
-              let decimals: number | null = null;
-              try {
-                if (entry?.metadata && typeof entry.metadata === 'string') {
-                  const json = JSON.parse(atob(entry.metadata));
-                  name = json?.displayName ?? json?.name ?? null;
-                  ticker = json?.symbol ?? json?.ticker ?? null;
-                  decimals = typeof json?.decimalPlaces === 'number' ? json.decimalPlaces : (typeof json?.decimals === 'number' ? json.decimals : null);
+            if (Array.isArray(balances)) {
+              tokens = balances.map((entry: any) => {
+                // Metadata may be base64-encoded JSON; decode best-effort
+                let name: string | null = null;
+                let ticker: string | null = null;
+                let decimals: number | null = null;
+                try {
+                  if (entry?.metadata && typeof entry.metadata === 'string') {
+                    const json = JSON.parse(atob(entry.metadata));
+                    name = json?.displayName ?? json?.name ?? null;
+                    ticker = json?.symbol ?? json?.ticker ?? null;
+                    decimals = typeof json?.decimalPlaces === 'number' ? json.decimalPlaces : (typeof json?.decimals === 'number' ? json.decimals : null);
+                  }
+                } catch {
+                  // ignore metadata parse errors
                 }
-              } catch {
-                // ignore metadata parse errors
-              }
-              return {
-                publicKey: String(entry?.token ?? ''),
-                name,
-                ticker,
-                decimals,
-                totalSupply: null,
-                balance: String(entry?.balance ?? '0'),
-              };
-            });
-            console.log('[EXPLORER_DATA] Processed tokens:', tokens);
+                return {
+                  publicKey: String(entry?.token ?? ''),
+                  name,
+                  ticker,
+                  decimals,
+                  totalSupply: null,
+                  balance: String(entry?.balance ?? '0'),
+                };
+              });
+              console.log('[EXPLORER_DATA] Processed tokens:', tokens);
+            }
+          } catch (balanceError) {
+            console.log('[EXPLORER_DATA] Error getting balances (likely need read capability):', balanceError);
+            // Continue without balance data - this is expected for non-connected accounts
           }
         }
         
@@ -181,8 +186,8 @@ export function useExplorerData() {
           }
         }
       } catch (error) {
-        console.log('[EXPLORER_DATA] Error fetching history:', error);
-        // Continue without activity data
+        console.log('[EXPLORER_DATA] Error fetching history (likely need read capability):', error);
+        // Continue without activity data - this is expected for non-connected accounts
       }
 
       const result = {

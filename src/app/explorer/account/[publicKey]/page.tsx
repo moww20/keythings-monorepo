@@ -123,7 +123,7 @@ export default function AccountPage(): React.JSX.Element {
   const accountDescription = toDisplayString(account.info?.["description"]) ?? 
     (hasAccountData || hasTokens || hasCertificates 
       ? "This account does not include a description." 
-      : "This is a basic account on the Keeta network with no additional metadata or activity recorded.");
+      : "This is a basic account on the Keeta network with no additional metadata or activity recorded. To view detailed balances and transaction history, connect your wallet and grant read permissions.");
 
   return (
     <div className="flex flex-1 flex-col overflow-y-auto">
@@ -335,7 +335,9 @@ export default function AccountPage(): React.JSX.Element {
               </div>
               <div className="divide-y divide-hairline">
                 {!hasActivity ? (
-                  <div className="px-6 py-4 text-sm text-muted">No recent activity found.</div>
+                  <div className="px-6 py-4 text-sm text-muted">
+                    No recent activity found. To view transaction history, connect your wallet and grant read permissions.
+                  </div>
                 ) : (
                   account.activity.slice(0, 10).map((activity, index) => (
                     <div key={activity.id || index} className="grid gap-4 px-6 py-4 text-sm text-foreground md:grid-cols-[1fr_1fr_2fr_1fr_1fr]">
