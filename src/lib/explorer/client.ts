@@ -1,98 +1,10 @@
 import "server-only";
 
-import { ZodError, z } from "zod";
+import { z } from "zod";
 
-// Default base URL for the explorer API - point to NestJS backend
-const defaultBaseUrl = "http://localhost:8080/api/explorer";
-
-const explorerConfigSchema = z.object({
-  baseUrl: z.string().url(),
-});
-
-let cachedConfig: z.infer<typeof explorerConfigSchema> | null = null;
-
-function resolveConfig(): z.infer<typeof explorerConfigSchema> {
-  if (cachedConfig) {
-    return cachedConfig;
-  }
-
-  const baseUrl = process.env.EXPLORER_API_BASE_URL
-    ?? process.env.NEXT_PUBLIC_EXPLORER_API_BASE_URL
-    ?? defaultBaseUrl;
-
-  const parsed = explorerConfigSchema.safeParse({ baseUrl });
-
-  if (!parsed.success) {
-    throw parsed.error;
-  }
-
-  cachedConfig = parsed.data;
-  return parsed.data;
-}
-
-function buildUrl(pathname: string, searchParams?: Record<string, string | number | undefined>) {
-  const { baseUrl } = resolveConfig();
-  const url = new URL(pathname.replace(/^\//, ""), baseUrl.endsWith("/") ? baseUrl : `${baseUrl}/`);
-
-  if (searchParams) {
-    Object.entries(searchParams).forEach(([key, value]) => {
-      if (value === undefined || value === null) return;
-      url.searchParams.set(key, String(value));
-    });
-  }
-
-  return url.toString();
-}
-
-async function fetchFromExplorer<T>(
-  pathname: string,
-  init?: RequestInit,
-  searchParams?: Record<string, string | number | undefined>,
-): Promise<T> {
-  const url = buildUrl(pathname, searchParams);
-  const timeout = Number(process.env.EXPLORER_API_TIMEOUT_MS ?? 10000);
-
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeout);
-
-  try {
-    const response = await fetch(url, {
-      ...init,
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-        ...(init?.headers ?? {}),
-      },
-      signal: controller.signal,
-      cache: init?.cache ?? 'no-store',
-      credentials: 'same-origin',
-    });
-
-    if (!response.ok) {
-      let errorText = 'Request failed';
-      try {
-        const errorData = await response.json().catch(() => ({}));
-        errorText = errorData.message || response.statusText || 'Unknown error';
-      } catch (e) {
-        errorText = await response.text().catch(() => 'Failed to parse error response');
-      }
-      throw new Error(`Explorer API error (${response.status}): ${errorText}`);
-    }
-
-    return response.json() as Promise<T>;
-  } catch (error) {
-    console.error('API request failed:', error);
-    if (error instanceof Error) {
-      if (error.name === 'AbortError') {
-        throw new Error('Request timed out. Please try again.');
-      }
-      throw new Error(`Network error: ${error.message}`);
-    }
-    throw new Error('An unexpected error occurred');
-  } finally {
-    clearTimeout(timer);
-  }
-}
+// Note: Keeta Network uses SDK calls, not HTTP API calls
+// This client provides mock data for development purposes
+// In production, data should come from the Keeta SDK via wallet extension
 
 const accountSchema = z.object({
   account: z.object({
@@ -241,13 +153,32 @@ export type ExplorerToken = z.infer<typeof tokenSchema>["token"];
 export type ExplorerCertificate = z.infer<typeof accountCertificateSchema>["certificate"];
 
 export async function fetchNetworkStats() {
-  const json = await fetchFromExplorer<unknown>("network/stats");
-  return networkStatsSchema.parse(json).stats;
+  // Mock data for development - in production, this should come from Keeta SDK
+  return {
+    blockCount: 12345,
+    transactionCount: 67890,
+    representativeCount: 50,
+    queryTime: 150,
+    time: new Date().toISOString(),
+  };
 }
 
 export async function fetchVoteStaple(blockhash: string) {
-  const json = await fetchFromExplorer<unknown>(`network/staple/${blockhash}`);
-  return voteStapleSchema.parse(json);
+  // Mock data for development - in production, this should come from Keeta SDK
+  return {
+    voteStaple: {
+      blocks: [
+        {
+          hash: blockhash,
+          createdAt: new Date().toISOString(),
+          account: "keeta_mock_account",
+          transactions: [],
+        }
+      ],
+    },
+    previousBlockHash: null,
+    nextBlockHash: null,
+  };
 }
 
 export interface ExplorerTransactionsQuery {
@@ -257,62 +188,113 @@ export interface ExplorerTransactionsQuery {
 }
 
 export async function fetchTransactions(query?: ExplorerTransactionsQuery): Promise<ExplorerTransactionsResponse> {
-  const searchParams = query
-    ? {
-        startBlock: query.startBlock,
-        depth: query.depth,
-        publicKey: query.publicKey,
+  // Mock data for development - in production, this should come from Keeta SDK
+  return {
+    nextCursor: null,
+    stapleOperations: [
+      {
+        type: "SEND",
+        block: {
+          $hash: "mock_block_hash_123",
+          date: new Date().toISOString(),
+          account: query?.publicKey || "keeta_mock_account",
+        },
+        operation: {
+          amount: "1000000",
+          to: "keeta_recipient_account",
+        },
       }
-    : undefined;
-  const json = await fetchFromExplorer<unknown>("transaction", undefined, searchParams);
-  return transactionsSchema.parse(json);
+    ],
+  };
 }
 
 export async function fetchAccount(publicKey: string): Promise<ExplorerAccount | null> {
-  const json = await fetchFromExplorer<unknown>(`account/${publicKey}`);
-  const parsed = accountSchema.safeParse(json);
-  if (!parsed.success) {
-    return null;
-  }
-  return parsed.data.account;
+  // Mock data for development - in production, this should come from Keeta SDK
+  return {
+    publicKey,
+    type: "ACCOUNT",
+    representative: null,
+    owner: null,
+    signers: [],
+    headBlock: "mock_head_block_hash",
+    info: {},
+    tokens: [
+      {
+        publicKey: "keeta_mock_token",
+        name: "Mock Token",
+        ticker: "MOCK",
+        decimals: 6,
+        totalSupply: "1000000000000",
+        balance: "1000000",
+      }
+    ],
+    certificates: [],
+  };
 }
 
 export async function fetchAccountCertificate(accountPublicKey: string, certificateHash: string) {
-  const json = await fetchFromExplorer<unknown>(
-    `account/${accountPublicKey}/certificate/${certificateHash}`,
-  );
-  const parsed = accountCertificateSchema.safeParse(json);
-  if (!parsed.success) {
-    return null;
-  }
-  return parsed.data.certificate;
+  // Mock data for development - in production, this should come from Keeta SDK
+  return {
+    hash: certificateHash,
+    issuerName: "Mock Issuer",
+    subjectPublicKey: accountPublicKey,
+    issuedAt: new Date().toISOString(),
+    expiresAt: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(), // 1 year from now
+    valid: true,
+    serial: "mock_serial_123",
+    trusted: true,
+    chain: [],
+    pem: "-----BEGIN CERTIFICATE-----\nMOCK_CERTIFICATE_DATA\n-----END CERTIFICATE-----",
+    attributes: [],
+    subjectDN: [],
+    issuerDN: [],
+  };
 }
 
 export async function fetchStorage(accountPublicKey: string) {
-  const json = await fetchFromExplorer<unknown>(`storage/${accountPublicKey}`);
-  const parsed = storageSchema.safeParse(json);
-  if (!parsed.success) {
-    return null;
-  }
-  return parsed.data.account;
+  // Mock data for development - in production, this should come from Keeta SDK
+  return {
+    publicKey: accountPublicKey,
+    type: "STORAGE",
+    representative: null,
+    owner: null,
+    signers: [],
+    headBlock: "mock_storage_head_block",
+    info: {},
+    tokens: [],
+    certificates: [],
+  };
 }
 
 export async function fetchToken(tokenPublicKey: string) {
-  const json = await fetchFromExplorer<unknown>(`token/${tokenPublicKey}`);
-  const parsed = tokenSchema.safeParse(json);
-  if (!parsed.success) {
-    return null;
-  }
-  return parsed.data.token;
+  // Mock data for development - in production, this should come from Keeta SDK
+  return {
+    publicKey: tokenPublicKey,
+    name: "Mock Token",
+    ticker: "MOCK",
+    totalSupply: "1000000000000",
+    decimals: 6,
+    supply: "1000000000000",
+    currencyCode: "MOCK",
+    decimalPlaces: 6,
+    accessMode: "PUBLIC",
+    defaultPermissions: ["ACCESS", "SEND"],
+    type: "TOKEN",
+    headBlock: "mock_token_head_block",
+  };
 }
 
 export async function fetchTokensBatch(tokenPublicKeys: string[]) {
-  const json = await fetchFromExplorer<unknown>(
-    "token",
-    {
-      method: "POST",
-      body: JSON.stringify({ publicKey: tokenPublicKeys }),
-    },
-  );
-  return json as Record<string, unknown>;
+  // Mock data for development - in production, this should come from Keeta SDK
+  const result: Record<string, unknown> = {};
+  for (const publicKey of tokenPublicKeys) {
+    result[publicKey] = {
+      publicKey,
+      name: `Mock Token ${publicKey.slice(-4)}`,
+      ticker: `MOCK${publicKey.slice(-2)}`,
+      totalSupply: "1000000000000",
+      decimals: 6,
+    };
+  }
+  return result;
 }
