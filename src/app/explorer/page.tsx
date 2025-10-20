@@ -1,6 +1,5 @@
 import Link from "next/link";
 import React from "react";
-import { formatDistanceToNow } from "date-fns";
 
 import {
   fetchNetworkStats,
@@ -10,6 +9,14 @@ import {
 
 import ExplorerQuickSearch from "./components/ExplorerQuickSearch";
 import { truncateIdentifier } from "./utils/resolveExplorerPath";
+import {
+  describeOperation,
+  formatRelativeTime,
+  parseExplorerDate,
+} from "./utils/operation-format";
+
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 type MetricCard = {
   label: string;
@@ -28,64 +35,6 @@ function formatNumber(value: number | null | undefined): string {
     return `${(value / 1_000).toFixed(1)}K`;
   }
   return value.toLocaleString();
-}
-
-function coerceString(value: unknown): string | null {
-  if (typeof value === "string" && value.trim().length > 0) {
-    return value;
-  }
-  if (typeof value === "number" && Number.isFinite(value)) {
-    return value.toString();
-  }
-  return null;
-}
-
-function parseExplorerDate(value: unknown): Date | null {
-  if (value instanceof Date && !Number.isNaN(value.getTime())) {
-    return value;
-  }
-  if (typeof value === "string" || typeof value === "number") {
-    const parsed = new Date(value);
-    if (!Number.isNaN(parsed.getTime())) {
-      return parsed;
-    }
-  }
-  return null;
-}
-
-function getOperationDetail(operation: ExplorerOperation): string {
-  switch (operation.type) {
-    case "SEND": {
-      const amount = coerceString(operation.operation?.amount ?? operation.operationSend?.amount);
-      const token = coerceString(operation.operation?.token ?? operation.operationSend?.token);
-      const recipient = coerceString(operation.operation?.to ?? operation.operationSend?.to);
-      if (amount && token && recipient) {
-        return `Sent ${amount} of ${truncateIdentifier(token, 8, 6)} to ${truncateIdentifier(recipient)}`;
-      }
-      break;
-    }
-    case "RECEIVE": {
-      const amount = coerceString(operation.operation?.amount ?? operation.operationReceive?.amount);
-      const sender = coerceString(operation.operation?.from ?? operation.operationReceive?.from);
-      if (amount && sender) {
-        return `Received ${amount} from ${truncateIdentifier(sender)}`;
-      }
-      break;
-    }
-    case "SWAP": {
-      const sendToken = coerceString(operation.operationSend?.token);
-      const receiveToken = coerceString(operation.operationReceive?.token);
-      if (sendToken && receiveToken) {
-        return `Swapped ${truncateIdentifier(sendToken, 8, 6)} ↔ ${truncateIdentifier(receiveToken, 8, 6)}`;
-      }
-      break;
-    }
-    default:
-      break;
-  }
-
-  const account = operation.block.account ? truncateIdentifier(operation.block.account) : "Unknown";
-  return `${operation.type} involving ${account}`;
 }
 
 export default async function ExplorerHome(): Promise<React.JSX.Element> {
@@ -107,7 +56,7 @@ export default async function ExplorerHome(): Promise<React.JSX.Element> {
       label: "Latest Block",
       value: latestBlockHash ? truncateIdentifier(latestBlockHash, 10, 8) : "—",
       helper: latestBlockHash && latestBlockDate
-        ? `~ ${formatDistanceToNow(latestBlockDate, { addSuffix: true })}`
+        ? `~ ${formatRelativeTime(latestBlockDate)}`
         : undefined,
     },
     {
@@ -176,7 +125,8 @@ export default async function ExplorerHome(): Promise<React.JSX.Element> {
                   {latestOperations.map((operation) => {
                     const blockHash = operation.block.$hash;
                     const timestamp = parseExplorerDate(operation.block.date) ?? new Date();
-                    const relativeTime = formatDistanceToNow(timestamp, { addSuffix: true });
+                    const relativeTime = formatRelativeTime(timestamp) ?? "Just now";
+                    const summary = describeOperation(operation);
                     return (
                       <div
                         key={`${blockHash}-${operation.voteStapleHash ?? operation.type}`}
@@ -195,7 +145,7 @@ export default async function ExplorerHome(): Promise<React.JSX.Element> {
                           <span className="text-sm text-muted">{relativeTime}</span>
                         </div>
                         <p className="mt-3 text-sm text-subtle">
-                          {getOperationDetail(operation)}
+                          {summary}
                         </p>
                       </div>
                     );

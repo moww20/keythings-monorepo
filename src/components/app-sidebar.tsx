@@ -41,7 +41,7 @@ const data = {
   user: {
     name: "Wallet User",
     email: "user@keeta.network",
-    avatar: "/avatars/wallet-user.jpg",
+    avatar: "/icons/TLEOfKos_400x400.jpg",
   },
   navMain: [
     {

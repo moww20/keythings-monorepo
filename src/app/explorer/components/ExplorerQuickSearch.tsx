@@ -3,24 +3,74 @@
 import { useCallback, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 
-import { resolveExplorerPath } from "../utils/resolveExplorerPath";
+import Toast from "@/app/components/Toast";
+
+import { resolveExplorerTarget } from "../utils/resolveExplorerPath";
 
 export default function ExplorerQuickSearch(): React.JSX.Element {
   const router = useRouter();
   const [inputValue, setInputValue] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleSubmit = useCallback((event: FormEvent<HTMLFormElement>) => {
+  const handleSubmit = useCallback(async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const nextPath = resolveExplorerPath(inputValue);
-    if (!nextPath) {
-      setError("Enter a valid block hash, account, storage, or token address.");
+    if (isSubmitting) {
       return;
     }
 
-    setError(null);
-    router.push(nextPath);
-  }, [inputValue, router]);
+    const trimmed = inputValue.trim();
+    const target = resolveExplorerTarget(trimmed);
+
+    if (!target) {
+      const message = "Enter a valid block hash, account, storage, or token address.";
+      setError(message);
+      Toast.error(message);
+      return;
+    }
+
+    setIsSubmitting(true);
+
+    try {
+      let destination = target.path;
+
+      if (target.type === "account") {
+        const response = await fetch(`/api/explorer/account/${trimmed}`);
+
+        if (response.status === 404) {
+          const message = "Account not found on the explorer network.";
+          setError(message);
+          Toast.error(message);
+          return;
+        }
+
+        if (!response.ok) {
+          throw new Error(`Explorer lookup failed (${response.status})`);
+        }
+
+        const data = await response.json() as { account?: { type?: string } };
+        const accountType = data?.account?.type;
+
+        if (accountType === "STORAGE") {
+          destination = `/explorer/storage/${trimmed}`;
+        } else if (accountType === "TOKEN") {
+          destination = `/explorer/token/${trimmed}`;
+        } else {
+          destination = `/explorer/account/${trimmed}`;
+        }
+      }
+
+      setError(null);
+      router.push(destination);
+    } catch (lookupError) {
+      console.error("Failed to resolve explorer resource", lookupError);
+      const message = "Unable to resolve explorer resource. Please try again.";
+      setError(message);
+      Toast.error(message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  }, [inputValue, isSubmitting, router]);
 
   return (
     <form
@@ -43,7 +93,8 @@ export default function ExplorerQuickSearch(): React.JSX.Element {
           />
           <button
             type="submit"
-            className="inline-flex items-center justify-center rounded-full bg-accent px-4 py-2 text-sm font-semibold text-white transition hover:bg-accent/90"
+            className="inline-flex items-center justify-center rounded-full bg-accent px-4 py-2 text-sm font-semibold text-white transition hover:bg-accent/90 disabled:opacity-50 disabled:cursor-not-allowed"
+            disabled={isSubmitting || !inputValue.trim()}
           >
             Search
           </button>

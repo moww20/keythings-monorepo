@@ -15,8 +15,7 @@ export function usePoolsApi() {
       if (error instanceof TypeError && error.message === 'Failed to fetch') {
         throw new Error(
           `Unable to connect to backend server at ${apiBase}. ` +
-          `Please ensure the keythings-dapp-engine is running. ` +
-          `Start it with: cd keythings-dapp-engine && cargo run`
+          `Please ensure the backend service is running.`
         );
       }
       throw error;
@@ -56,7 +55,7 @@ export function usePoolsApi() {
       if (error instanceof TypeError && error.message === 'Failed to fetch') {
         throw new Error(
           `Unable to connect to backend server at ${apiBase}. ` +
-          `Please ensure the keythings-dapp-engine is running.`
+          `Please ensure the backend service is running.`
         );
       }
       throw error;

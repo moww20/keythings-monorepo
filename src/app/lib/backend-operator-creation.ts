@@ -1,13 +1,11 @@
 /**
  * Backend Operator Account Management
  * 
- * This module provides utilities for managing backend operator accounts for the Keeta CEX.
+ * This file contains type definitions and documentation for backend operator configuration.
  * These functions are intended to be used by the backend service, not the client-side application.
  * 
  * IMPORTANT: This file is for documentation and type definitions only. The actual implementation
- * is in the `keythings-dapp-engine` Rust backend where environment variables are accessible.
- * 
- * The .env file is located at: keythings-dapp-engine/.env
+ * is in the NestJS backend where environment variables are accessible.
  */
 
 export interface BackendOperatorConfig {
@@ -23,8 +21,7 @@ export interface BackendOperatorConfig {
  * Loads backend operator configuration from environment variables.
  * Throws an error if required environment variables are not set.
  * 
- * NOTE: This function should only be called from the keythings-dapp-engine backend.
- * The .env file is located at: keythings-dapp-engine/.env
+ * NOTE: This function should only be called from the backend service.
  */
 export function loadBackendOperatorConfig(): BackendOperatorConfig {
   const seed = process.env.KEETA_OPERATOR_SEED;

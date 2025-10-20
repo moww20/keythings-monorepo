@@ -56,48 +56,53 @@ Example:
 bun run dev
 ```
 
-## Keythings dApp Engine (Backend)
+## Backend Services
 
-The backend trading engine is built with Rust and Actix-web, providing high-performance order matching, settlement, and Keeta blockchain integration.
+The backend is built with NestJS, providing a robust and scalable API for the Keythings dApp. The backend handles authentication, order management, and Keeta blockchain integration.
 
-### Running with Docker
+### Running the Backend
 
-All backend services run in Docker containers. Navigate to the `docker/` directory to manage the engine:
+Navigate to the `kethings-backend-nestjs` directory to manage the backend:
 
 ```bash
-cd docker
+cd kethings-backend-nestjs
 ```
 
-| Command | Description |
-| --- | --- |
-| `docker compose up --build -d` | Build and start the engine in detached mode |
-| `docker compose down` | Stop and remove the engine container |
-| `docker compose restart` | Restart the running engine |
-| `docker compose logs -f` | View live logs from the engine |
-| `docker compose logs --tail=50` | View last 50 log lines |
-| `docker ps` | Check running containers status |
+#### Development
+
+```bash
+# Install dependencies
+npm install
+
+# Start development server
+npm run start:dev
+```
+
+The API will be available at `http://localhost:3000` by default.
+
+#### Production
+
+```bash
+# Build the application
+npm run build
+
+# Start in production mode
+npm run start:prod
+```
 
 ### Backend Configuration
 
-- **Container Name**: `keythings_dapp_engine`
-- **Port**: `8080` (exposed on `localhost:8080`)
-- **API Base URL**: `http://localhost:8080/api`
-- **WebSocket URL**: `ws://localhost:8080/ws/trade`
-- **Health Check**: `http://localhost:8080/api/health`
+- **Port**: `3000` (exposed on `localhost:3000`)
+- **API Base URL**: `http://localhost:3000/api`
+- **Health Check**: `http://localhost:3000/api/health`
 
-### Available API Endpoints
+### Core Features
 
-| Method | Endpoint | Description |
-| --- | --- | --- |
-| GET | `/api/health` | Health check endpoint |
-| GET | `/api/auth/challenge/{pubkey}` | Get authentication challenge |
-| POST | `/api/auth/session` | Create authentication session |
-| GET | `/api/balances/{user_id}` | List user balances |
-| POST | `/api/internal/credit` | Credit balance (internal) |
-| POST | `/api/orders` | Place a new order |
-| DELETE | `/api/orders/{order_id}` | Cancel an order |
-| POST | `/api/withdrawals` | Request withdrawal |
-| GET | `/api/deposit/{user_id}/{token}` | Get deposit address |
+- **Authentication** - Secure JWT-based authentication
+- **Order Management** - Create, read, update, and cancel orders
+- **Blockchain Integration** - Interact with the Keeta blockchain
+- **Real-time Updates** - WebSocket support for real-time data
+- **API Documentation** - Auto-generated OpenAPI documentation
 
 ### WebSocket Real-Time Data
 
@@ -118,17 +123,16 @@ The backend exposes a WebSocket endpoint at `ws://localhost:8080/ws/trade` for r
 **Message Types:**
 - `orderbook` - Real-time order book updates with bids and asks
 - `trade` - New trade execution notifications
-- `order_update` - User order status changes
 
-### Backend Architecture
+## Architecture
 
-The engine includes:
-- **Ledger System** - Account and balance management
-- **Trading Engine** - Order matching and execution (16 workers)
-- **Settlement Queue** - Transaction settlement processing
-- **Reconciler** - Account reconciliation
-- **Keeta Client** - Integration with Keeta blockchain RPC
-- **WebSocket Server** - Real-time data streaming for trading clients
+The system is built with a modern microservices architecture:
+
+- **NestJS Backend** - Robust API server with TypeScript
+- **PostgreSQL** - Primary data store for application data
+- **Redis** - Caching and real-time features
+- **Keeta SDK** - Integration with the Keeta blockchain
+- **WebSocket Gateway** - Real-time data streaming for clients
 
 ## Project structure
 

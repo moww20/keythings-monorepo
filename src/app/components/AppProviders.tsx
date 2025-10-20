@@ -4,11 +4,13 @@ import type { ReactNode } from "react";
 import { useState } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { QueryClientConfig } from "@tanstack/react-query";
+import { ToastProvider, ToastViewport } from "@radix-ui/react-toast";
 
 import WalletEventsManager from "./WalletEventsManager";
 import WalletAutoConnect from "./WalletAutoConnect";
 import { WalletProvider } from "../contexts/WalletContext";
 import { isRateLimitedError } from "../lib/wallet-throttle";
+import { ToastBridge } from "./Toast";
 
 const defaultQueryOptions: QueryClientConfig["defaultOptions"] = {
   queries: {
@@ -45,12 +47,17 @@ export default function AppProviders({ children }: AppProvidersProps) {
   }));
 
   return (
-    <QueryClientProvider client={queryClient}>
-      <WalletEventsManager />
-      <WalletAutoConnect />
-      <WalletProvider>
-        {children}
-      </WalletProvider>
-    </QueryClientProvider>
+    <ToastProvider swipeDirection="right">
+      <QueryClientProvider client={queryClient}>
+        <WalletEventsManager />
+        <WalletAutoConnect />
+        <WalletProvider>
+          <ToastBridge />
+          {children}
+        </WalletProvider>
+      </QueryClientProvider>
+
+      <ToastViewport className="fixed bottom-4 right-4 z-[100] flex w-[320px] flex-col gap-3" />
+    </ToastProvider>
   );
 }
