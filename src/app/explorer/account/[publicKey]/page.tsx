@@ -1,12 +1,10 @@
+"use client";
+
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { useParams } from "next/navigation";
+import { useEffect } from "react";
 
-import {
-  fetchAccount,
-  fetchTransactions,
-  parseExplorerOperations,
-} from "@/lib/explorer/client";
-
+import { useExplorerData } from "@/app/hooks/useExplorerData";
 import ExplorerOperationsTable from "../../components/ExplorerOperationsTable";
 import {
   formatRelativeTime,
@@ -35,11 +33,7 @@ function toDisplayString(value: unknown): string | null {
   return null;
 }
 
-interface AccountPageProps {
-  params: {
-    publicKey: string;
-  };
-}
+// Remove the interface since we're using useParams now
 
 function formatTokenAmount(balance: string, decimals?: number | null): string {
   try {
@@ -68,20 +62,46 @@ function formatDate(value: unknown): string {
   return `${date.toLocaleDateString()} ${date.toLocaleTimeString()}`;
 }
 
-export default async function AccountPage({ params }: AccountPageProps): Promise<React.JSX.Element> {
-  const { publicKey: accountPublicKey } = await params;
+export default function AccountPage(): React.JSX.Element {
+  const params = useParams();
+  const publicKey = params.publicKey as string;
+  
+  const { account, loading, error, fetchAccount } = useExplorerData();
 
-  const [accountResponse, transactionsResponse] = await Promise.all([
-    fetchAccount(accountPublicKey),
-    fetchTransactions({ publicKey: accountPublicKey, depth: 20 }),
-  ]);
+  useEffect(() => {
+    if (publicKey) {
+      fetchAccount(publicKey);
+    }
+  }, [publicKey, fetchAccount]);
 
-  if (!accountResponse) {
-    notFound();
+  if (loading) {
+    return (
+      <div className="flex flex-1 flex-col overflow-y-auto">
+        <div className="px-4 py-6 lg:px-6">
+          <div className="flex flex-col gap-6">
+            <div className="text-center py-8">
+              <p className="text-muted">Loading account information...</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
   }
 
-  const account = accountResponse;
-  const operations = parseExplorerOperations(transactionsResponse.stapleOperations);
+  if (error || !account) {
+    return (
+      <div className="flex flex-1 flex-col overflow-y-auto">
+        <div className="px-4 py-6 lg:px-6">
+          <div className="flex flex-col gap-6">
+            <div className="text-center py-8">
+              <p className="text-red-400">Error: {error || 'Account not found'}</p>
+              <p className="text-muted mt-2">Please ensure your wallet is connected and try again.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   const representativeLink = account.representative
     ? resolveExplorerPath(account.representative)
@@ -269,17 +289,10 @@ export default async function AccountPage({ params }: AccountPageProps): Promise
           <section className="space-y-3">
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-semibold text-foreground">Recent Activity</h2>
-              <Link
-                href={`/explorer/transactions?cursor=${transactionsResponse.nextCursor ?? ""}&depth=20`}
-                className="text-sm font-medium text-accent hover:text-foreground"
-              >
-                View more
-              </Link>
             </div>
-            <ExplorerOperationsTable
-              operations={operations}
-              emptyLabel="No recent operations for this account."
-            />
+            <div className="rounded-2xl border border-hairline bg-surface p-6">
+              <p className="text-muted">Transaction history will be available when connected to the Keeta network.</p>
+            </div>
           </section>
         </div>
       </div>

@@ -24,7 +24,11 @@ export async function GET(_request: Request, { params }: RouteContext) {
     if (!account) {
       console.log(`Account not found: ${publicKey}`);
       return NextResponse.json(
-        { error: "Account not found" },
+        { 
+          error: "Account not found",
+          message: "Account data is not available. Please use the wallet extension to access account information.",
+          suggestion: "Use window.keeta.getAccountInfo(address) in the browser console or connect your wallet to view account details."
+        },
         { status: 404 }
       );
     }
