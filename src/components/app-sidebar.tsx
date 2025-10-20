@@ -19,7 +19,7 @@ import {
   IconKey,
   IconDatabase,
 } from "@tabler/icons-react"
-import { BookOpen, Wallet, LogOut } from "lucide-react"
+import { BookOpen } from "lucide-react"
 import { siX, siDiscord } from "simple-icons"
 
 import SearchBar from "@/app/components/SearchBar"
@@ -36,6 +36,7 @@ import {
   SidebarFooter,
   SidebarHeader,
 } from "@/components/ui/sidebar"
+import Toast from "@/app/components/Toast"
 
 const data = {
   user: {
@@ -128,6 +129,11 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const router = useRouter()
   const [walletConnected, setWalletConnected] = useState(false)
   const [walletAddress, setWalletAddress] = useState<string | null>(null)
+  const [hasHydrated, setHasHydrated] = useState(false)
+
+  useEffect(() => {
+    setHasHydrated(true)
+  }, [])
 
   const redirectToDashboard = useCallback(() => {
     if (typeof window === "undefined") return
@@ -176,9 +182,9 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         error instanceof Error
         && (error.message.includes("User rejected") || error.message.includes("rejected"))
       ) {
-        window.alert("Connection request rejected. Please approve the connection in your wallet.")
+        Toast.warning("Connection request rejected. Please approve the connection in your wallet.")
       } else {
-        window.alert("Failed to connect wallet. Please try again.")
+        Toast.error("Failed to connect wallet. Please try again.")
       }
     }
   }, [redirectToDashboard, waitForWallet])
@@ -259,6 +265,9 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
 
   const isDocsRoute = pathname.startsWith("/docs")
 
+  const hydratedWalletConnected = hasHydrated && walletConnected
+  const hydratedWalletAddress = hasHydrated ? walletAddress : null
+
   return (
     <Sidebar collapsible="offcanvas" {...props}>
       <SidebarHeader className="gap-4">
@@ -275,30 +284,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         </div>
 
 
-        <div>
-          {walletConnected ? (
-            <div className="flex items-center gap-2 rounded-full border border-hairline bg-white/10 px-4 py-2 text-sm font-medium text-foreground">
-              <Wallet className="h-4 w-4" />
-              <span>{formatAddress(walletAddress)}</span>
-              <button
-                type="button"
-                onClick={disconnectWallet}
-                aria-label="Disconnect wallet"
-                className="inline-flex h-6 w-6 items-center justify-center rounded-full text-foreground/70 transition hover:bg-white/20 hover:text-foreground"
-              >
-                <LogOut className="h-3.5 w-3.5" />
-              </button>
-            </div>
-          ) : (
-            <button
-              type="button"
-              onClick={connectWallet}
-              className="w-full rounded-full border border-transparent bg-white/10 px-4 py-2 text-sm font-medium text-foreground transition hover:bg-white/20 hover:shadow-lg hover:shadow-white/10 [html[data-theme='light']_&]:border-gray-300 [html[data-theme='light']_&]:hover:shadow-gray-300/50"
-            >
-              Connect Wallet
-            </button>
-          )}
-        </div>
+        <div />
       </SidebarHeader>
 
       <SidebarContent>
@@ -345,7 +331,14 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             )}
           </div>
           
-          <NavUser user={data.user} />
+          <NavUser
+            user={data.user}
+            walletConnected={hydratedWalletConnected}
+            walletAddress={hydratedWalletAddress}
+            onConnectWallet={connectWallet}
+            onDisconnectWallet={disconnectWallet}
+            formatAddress={formatAddress}
+          />
         </div>
       </SidebarFooter>
     </Sidebar>

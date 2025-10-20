@@ -11,6 +11,7 @@ import { siX, siDiscord } from "simple-icons";
 import type { KeetaProvider } from "@/types/keeta";
 import SearchBar from "./SearchBar";
 import ThemeToggle from "./ThemeToggle";
+import Toast from "./Toast";
 
 interface MenuItem {
   path: string | null;
@@ -218,9 +219,9 @@ export default function Navbar(): React.JSX.Element {
     } catch (error) {
       console.error("Connection failed:", error);
       if (error instanceof Error && (error.message.includes("User rejected") || error.message.includes("rejected"))) {
-        window.alert("Connection request rejected. Please approve the connection in your wallet.");
+        Toast.warning("Connection request rejected. Please approve the connection in your wallet.");
       } else {
-        window.alert("Failed to connect wallet. Please try again.");
+        Toast.error("Failed to connect wallet. Please try again.");
       }
     }
   };
