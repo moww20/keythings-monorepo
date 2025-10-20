@@ -230,6 +230,12 @@ export function useWalletData() {
       setErrorState(null);
       setLoadingState(true);
       
+      // First check if wallet is locked
+      const isLocked = await provider.isLocked?.() ?? true;
+      if (isLocked) {
+        throw new Error('Wallet is locked. Please unlock your wallet first.');
+      }
+
       // Request account access with minimal permissions
       let accounts: unknown = null;
 
@@ -247,7 +253,7 @@ export function useWalletData() {
       }
 
       if (!Array.isArray(accounts) || accounts.length === 0) {
-        throw new Error('No accounts found');
+        throw new Error('No accounts found. Please ensure your wallet is unlocked and has accounts.');
       }
 
       // Update with basic account info first

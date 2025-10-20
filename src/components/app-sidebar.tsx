@@ -170,6 +170,16 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         && (error.message.includes("User rejected") || error.message.includes("rejected"))
       ) {
         Toast.warning("Connection request rejected. Please approve the connection in your wallet.")
+      } else if (
+        error instanceof Error
+        && error.message.includes("Wallet is locked")
+      ) {
+        Toast.warning("Wallet is locked. Please unlock your wallet first.")
+      } else if (
+        error instanceof Error
+        && error.message.includes("No accounts found")
+      ) {
+        Toast.warning("No accounts found. Please ensure your wallet is unlocked and has accounts.")
       } else {
         Toast.error("Failed to connect wallet. Please try again.")
       }
