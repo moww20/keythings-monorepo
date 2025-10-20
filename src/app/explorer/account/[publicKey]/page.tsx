@@ -110,12 +110,19 @@ export default function AccountPage(): React.JSX.Element {
     );
   }
 
+  // Check if account has meaningful data to display
+  const hasAccountData = account.representative || account.owner || account.signers?.length > 0 || account.headBlock || Object.keys(account.info || {}).length > 0;
+  const hasTokens = account.tokens?.length > 0;
+  const hasCertificates = account.certificates?.length > 0;
+
   const representativeLink = account.representative
     ? resolveExplorerPath(account.representative)
     : null;
   const ownerLink = account.owner ? resolveExplorerPath(account.owner) : null;
-  const accountDescription =
-    toDisplayString(account.info?.["description"]) ?? "This account does not include a description.";
+  const accountDescription = toDisplayString(account.info?.["description"]) ?? 
+    (hasAccountData || hasTokens || hasCertificates 
+      ? "This account does not include a description." 
+      : "This is a basic account on the Keeta network with no additional metadata or activity recorded.");
 
   return (
     <div className="flex flex-1 flex-col overflow-y-auto">
@@ -158,6 +165,26 @@ export default function AccountPage(): React.JSX.Element {
               )}
             </div>
           </section>
+
+          {!hasAccountData && !hasTokens && !hasCertificates && (
+            <section className="rounded-2xl border border-hairline bg-surface p-6 shadow-[0_18px_50px_rgba(5,6,11,0.45)]">
+              <div className="text-center py-8">
+                <h3 className="text-lg font-semibold text-foreground mb-2">Account Found</h3>
+                <p className="text-muted mb-4">
+                  This account exists on the Keeta network but has no recorded activity or metadata yet.
+                </p>
+                <div className="text-sm text-subtle space-y-2">
+                  <p>• No representative assigned</p>
+                  <p>• No ownership information</p>
+                  <p>• No token balances</p>
+                  <p>• No certificates issued</p>
+                </div>
+                <p className="text-xs text-faint mt-4">
+                  This is normal for new or inactive accounts on the Keeta network.
+                </p>
+              </div>
+            </section>
+          )}
 
           <section className="grid gap-6 md:grid-cols-2">
             <div className="rounded-2xl border border-hairline bg-surface p-6 shadow-[0_18px_50px_rgba(5,6,11,0.45)]">
