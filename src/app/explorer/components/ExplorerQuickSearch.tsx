@@ -20,10 +20,14 @@ export default function ExplorerQuickSearch(): React.JSX.Element {
     }
 
     const trimmed = inputValue.trim();
+    console.log('[EXPLORER_SEARCH] Starting search for:', trimmed);
+    
     const target = resolveExplorerTarget(trimmed);
+    console.log('[EXPLORER_SEARCH] Resolved target:', target);
 
     if (!target) {
       const message = "Enter a valid block hash, account, storage, or token address.";
+      console.log('[EXPLORER_SEARCH] Invalid target, showing error:', message);
       setError(message);
       Toast.error(message);
       return;
@@ -33,15 +37,25 @@ export default function ExplorerQuickSearch(): React.JSX.Element {
 
     try {
       let destination = target.path;
+      console.log('[EXPLORER_SEARCH] Initial destination:', destination);
 
       if (target.type === "account") {
+        console.log('[EXPLORER_SEARCH] Account type detected, checking wallet availability...');
+        
         // Prefer client-side wallet lookup via Keeta provider to avoid server 404s
         const keeta = typeof window !== 'undefined' ? (window as typeof window & { keeta?: { getAccountInfo?: (addr: string) => Promise<unknown> } }).keeta : undefined;
+        console.log('[EXPLORER_SEARCH] Keeta wallet available:', !!keeta);
+        console.log('[EXPLORER_SEARCH] getAccountInfo method available:', !!keeta?.getAccountInfo);
+        
         if (keeta?.getAccountInfo) {
           try {
+            console.log('[EXPLORER_SEARCH] Attempting wallet lookup for:', trimmed);
             const info = await keeta.getAccountInfo(trimmed);
+            console.log('[EXPLORER_SEARCH] Wallet lookup result:', info);
+            
             const account: any = info ?? {};
             const accountType = String(account?.type ?? '').toUpperCase();
+            console.log('[EXPLORER_SEARCH] Account type from wallet:', accountType);
 
             if (accountType === 'STORAGE') {
               destination = `/explorer/storage/${trimmed}`;
@@ -50,20 +64,24 @@ export default function ExplorerQuickSearch(): React.JSX.Element {
             } else {
               destination = `/explorer/account/${trimmed}`;
             }
+            console.log('[EXPLORER_SEARCH] Final destination after wallet lookup:', destination);
           } catch (e) {
+            console.log('[EXPLORER_SEARCH] Wallet lookup failed, using fallback:', e);
             // If lookup fails, still navigate to the generic account view
             destination = `/explorer/account/${trimmed}`;
           }
         } else {
+          console.log('[EXPLORER_SEARCH] No wallet available, using fallback navigation');
           // Fallback: navigate directly; the page will handle fetching/empty states
           destination = `/explorer/account/${trimmed}`;
         }
       }
 
+      console.log('[EXPLORER_SEARCH] Navigating to:', destination);
       setError(null);
       router.push(destination);
     } catch (lookupError) {
-      console.error("Failed to resolve explorer resource", lookupError);
+      console.error("[EXPLORER_SEARCH] Failed to resolve explorer resource", lookupError);
       const message = "Unable to resolve explorer resource. Please try again.";
       setError(message);
       Toast.error(message);

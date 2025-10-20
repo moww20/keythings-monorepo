@@ -66,11 +66,18 @@ export default function AccountPage(): React.JSX.Element {
   const params = useParams();
   const publicKey = params.publicKey as string;
   
+  console.log('[ACCOUNT_PAGE] Component rendered with publicKey:', publicKey);
+  
   const { account, loading, error, fetchAccount } = useExplorerData();
+  console.log('[ACCOUNT_PAGE] Current state - account:', account, 'loading:', loading, 'error:', error);
 
   useEffect(() => {
+    console.log('[ACCOUNT_PAGE] useEffect triggered with publicKey:', publicKey);
     if (publicKey) {
+      console.log('[ACCOUNT_PAGE] Calling fetchAccount...');
       fetchAccount(publicKey);
+    } else {
+      console.log('[ACCOUNT_PAGE] No publicKey provided');
     }
   }, [publicKey, fetchAccount]);
 

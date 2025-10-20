@@ -214,11 +214,13 @@ export async function fetchTransactions(query?: ExplorerTransactionsQuery): Prom
 
 export async function fetchAccount(publicKey: string): Promise<ExplorerAccount | null> {
   try {
+    console.log('[CLIENT] fetchAccount called with publicKey:', publicKey);
     // Real Keeta network data - for now return null to indicate account not found
     // In the future, this will fetch real account data from Keeta network
+    console.log('[CLIENT] Returning null (not implemented yet)');
     return null;
   } catch (error) {
-    console.error('Error fetching account:', error);
+    console.error('[CLIENT] Error fetching account:', error);
     throw new Error('Failed to fetch account data');
   }
 }

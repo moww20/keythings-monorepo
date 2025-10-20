@@ -10,7 +10,10 @@ interface RouteContext {
 export async function GET(_request: Request, { params }: RouteContext) {
   const { publicKey } = await params;
   
+  console.log('[API_ROUTE] GET request received for publicKey:', publicKey);
+  
   if (!publicKey) {
+    console.log('[API_ROUTE] No publicKey provided, returning 400');
     return NextResponse.json(
       { error: "Public key is required" },
       { status: 400 }
@@ -18,11 +21,12 @@ export async function GET(_request: Request, { params }: RouteContext) {
   }
 
   try {
-    console.log(`Fetching account: ${publicKey}`);
+    console.log(`[API_ROUTE] Fetching account: ${publicKey}`);
     const account = await fetchAccount(publicKey);
+    console.log(`[API_ROUTE] fetchAccount returned:`, account);
 
     if (!account) {
-      console.log(`Account not found: ${publicKey}`);
+      console.log(`[API_ROUTE] Account not found: ${publicKey}`);
       return NextResponse.json(
         { 
           error: "Account not found",
@@ -33,14 +37,14 @@ export async function GET(_request: Request, { params }: RouteContext) {
       );
     }
 
-    console.log(`Successfully fetched account: ${publicKey}`);
+    console.log(`[API_ROUTE] Successfully fetched account: ${publicKey}`);
     return NextResponse.json({ 
       success: true,
       account 
     });
     
   } catch (error) {
-    console.error(`Error fetching account ${publicKey}:`, error);
+    console.error(`[API_ROUTE] Error fetching account ${publicKey}:`, error);
 
     if (error instanceof Error && /\b404\b/.test(error.message)) {
       return NextResponse.json(
