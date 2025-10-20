@@ -275,7 +275,7 @@ export function useWalletData() {
   }, [fetchWalletState, isLoading, setErrorState, setLoadingState, updateWalletData]);
 
   const refreshWallet = useCallback(async () => {
-    await fetchWalletState();
+    await fetchWalletState(true);
   }, [fetchWalletState]);
 
   // Set up wallet event listeners
@@ -285,15 +285,15 @@ export function useWalletData() {
 
     const handleAccountsChanged = (accounts: unknown) => {
       console.debug('Accounts changed:', accounts);
-      fetchWalletState();
+      fetchWalletState(true);
     };
 
     const handleLockChanged = (isLocked: unknown) => {
       console.debug('Lock status changed:', isLocked);
       updateWalletData({ isLocked: Boolean(isLocked) });
       if (!isLocked) {
-        // If wallet was unlocked, refresh the full state
-        fetchWalletState();
+        // If wallet was unlocked, refresh the full state with capabilities
+        fetchWalletState(true);
       }
     };
 
@@ -314,8 +314,8 @@ export function useWalletData() {
     provider.on?.('lockChanged', handleLockChanged);
     provider.on?.('disconnect', handleDisconnect);
 
-    // Initial fetch
-    fetchWalletState();
+    // Initial fetch with read capabilities
+    fetchWalletState(true);
 
     // Cleanup
     return () => {
