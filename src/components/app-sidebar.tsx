@@ -37,6 +37,7 @@ import {
   SidebarHeader,
 } from "@/components/ui/sidebar"
 import Toast from "@/app/components/Toast"
+import { useWallet } from "@/app/contexts/WalletContext"
 
 const data = {
   user: {
@@ -127,8 +128,7 @@ const data = {
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const pathname = usePathname()
   const router = useRouter()
-  const [walletConnected, setWalletConnected] = useState(false)
-  const [walletAddress, setWalletAddress] = useState<string | null>(null)
+  const wallet = useWallet()
   const [hasHydrated, setHasHydrated] = useState(false)
 
   useEffect(() => {
@@ -153,29 +153,9 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   }, [])
 
   const connectWallet = useCallback(async () => {
-    if (typeof window === "undefined") return
-
-    const provider = await waitForWallet()
-
-    if (!provider) {
-      const retry = window.confirm(
-        "Keythings Wallet not detected.\n\n"
-          + "If you have the extension installed, please refresh the page.\n\n"
-          + "Otherwise, click OK to visit the installation page.",
-      )
-      if (retry) {
-        window.open("https://docs.keythings.xyz/docs/introduction", "_blank")
-      }
-      return
-    }
-
     try {
-      const accounts = await provider.requestAccounts()
-      if (accounts && accounts.length > 0) {
-        setWalletConnected(true)
-        setWalletAddress(accounts[0] ?? null)
-        redirectToDashboard()
-      }
+      await wallet.connectWallet()
+      redirectToDashboard()
     } catch (error) {
       console.error("Connection failed:", error)
       if (
@@ -187,14 +167,11 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         Toast.error("Failed to connect wallet. Please try again.")
       }
     }
-  }, [redirectToDashboard, waitForWallet])
+  }, [wallet, redirectToDashboard])
 
   const disconnectWallet = useCallback(() => {
-    setWalletConnected(false)
-    setWalletAddress(null)
-    if (typeof window !== "undefined" && window.keeta) {
-      console.log("Wallet disconnected from app")
-    }
+    // The wallet context handles disconnection automatically
+    // No need for local state management
   }, [])
 
   const formatAddress = useCallback((address: string | null): string => {
@@ -202,71 +179,12 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     return `${address.slice(0, 6)}...${address.slice(-4)}`
   }, [])
 
-  const checkWalletConnection = useCallback(async () => {
-    if (typeof window === "undefined") return
-    if (typeof window.keeta === "undefined") return
-
-    try {
-      const accounts = await window.keeta.getAccounts()
-      if (accounts && accounts.length > 0) {
-        setWalletConnected(true)
-        setWalletAddress(accounts[0] ?? null)
-        redirectToDashboard()
-      }
-    } catch (error) {
-      console.log("No wallet connected", error)
-    }
-  }, [redirectToDashboard])
-
-  useEffect(() => {
-    const timeoutId = window.setTimeout(() => {
-      void checkWalletConnection()
-    }, 800)
-
-    let detachListeners: (() => void) | undefined
-
-    if (typeof window !== "undefined" && window.keeta) {
-      const provider = window.keeta
-
-      const handleAccountsChanged = (...args: unknown[]) => {
-        const accounts = Array.isArray(args[0]) ? (args[0] as string[]) : []
-        if (accounts.length > 0) {
-          setWalletConnected(true)
-          setWalletAddress(accounts[0] ?? null)
-          redirectToDashboard()
-        } else {
-          setWalletConnected(false)
-          setWalletAddress(null)
-        }
-      }
-
-      const handleDisconnect = () => {
-        setWalletConnected(false)
-        setWalletAddress(null)
-      }
-
-      provider.on?.("accountsChanged", handleAccountsChanged)
-      provider.on?.("disconnect", handleDisconnect)
-
-      detachListeners = () => {
-        const remove = provider.removeListener?.bind(provider)
-        if (remove) {
-          remove("accountsChanged", handleAccountsChanged)
-          remove("disconnect", handleDisconnect)
-        }
-      }
-    }
-
-    return () => {
-      window.clearTimeout(timeoutId)
-      detachListeners?.()
-    }
-  }, [checkWalletConnection, redirectToDashboard])
+  // Wallet connection state is now managed by the centralized wallet context
 
   const isDocsRoute = pathname.startsWith("/docs")
 
-  const hydratedWalletConnected = hasHydrated && walletConnected
-  const hydratedWalletAddress = hasHydrated ? walletAddress : null
+  const hydratedWalletConnected = hasHydrated && wallet.isConnected
+  const hydratedWalletAddress = hasHydrated ? wallet.publicKey : null
 
   return (
     <Sidebar collapsible="offcanvas" {...props}>

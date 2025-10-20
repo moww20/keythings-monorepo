@@ -12,6 +12,7 @@ import type { KeetaProvider } from "@/types/keeta";
 import SearchBar from "./SearchBar";
 import ThemeToggle from "./ThemeToggle";
 import Toast from "./Toast";
+import { useWallet } from "@/app/contexts/WalletContext";
 
 interface MenuItem {
   path: string | null;
@@ -24,10 +25,9 @@ interface MenuItem {
 export default function Navbar(): React.JSX.Element {
   const pathname = usePathname();
   const router = useRouter();
+  const wallet = useWallet();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
-  const [walletConnected, setWalletConnected] = useState(false);
-  const [walletAddress, setWalletAddress] = useState<string | null>(null);
   const navRef = useRef<HTMLElement | null>(null);
 
   const updateNavHeight = useCallback(() => {
@@ -66,31 +66,7 @@ export default function Navbar(): React.JSX.Element {
     }
   }, [router]);
 
-  const checkWalletConnection = useCallback(async () => {
-    if (typeof window === "undefined") return;
-
-    // Simple detection like test-api.html
-    if (typeof window.keeta !== "undefined") {
-      const provider = window.keeta;
-      if (!provider) {
-        return;
-      }
-
-      try {
-        const accounts = await provider.getAccounts();
-        if (accounts && accounts.length > 0) {
-          setWalletConnected(true);
-          setWalletAddress(accounts[0] ?? null);
-          // Only redirect to home if we're on the root page
-          if (window.location.pathname === "/" || window.location.pathname === "") {
-            redirectToDashboard();
-          }
-        }
-      } catch (error) {
-        console.log("No wallet connected", error);
-      }
-    }
-  }, [redirectToDashboard]);
+  // Wallet connection state is now managed by the centralized wallet context
 
   useEffect(() => {
     // Close mobile menu on route change
@@ -111,7 +87,7 @@ export default function Navbar(): React.JSX.Element {
 
   useEffect(() => {
     updateNavHeight();
-  }, [updateNavHeight, walletConnected, mobileOpen]);
+  }, [updateNavHeight, wallet.isConnected, mobileOpen]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -123,59 +99,8 @@ export default function Navbar(): React.JSX.Element {
 
   useEffect(() => {
     setMounted(true);
-
-    const timeoutId = setTimeout(() => {
-      void checkWalletConnection();
-    }, 1000);
-
-    let detachListeners: (() => void) | null = null;
-
-    if (typeof window !== "undefined" && window.keeta) {
-      const provider = window.keeta;
-
-      const handleAccountsChanged = (...args: unknown[]) => {
-        const accounts = args[0] as string[];
-        if (accounts && accounts.length > 0) {
-          setWalletConnected(true);
-          setWalletAddress(accounts[0] ?? null);
-          // Only redirect to dashboard if we're on the root page
-          if (window.location.pathname === "/" || window.location.pathname === "") {
-            redirectToDashboard();
-          }
-        } else {
-          setWalletConnected(false);
-          setWalletAddress(null);
-        }
-      };
-
-      const handleChainChanged = (...args: unknown[]) => {
-        void checkWalletConnection();
-      };
-
-      const handleDisconnect = (...args: unknown[]) => {
-        setWalletConnected(false);
-        setWalletAddress(null);
-      };
-
-      provider.on?.("accountsChanged", handleAccountsChanged);
-      provider.on?.("chainChanged", handleChainChanged);
-      provider.on?.("disconnect", handleDisconnect);
-
-      detachListeners = () => {
-        const remove = provider.removeListener?.bind(provider);
-        if (remove) {
-          remove("accountsChanged", handleAccountsChanged);
-          remove("chainChanged", handleChainChanged);
-          remove("disconnect", handleDisconnect);
-        }
-      };
-    }
-
-    return () => {
-      clearTimeout(timeoutId);
-      detachListeners?.();
-    };
-  }, [checkWalletConnection, redirectToDashboard]);
+    // Wallet connection state is now managed by the centralized wallet context
+  }, []);
 
   const waitForWallet = async (maxAttempts = 20): Promise<KeetaProvider | null> => {
     for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
@@ -188,33 +113,11 @@ export default function Navbar(): React.JSX.Element {
   };
 
   const connectWallet = async (): Promise<void> => {
-    if (typeof window === "undefined") return;
-
-    // Wait for wallet to be available (give extension time to inject)
-    const provider = await waitForWallet();
-
-    if (!provider) {
-      const retry = window.confirm(
-        "Keythings Wallet not detected.\n\n"
-          + "If you have the extension installed, please refresh the page.\n\n"
-          + "Otherwise, click OK to visit the installation page.",
-      );
-      if (retry) {
-        window.open("https://docs.keythings.xyz/docs/introduction", "_blank");
-      }
-      return;
-    }
-
     try {
-      // Request connection
-      const accounts = await provider.requestAccounts();
-      if (accounts && accounts.length > 0) {
-        setWalletConnected(true);
-        setWalletAddress(accounts[0] ?? null);
-        // Only redirect to dashboard if we're on the root page
-        if (window.location.pathname === "/" || window.location.pathname === "") {
-          redirectToDashboard();
-        }
+      await wallet.connectWallet();
+      // Only redirect to dashboard if we're on the root page
+      if (window.location.pathname === "/" || window.location.pathname === "") {
+        redirectToDashboard();
       }
     } catch (error) {
       console.error("Connection failed:", error);
@@ -227,20 +130,8 @@ export default function Navbar(): React.JSX.Element {
   };
 
   const disconnectWallet = async (): Promise<void> => {
-    try {
-      // Clear local state
-      setWalletConnected(false);
-      setWalletAddress(null);
-
-      // If the wallet provider has a disconnect method, call it
-      if (typeof window !== "undefined" && window.keeta) {
-        // Most wallets don't have a programmatic disconnect, but we can clear the state
-        // The user would need to disconnect from the extension itself for full disconnect
-        console.log("Wallet disconnected from app");
-      }
-    } catch (error) {
-      console.error("Error disconnecting wallet:", error);
-    }
+    // The wallet context handles disconnection automatically
+    // No need for local state management
   };
 
   const formatAddress = (address: string | null): string => {
@@ -302,10 +193,10 @@ export default function Navbar(): React.JSX.Element {
           >
             <BookOpen className="w-5 h-5" />
           </a>
-          {walletConnected ? (
+          {wallet.isConnected ? (
             <div className="flex items-center gap-2 px-4 py-2 flex-shrink-0 rounded-full border border-hairline bg-white/10 text-foreground text-sm font-medium max-[519px]:hidden">
               <Wallet className="w-4 h-4" />
-              <span>{formatAddress(walletAddress)}</span>
+              <span>{formatAddress(wallet.publicKey)}</span>
               <button
                 type="button"
                 onClick={disconnectWallet}
@@ -407,10 +298,10 @@ export default function Navbar(): React.JSX.Element {
                       <BookOpen className="w-4 h-4" />
                       <span>Docs</span>
                     </a>
-                    {walletConnected ? (
+                    {wallet.isConnected ? (
                       <div className="flex items-center gap-2 px-4 py-2 rounded-full border border-hairline bg-white/10 text-foreground text-sm font-medium">
                         <Wallet className="w-4 h-4" />
-                        <span className="flex-1">{formatAddress(walletAddress)}</span>
+                        <span className="flex-1">{formatAddress(wallet.publicKey)}</span>
                         <button
                           type="button"
                           onClick={disconnectWallet}
