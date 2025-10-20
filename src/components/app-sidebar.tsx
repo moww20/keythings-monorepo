@@ -18,6 +18,9 @@ import {
   IconUser,
   IconKey,
   IconDatabase,
+  IconMail,
+  IconWorld,
+  IconFileText,
 } from "@tabler/icons-react"
 import { BookOpen } from "lucide-react"
 import { siX, siDiscord } from "simple-icons"
@@ -84,9 +87,9 @@ const data = {
       url: "/receive",
     },
     {
-      name: "Portfolio",
+      name: "OTC Swap",
       icon: IconTrendingUp,
-      url: "/portfolio",
+      url: "/otc-swap",
     },
   ],
   navSecondary: [
@@ -108,18 +111,28 @@ const data = {
   ],
   documents: [
     {
-      name: "Backup & Recovery",
-      url: "/backup",
-      icon: IconDatabase,
+      name: "Feed",
+      url: "/feed",
+      icon: IconTrendingUp,
     },
     {
-      name: "Private Keys",
-      url: "/keys",
-      icon: IconKey,
+      name: "Messages",
+      url: "/messages",
+      icon: IconMail,
     },
     {
-      name: "Account Info",
-      url: "/account",
+      name: "World Chat",
+      url: "/world-chat",
+      icon: IconWorld,
+    },
+    {
+      name: "Articles",
+      url: "/articles",
+      icon: IconFileText,
+    },
+    {
+      name: "Profile",
+      url: "/profile",
       icon: IconUser,
     },
   ],
@@ -241,10 +254,10 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             {!isDocsRoute && (
               <Link
                 href="/docs/introduction"
-                className="inline-flex h-9 items-center gap-2 rounded-full border border-hairline px-4 text-sm font-medium text-foreground transition hover:bg-surface"
+                className="inline-flex h-9 w-9 items-center justify-center rounded-full text-foreground/85 transition hover:bg-surface"
+                aria-label="Documentation"
               >
                 <BookOpen className="h-4 w-4" />
-                Docs
               </Link>
             )}
           </div>
