@@ -86,6 +86,7 @@ export interface KeetaProvider {
   getUserClient?: () => KeetaUserClient | Promise<KeetaUserClient>;
   listStorageAccounts?: () => Promise<KeetaACLRecord[]>;
   getAccountInfo?: (address: string) => Promise<unknown>;
+  history?: (options?: { depth?: number; cursor?: string }) => Promise<{ records: any[]; cursor: string | null; hasMore: boolean }>;
 }
 
 declare global {

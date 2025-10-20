@@ -105,7 +105,7 @@ interface WalletContextValue {
   };
   error: string | null;
   isLoading: boolean;
-  connectWallet: () => Promise<void>;
+  connectWallet: (requestCapabilities?: boolean) => Promise<void>;
   requestTransactionPermissions: () => Promise<boolean>;
   hasTransactionPermissions: boolean;
   refreshWallet: () => Promise<void>;
@@ -1092,7 +1092,7 @@ export function WalletProvider({ children }: WalletProviderProps) {
       wallet,
       error: walletData.error,
       isLoading: walletData.isLoading,
-      connectWallet: walletData.connectWallet,
+      connectWallet: (requestCapabilities = false) => walletData.connectWallet(requestCapabilities),
       refreshWallet: walletData.refreshWallet,
       fetchWalletState: walletData.fetchWalletState,
 
