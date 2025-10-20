@@ -689,15 +689,9 @@ function TokenCellViewer({ item }: { item: z.infer<typeof schema> }) {
     }
 
     if (item.fallbackIcon) {
-      const { letter, bgColor, textColor } = item.fallbackIcon
+      const { letter } = item.fallbackIcon
       return (
-        <span
-          className="flex h-8 w-8 items-center justify-center rounded-full text-sm font-semibold"
-          style={{
-            backgroundColor: bgColor ?? "var(--surface-glass)",
-            color: textColor ?? "var(--foreground)",
-          }}
-        >
+        <span className="flex h-8 w-8 items-center justify-center rounded-full text-sm font-semibold bg-[color:var(--surface-glass)] text-[color:var(--foreground)]">
           {letter ?? tokenInitial}
         </span>
       )

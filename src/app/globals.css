@@ -127,8 +127,9 @@ html, body {
 /* Global scrollbar styling to avoid bright white vertical bar */
 html {
   /* Fallback for browsers that don't support scrollbar-* properties */
-  scrollbar-width: thin;
-  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+}
+@supports (scrollbar-color: red blue) {
+  html { scrollbar-width: thin; scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track); }
 }
 html::-webkit-scrollbar { width: 10px; }
 html::-webkit-scrollbar-track { background: var(--scrollbar-track); }
@@ -141,8 +142,9 @@ html::-webkit-scrollbar-thumb {
 html::-webkit-scrollbar-thumb:hover { 
   background-color: var(--scrollbar-thumb);
   opacity: 0.85;
-  /* Modern browsers with color-mix support */
-  background-color: color-mix(in oklab, var(--scrollbar-thumb) 85%, transparent);
+}
+@supports (background-color: color-mix(in oklab, black 50%, transparent)) {
+  html::-webkit-scrollbar-thumb:hover { background-color: color-mix(in oklab, var(--scrollbar-thumb) 85%, transparent); }
 }
 
 ::selection {
@@ -187,8 +189,9 @@ html::-webkit-scrollbar-thumb:hover {
 .input-pill:focus-within {
   border-color: var(--accent);
   opacity: 0.6;
-  /* Modern browsers with color-mix support */
-  border-color: color-mix(in oklab, var(--accent) 60%, transparent);
+}
+@supports (border-color: color-mix(in oklab, black 50%, transparent)) {
+  .input-pill:focus-within { border-color: color-mix(in oklab, var(--accent) 60%, transparent); }
 }
 
 /* Remove inner focus ring for controls inside the pill */
@@ -202,8 +205,6 @@ html::-webkit-scrollbar-thumb:hover {
   outline-offset: 2px;
   border-radius: 8px;
   opacity: 0.6;
-  /* Modern browsers with color-mix support */
-  outline: 2px solid color-mix(in oklab, var(--accent) 60%, transparent);
 }
 
 .text-foreground { color: var(--foreground-strong); }
@@ -215,15 +216,12 @@ html::-webkit-scrollbar-thumb:hover {
 .bg-surface-strong { background: var(--surface-tint); }
 .bg-surface-strong\/80 {
   background: var(--surface-tint);
-  background: color-mix(in oklab, var(--surface-tint) 80%, transparent);
 }
 .hover\:bg-surface-strong\/80:hover {
   background: var(--surface-tint);
-  background: color-mix(in oklab, var(--surface-tint) 80%, transparent);
 }
 .focus-visible\:bg-surface-strong\/80:focus-visible {
   background: var(--surface-tint);
-  background: color-mix(in oklab, var(--surface-tint) 80%, transparent);
 }
 
 .border-hairline { border-color: var(--hairline); }
@@ -455,8 +453,9 @@ html[data-theme='light'] .force-dark {
 /* Subtle vertical scrollbar styling for dark UI */
 .scroll-y-subtle {
   /* Fallback for browsers that don't support scrollbar-* properties */
-  scrollbar-width: thin; /* Firefox */
-  scrollbar-color: rgba(255,255,255,0.22) transparent; /* thumb, track */
+}
+@supports (scrollbar-color: red blue) {
+  .scroll-y-subtle { scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.22) transparent; }
 }
 .scroll-y-subtle::-webkit-scrollbar {
   width: 10px;
@@ -495,8 +494,6 @@ html[data-theme='light'] .force-dark {
   font-weight: 600;
   color: var(--foreground);
   opacity: 0.92;
-  /* Modern browsers with color-mix support */
-  color: color-mix(in oklab, var(--foreground) 92%, transparent);
 }
 
 /* Remove spinners from number inputs (Chrome, Safari, Edge, Firefox) */
