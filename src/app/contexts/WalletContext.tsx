@@ -106,6 +106,8 @@ interface WalletContextValue {
   error: string | null;
   isLoading: boolean;
   connectWallet: () => Promise<void>;
+  requestTransactionPermissions: () => Promise<boolean>;
+  hasTransactionPermissions: boolean;
   refreshWallet: () => Promise<void>;
   fetchWalletState: () => Promise<void>;
   
@@ -186,14 +188,15 @@ export function WalletProvider({ children }: WalletProviderProps) {
   // Process raw token balances into ProcessedToken[] format
   const [processedTokens, setProcessedTokens] = useState<ProcessedToken[]>([]);
   
-  // Trading enablement state
+  // Capability state & Keeta SDK client
+  const [hasTransactionPermissions, setHasTransactionPermissions] = useState(false);
+  const [userClient, setUserClient] = useState<KeetaUserClient | null>(null);
+
+  // Trading state
   const [isTradingEnabled, setIsTradingEnabled] = useState(false);
   const [isTradingEnabling, setIsTradingEnabling] = useState(false);
   const [tradingError, setTradingError] = useState<string | null>(null);
   const [storageAccountAddress, setStorageAccountAddress] = useState<string | null>(null);
-  
-  // Keeta SDK user client state
-  const [userClient, setUserClient] = useState<KeetaUserClient | null>(null);
   
   // Debug: Log whenever userClient changes
   useEffect(() => {
@@ -204,12 +207,25 @@ export function WalletProvider({ children }: WalletProviderProps) {
     });
   }, [userClient]);
   
-  // Initialize userClient when wallet unlocks
+  // Reset permission state when wallet disconnects or locks
+  useEffect(() => {
+    if (!walletData.wallet.connected || walletData.wallet.isLocked) {
+      setHasTransactionPermissions(false);
+    }
+  }, [walletData.wallet.connected, walletData.wallet.isLocked]);
+
+  // Initialize userClient when wallet unlocks and permissions granted
   useEffect(() => {
     const initUserClient = async () => {
       // Clear client if wallet disconnected or locked
       if (!walletData.wallet.connected || walletData.wallet.isLocked) {
         console.log('[WalletContext] Clearing userClient (wallet locked/disconnected)');
+        setUserClient(null);
+        return;
+      }
+
+      if (!hasTransactionPermissions) {
+        console.log('[WalletContext] Waiting for transaction permissions before initializing userClient');
         setUserClient(null);
         return;
       }
@@ -267,7 +283,7 @@ export function WalletProvider({ children }: WalletProviderProps) {
     };
     
     initUserClient();
-  }, [walletData.wallet.connected, walletData.wallet.isLocked]);
+  }, [walletData.wallet.connected, walletData.wallet.isLocked, hasTransactionPermissions]);
   
   useEffect(() => {
     async function processBalances() {
@@ -516,6 +532,18 @@ export function WalletProvider({ children }: WalletProviderProps) {
       setIsTradingEnabling(false);
     }
   }, [isTradingEnabling, walletData.wallet.accounts]);
+
+  const requestTransactionPermissions = useCallback(async (): Promise<boolean> => {
+    try {
+      await walletData.fetchWalletState(true);
+      setHasTransactionPermissions(true);
+      return true;
+    } catch (error) {
+      console.error('[WalletContext] Failed to request transaction permissions:', error);
+      setHasTransactionPermissions(false);
+      return false;
+    }
+  }, [walletData]);
 
   const walletAddress = walletData.wallet.accounts?.[0] ?? '';
 
@@ -1076,6 +1104,8 @@ export function WalletProvider({ children }: WalletProviderProps) {
       publicKey: primaryAccount,
       signMessage: !primaryAccount ? null : signMessage,
       userClient, // Keeta SDK client for building and signing transactions
+      hasTransactionPermissions,
+      requestTransactionPermissions,
       getTokenMetadata: async (tokenAddress: string) => {
         if (!userClient) return null;
         
@@ -1206,6 +1236,8 @@ export function WalletProvider({ children }: WalletProviderProps) {
     tradingError,
     storageAccountAddress,
     enableTrading,
+    requestTransactionPermissions,
+    hasTransactionPermissions,
     userClient,
     // createRFQStorageAccount removed
     fillRFQOrder,

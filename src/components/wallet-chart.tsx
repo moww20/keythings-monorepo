@@ -308,3 +308,4 @@ export function WalletChart() {
     </Card>
   )
 }
+

@@ -67,6 +67,8 @@ export default function DashboardClient(): JSX.Element {
     wallet,
     tokens,
     connectWallet,
+    requestTransactionPermissions,
+    hasTransactionPermissions,
     isWalletLoading,
     isTokensLoading,
     isTradingEnabled,
@@ -82,6 +84,16 @@ export default function DashboardClient(): JSX.Element {
     setIsConnecting(true);
     try {
       await connectWallet();
+
+      let permissionsGranted = hasTransactionPermissions;
+      if (!permissionsGranted) {
+        permissionsGranted = await requestTransactionPermissions();
+      }
+
+      if (!permissionsGranted) {
+        console.warn("Transaction permissions were not granted; balance details may be limited.");
+        return;
+      }
     } catch (error) {
       console.error("Failed to connect wallet:", error);
       const message = (error as Error)?.message ?? "";
@@ -91,7 +103,7 @@ export default function DashboardClient(): JSX.Element {
     } finally {
       setIsConnecting(false);
     }
-  }, [connectWallet, isConnecting]);
+  }, [connectWallet, requestTransactionPermissions, hasTransactionPermissions, isConnecting]);
 
   const fetchKtaPrice = useCallback(async () => {
     if (typeof window === "undefined" || priceFetchInProgress.current) {

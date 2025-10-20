@@ -14,6 +14,9 @@ export default function AssetsPage() {
     isWalletFetching,
     walletError,
     connectWallet,
+    requestTransactionPermissions,
+    hasTransactionPermissions,
+    refreshWallet,
     isDisconnected,
     isLocked,
     isUnlocked,
@@ -33,6 +36,17 @@ export default function AssetsPage() {
 
     try {
       await connectWallet();
+
+      let permissionsGranted = hasTransactionPermissions;
+      if (!permissionsGranted) {
+        permissionsGranted = await requestTransactionPermissions();
+      }
+
+      if (permissionsGranted) {
+        await refreshWallet();
+      } else {
+        console.warn('Transaction permissions were not granted; wallet data may be limited.');
+      }
     } catch (error) {
       console.error('Failed to connect wallet:', error);
       const message = (error as Error)?.message ?? '';
@@ -42,7 +56,7 @@ export default function AssetsPage() {
     } finally {
       setIsConnecting(false);
     }
-  }, [connectWallet, isConnecting]);
+  }, [connectWallet, requestTransactionPermissions, hasTransactionPermissions, refreshWallet, isConnecting]);
 
   useEffect(() => {
     if (walletError) {

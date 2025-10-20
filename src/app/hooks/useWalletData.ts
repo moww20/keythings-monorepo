@@ -71,7 +71,7 @@ export function useWalletData() {
   // Only sign and transact operations require capability tokens
   // The wallet extension handles capability token management internally
 
-  const fetchWalletState = useCallback(async () => {
+  const fetchWalletState = useCallback(async (requestCapabilities = false) => {
     const provider = getWalletProvider();
     if (!provider) {
       updateWalletData({
@@ -124,16 +124,18 @@ export function useWalletData() {
         return;
       }
 
-      // Wallet is unlocked, request read capabilities first
-      console.debug('Wallet unlocked, requesting read capabilities...');
+      // Only request capabilities if explicitly requested
       let capabilityTokens: any = null;
-      try {
-        if (typeof provider.requestCapabilities === 'function') {
-          capabilityTokens = await provider.requestCapabilities(['read']);
-          console.debug('Read capability tokens obtained:', capabilityTokens);
+      if (requestCapabilities) {
+        console.debug('Requesting read capabilities...');
+        try {
+          if (typeof provider.requestCapabilities === 'function') {
+            capabilityTokens = await provider.requestCapabilities(['read']);
+            console.debug('Read capability tokens obtained:', capabilityTokens);
+          }
+        } catch (capError) {
+          console.debug('Failed to request capabilities (will retry on individual calls):', capError);
         }
-      } catch (capError) {
-        console.debug('Failed to request capabilities (will retry on individual calls):', capError);
       }
 
       // Extract the read token if available
@@ -216,7 +218,9 @@ export function useWalletData() {
     }
   }, [updateWalletData, setErrorState, setLoadingState]);
 
-  const connectWallet = useCallback(async () => {
+  const connectWallet = useCallback(async (requestCapabilities = false) => {
+    if (isLoading) return;
+    
     const provider = getWalletProvider();
     if (!provider) {
       throw new Error('Keeta wallet not found');
@@ -225,35 +229,50 @@ export function useWalletData() {
     try {
       setErrorState(null);
       setLoadingState(true);
+      
+      // Request account access with minimal permissions
+      let accounts: unknown = null;
 
-      console.debug('Requesting wallet accounts...');
-      const accounts = await provider.requestAccounts();
-
-      console.debug('Received accounts from wallet:', accounts);
-
-      if (!Array.isArray(accounts) || accounts.length === 0) {
-        throw new Error(
-          'No accounts found in wallet. Please:\n' +
-          '1. Open the Keeta Wallet extension\n' +
-          '2. Create or import a wallet if you haven\'t already\n' +
-          '3. Unlock the wallet\n' +
-          '4. Try connecting again'
-        );
+      if (typeof provider.request === 'function') {
+        accounts = await provider.request({
+          method: 'eth_requestAccounts',
+          // Don't request any additional permissions here
+          params: [],
+        });
+      } else if (typeof provider.getAccounts === 'function') {
+        // Fallback for providers that expose getAccounts() directly
+        accounts = await provider.getAccounts();
+      } else {
+        throw new Error('Keeta provider does not support account requests');
       }
 
-      console.debug('Wallet connected with accounts:', accounts);
+      if (!Array.isArray(accounts) || accounts.length === 0) {
+        throw new Error('No accounts found');
+      }
 
-      // Fetch full wallet state after connection
-      await fetchWalletState();
-
+      // Update with basic account info first
+      updateWalletData({
+        connected: true,
+        accounts: accounts as string[],
+        balance: '0',
+        network: null,
+        isLocked: false,
+        isInitializing: false,
+      });
+      
+      // Then fetch the rest of the wallet state with capabilities if requested
+      if (requestCapabilities) {
+        await fetchWalletState(true);
+      }
+      
     } catch (error) {
-      console.error('Wallet connection failed:', error);
-      setErrorState(`Connection failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
-      throw error;
+      console.error('Error connecting wallet:', error);
+      setErrorState(error instanceof Error ? error.message : 'Failed to connect wallet');
+      throw error; // Re-throw to allow calling code to handle the error
     } finally {
       setLoadingState(false);
     }
-  }, [fetchWalletState, setErrorState, setLoadingState]);
+  }, [fetchWalletState, isLoading, setErrorState, setLoadingState, updateWalletData]);
 
   const refreshWallet = useCallback(async () => {
     await fetchWalletState();
