@@ -11,7 +11,6 @@ import {
   IconHistory,
   IconSettings,
   IconHelp,
-  IconShield,
   IconSend,
   IconReceipt,
   IconTrendingUp,
@@ -94,18 +93,13 @@ const data = {
   ],
   navSecondary: [
     {
-      title: "Security",
-      url: "/security",
-      icon: IconShield,
-    },
-    {
       title: "Settings",
       url: "/settings",
       icon: IconSettings,
     },
     {
-      title: "Help",
-      url: "/help",
+      title: "About Us",
+      url: "/about",
       icon: IconHelp,
     },
   ],
