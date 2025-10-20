@@ -3,8 +3,9 @@ import type { ReactNode } from "react";
 
 import "./globals.css";
 import AppProviders from "./components/AppProviders";
-import WalletRedirector from "./components/WalletRedirector";
+import ConditionalFooter from "./components/ConditionalFooter";
 import ForceDarkTheme from "./components/ForceDarkTheme";
+import WalletRedirector from "./components/WalletRedirector";
 
 export const metadata: Metadata = {
   title: "Keythings Wallet",
@@ -36,6 +37,7 @@ export default function RootLayout({ children }: RootLayoutProps) {
             <main className="min-h-screen">
               {children}
             </main>
+            <ConditionalFooter />
           </ForceDarkTheme>
         </AppProviders>
       </body>

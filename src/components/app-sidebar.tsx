@@ -50,11 +50,6 @@ const data = {
       icon: IconDashboard,
     },
     {
-      title: "Wallet",
-      url: "/dashboard",
-      icon: IconWallet,
-    },
-    {
       title: "Tokens",
       url: "/tokens",
       icon: IconCoins,
@@ -274,39 +269,6 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           <SearchBar />
         </div>
 
-        <div className="flex items-center gap-2">
-          <a
-            href="https://x.com/keythings"
-            target="_blank"
-            rel="noopener noreferrer"
-            aria-label="X (Twitter)"
-            className="inline-flex h-9 w-9 items-center justify-center rounded-full text-foreground/85 transition hover:bg-surface"
-          >
-            <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor" role="img" aria-hidden="true">
-              <path d={siX.path} />
-            </svg>
-          </a>
-          <a
-            href="https://discord.gg/keythings"
-            target="_blank"
-            rel="noopener noreferrer"
-            aria-label="Discord"
-            className="inline-flex h-9 w-9 items-center justify-center rounded-full text-foreground/85 transition hover:bg-surface"
-          >
-            <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor" role="img" aria-hidden="true">
-              <path d={siDiscord.path} />
-            </svg>
-          </a>
-          {!isDocsRoute && (
-            <Link
-              href="/docs/introduction"
-              className="inline-flex h-9 items-center gap-2 rounded-full border border-hairline px-4 text-sm font-medium text-foreground transition hover:bg-surface"
-            >
-              <BookOpen className="h-4 w-4" />
-              Docs
-            </Link>
-          )}
-        </div>
 
         <div>
           {walletConnected ? (
@@ -342,7 +304,44 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       </SidebarContent>
 
       <SidebarFooter>
-        <NavUser user={data.user} />
+        <div className="flex flex-col gap-4">
+          {/* Social Icons and Docs */}
+          <div className="flex items-center justify-center gap-2">
+            <a
+              href="https://x.com/keythings"
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="X (Twitter)"
+              className="inline-flex h-9 w-9 items-center justify-center rounded-full text-foreground/85 transition hover:bg-surface"
+            >
+              <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor" role="img" aria-hidden="true">
+                <path d={siX.path} />
+              </svg>
+            </a>
+            <a
+              href="https://discord.gg/keythings"
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="Discord"
+              className="inline-flex h-9 w-9 items-center justify-center rounded-full text-foreground/85 transition hover:bg-surface"
+            >
+              <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor" role="img" aria-hidden="true">
+                <path d={siDiscord.path} />
+              </svg>
+            </a>
+            {!isDocsRoute && (
+              <Link
+                href="/docs/introduction"
+                className="inline-flex h-9 items-center gap-2 rounded-full border border-hairline px-4 text-sm font-medium text-foreground transition hover:bg-surface"
+              >
+                <BookOpen className="h-4 w-4" />
+                Docs
+              </Link>
+            )}
+          </div>
+          
+          <NavUser user={data.user} />
+        </div>
       </SidebarFooter>
     </Sidebar>
   )
