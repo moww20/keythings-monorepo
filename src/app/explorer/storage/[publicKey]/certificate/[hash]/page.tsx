@@ -15,8 +15,7 @@ interface StorageCertificatePageProps {
 }
 
 export default async function ExplorerStorageCertificatePage({ params }: StorageCertificatePageProps): Promise<React.JSX.Element> {
-  const storagePublicKey = params.publicKey;
-  const certificateHash = params.hash;
+  const { publicKey: storagePublicKey, hash: certificateHash } = await params;
 
   const certificate = await fetchAccountCertificate(storagePublicKey, certificateHash);
 

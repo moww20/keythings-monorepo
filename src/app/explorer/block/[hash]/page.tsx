@@ -45,7 +45,7 @@ function extractOperations(block: ExplorerVoteStapleResponse["voteStaple"]["bloc
 }
 
 export default async function BlockPage({ params }: BlockPageProps): Promise<React.JSX.Element> {
-  const blockhash = params.hash;
+  const { hash: blockhash } = await params;
   const response = await fetchVoteStaple(blockhash);
   const block = findBlock(response, blockhash);
 

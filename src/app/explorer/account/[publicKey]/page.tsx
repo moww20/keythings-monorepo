@@ -69,7 +69,7 @@ function formatDate(value: unknown): string {
 }
 
 export default async function AccountPage({ params }: AccountPageProps): Promise<React.JSX.Element> {
-  const accountPublicKey = params.publicKey;
+  const { publicKey: accountPublicKey } = await params;
 
   const [accountResponse, transactionsResponse] = await Promise.all([
     fetchAccount(accountPublicKey),

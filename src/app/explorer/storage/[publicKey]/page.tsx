@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from "next/link";
-import { useRouter } from 'next/navigation';
+import { useRouter, useParams } from 'next/navigation';
 import { useStorage } from "@/hooks/useApi";
 import { ExplorerDetailCard } from "../../components/ExplorerDetailCard";
 import { formatRelativeTime } from "../../utils/operation-format";
@@ -76,9 +76,10 @@ function formatTokenAmount(balance: string, decimals: number = 0): string {
   }
 }
 
-export default function StoragePage({ params }: StoragePageProps) {
+export default function StoragePage() {
   const router = useRouter();
-  const storagePublicKey = params.publicKey;
+  const params = useParams();
+  const storagePublicKey = params.publicKey as string;
   const { data, loading, error } = useStorage(storagePublicKey);
   const [storageAccount, setStorageAccount] = useState<StorageAccount | null>(null);
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);

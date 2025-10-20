@@ -15,8 +15,7 @@ interface CertificatePageProps {
 }
 
 export default async function ExplorerAccountCertificatePage({ params }: CertificatePageProps): Promise<React.JSX.Element> {
-  const accountPublicKey = params.publicKey;
-  const certificateHash = params.hash;
+  const { publicKey: accountPublicKey, hash: certificateHash } = await params;
 
   const certificate = await fetchAccountCertificate(accountPublicKey, certificateHash);
 

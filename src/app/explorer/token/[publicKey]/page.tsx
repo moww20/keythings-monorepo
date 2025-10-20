@@ -47,7 +47,7 @@ function formatPermissions(permissions?: string[]): string {
 }
 
 export default async function TokenPage({ params }: TokenPageProps): Promise<React.JSX.Element> {
-  const tokenPublicKey = params.publicKey;
+  const { publicKey: tokenPublicKey } = await params;
 
   const [token, transactions] = await Promise.all([
     fetchToken(tokenPublicKey),
