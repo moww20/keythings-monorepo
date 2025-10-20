@@ -90,9 +90,9 @@ export function useExplorerData() {
         const isCurrent = Array.isArray(connectedAccounts) && connectedAccounts.includes(publicKey);
         console.log('[EXPLORER_DATA] Is current account:', isCurrent);
         
-        // Try to get balances for any account, not just the current one
-        if (keeta.getAllBalances) {
-          console.log('[EXPLORER_DATA] Getting balances...');
+        // Only try to get balances if this is the currently connected account
+        if (isCurrent && keeta.getAllBalances) {
+          console.log('[EXPLORER_DATA] Getting balances for connected account...');
           try {
             const balances = await keeta.getAllBalances();
             console.log('[EXPLORER_DATA] Raw balances:', balances);
@@ -125,7 +125,7 @@ export function useExplorerData() {
               console.log('[EXPLORER_DATA] Processed tokens:', tokens);
             }
           } catch (balanceError) {
-            console.log('[EXPLORER_DATA] Error getting balances (likely need read capability):', balanceError);
+            console.log('[EXPLORER_DATA] Error getting balances:', balanceError);
             // Continue without balance data - this is expected for non-connected accounts
           }
         }
@@ -162,11 +162,11 @@ export function useExplorerData() {
         // best-effort enrichment only
       }
 
-      // Try to get transaction history if available
+      // Try to get transaction history if this is the currently connected account
       let activity: any[] = [];
       try {
         console.log('[EXPLORER_DATA] Attempting to get transaction history...');
-        if (keeta.history && typeof keeta.history === 'function') {
+        if (isCurrent && keeta.history && typeof keeta.history === 'function') {
           const historyResult = await keeta.history({ depth: 10 });
           console.log('[EXPLORER_DATA] History result:', historyResult);
           
@@ -185,10 +185,10 @@ export function useExplorerData() {
             console.log('[EXPLORER_DATA] Processed activity:', activity);
           }
         }
-      } catch (error) {
-        console.log('[EXPLORER_DATA] Error fetching history (likely need read capability):', error);
-        // Continue without activity data - this is expected for non-connected accounts
-      }
+        } catch (error) {
+          console.log('[EXPLORER_DATA] Error fetching history:', error);
+          // Continue without activity data - this is expected for non-connected accounts
+        }
 
       const result = {
         publicKey: account.publicKey || publicKey,
