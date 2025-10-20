@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { usePathname } from "next/navigation"
 import { type Icon } from "@tabler/icons-react"
 
 import {
@@ -21,14 +22,26 @@ export function NavSecondary({
     icon: Icon
   }[]
 } & React.ComponentPropsWithoutRef<typeof SidebarGroup>) {
+  const pathname = usePathname()
+
+  const isActivePath = (url: string) => {
+    if (url === "/") {
+      return pathname === url
+    }
+    return pathname === url || pathname.startsWith(`${url}/`)
+  }
+
   return (
     <SidebarGroup {...props}>
       <SidebarGroupContent>
         <SidebarMenu>
           {items.map((item) => (
             <SidebarMenuItem key={item.title}>
-              <SidebarMenuButton asChild>
-                <a href={item.url}>
+              <SidebarMenuButton asChild isActive={isActivePath(item.url)}>
+                <a
+                  href={item.url}
+                  aria-current={isActivePath(item.url) ? "page" : undefined}
+                >
                   <item.icon />
                   <span>{item.title}</span>
                 </a>

@@ -1,5 +1,6 @@
 "use client"
 
+import { usePathname } from "next/navigation"
 import {
   IconDots,
   IconFolder,
@@ -34,7 +35,15 @@ export function NavDocuments({
     icon: Icon
   }[]
 }) {
+  const pathname = usePathname()
   const { isMobile } = useSidebar()
+
+  const isActivePath = (url: string) => {
+    if (url === "/") {
+      return pathname === url
+    }
+    return pathname === url || pathname.startsWith(`${url}/`)
+  }
 
   return (
     <SidebarGroup className="group-data-[collapsible=icon]:hidden">
@@ -42,8 +51,11 @@ export function NavDocuments({
       <SidebarMenu>
         {items.map((item) => (
           <SidebarMenuItem key={item.name}>
-            <SidebarMenuButton asChild>
-              <a href={item.url}>
+            <SidebarMenuButton asChild isActive={isActivePath(item.url)}>
+              <a
+                href={item.url}
+                aria-current={isActivePath(item.url) ? "page" : undefined}
+              >
                 <item.icon />
                 <span>{item.name}</span>
               </a>
