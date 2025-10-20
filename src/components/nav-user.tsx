@@ -184,7 +184,7 @@ export function NavUser({
                   void handlePrimaryAction()
                 }}
                 disabled={isProcessing || !onConnectWallet}
-                className="inline-flex w-full items-center justify-center rounded-full bg-accent px-4 py-2 text-sm font-semibold text-white transition disabled:opacity-60 disabled:cursor-not-allowed hover:opacity-90"
+                className="inline-flex w-full items-center justify-center rounded-full bg-accent border border-hairline px-4 py-2 text-sm font-semibold text-white transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed hover:bg-accent/90 hover:border-hairline-strong hover:shadow-lg hover:scale-[1.02]"
               >
                 {isProcessing ? "Please wait..." : "Connect Wallet"}
               </button>
