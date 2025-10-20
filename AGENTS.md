@@ -2082,7 +2082,105 @@ builder.updatePermissions(
 
 ---
 
-### 💡 Future Improvements to Consider
+#### Entry #10: Sticky Navbar Layout Integration (2025-10-20)
+**Category:** Workflow Optimization  
+**Discovery:** Using `position: fixed` for the top navbar caused the main content to render beneath the bar unless additional padding was applied, making page transitions feel inconsistent. Switching to `position: sticky` keeps the navbar in the normal document flow while still pinning it during scroll.  
+
+**Implementation Pattern:**
+```tsx
+// Navbar component
+<motion.nav className="sticky top-0 z-50 backdrop-blur-sm hairline-b bg-[color:var(--background)]/90 ...">
+
+// Global layout no longer needs compensating top padding
+<Navbar />
+<div className="min-h-screen flex flex-col">
+```
+
+**Impact:** Content now starts directly below the navbar without manual offsets, reducing layout duplication and ensuring consistent spacing on every page.
+
+---
+
+#### Entry #11: Sidebar Offset for Navbar Height (2025-10-20)
+**Category:** Workflow Optimization  
+**Discovery:** After moving the navbar into the normal flow, the desktop sidebar still used a `fixed` container pinned to the top of the viewport, causing it to overlap the navbar. Additionally, the mobile sheet variant did not account for the navbar height.  
+
+**Implementation Pattern:**
+```tsx
+// Sidebar container now starts below the navbar and fills remaining height
+style={{
+  top: "var(--app-nav-height, 0px)",
+  height: "calc(100svh - var(--app-nav-height, 0px))",
+}}
+
+// Provider wrapper uses the same variable for consistent layouts
+minHeight: "calc(100svh - var(--app-nav-height, 0px))"
+```
+
+**Impact:** Sidebar content aligns with the navbar across desktop and mobile, eliminating overlap and ensuring scroll areas remain visible.
+
+---
+
+#### Entry #12: Navbar Content Consolidated into Sidebar (2025-10-20)
+**Category:** Workflow Optimization  
+**Discovery:** Maintaining a separate top navbar alongside the sidebar created duplicated wallet state logic and overlapping layout offsets. Folding the navbar actions (search, social links, wallet status, theme toggle) into the sidebar header lets the sidebar own all navigation concerns.  
+
+**Implementation Pattern:**
+```tsx
+// In `AppSidebar`
+<SidebarHeader>
+  <ThemeToggle />
+  <SearchBar />
+  <ConnectWalletControls />
+</SidebarHeader>
+
+// Root layout no longer renders `Navbar`
+<AppProviders>
+  <WalletRedirector />
+  <div className="min-h-screen flex flex-col">
+    <main className="flex-1">{children}</main>
+    <ConditionalFooter />
+  </div>
+</AppProviders>
+```
+
+**Impact:** Navigation is centralized, the sidebar controls wallet connectivity directly, and redundant height variables are removed. This simplifies layout composition and reduces the chance of state drift between top and side navigation.
+
+---
+
+#### Entry #13: Dashboard Card Cleanup (2025-10-20)
+**Category:** Workflow Optimization  
+**Discovery:** Static placeholder cards (`Active Tokens`, `Security Score`, `Security Status`, `Network Status`) cluttered `SectionCards` and `WalletQuickActions` without live data, creating misleading UX. Removing them keeps the dashboard focused on actionable modules.  
+
+**Implementation Pattern:**
+```tsx
+// `SectionCards`
+// Removed secondary cards by trimming the JSX list to just revenue + transactions
+
+// `WalletQuickActions`
+// Dropped trailing cards by deleting the JSX blocks for Security/Network status
+```
+
+**Impact:** Dashboard surfaces only meaningful content while we wire real metrics, reducing maintenance and preventing stale mock statistics from shipping.
+
+---
+
+#### Entry #13: Sticky Navbar Layout Integration (2025-10-20)
+**Category:** Workflow Optimization  
+**Discovery:** Using `position: fixed` for the top navbar caused the main content to render beneath the bar unless additional padding was applied, making page transitions feel inconsistent. Switching to `position: sticky` keeps the navbar in the normal document flow while still pinning it during scroll.  
+
+**Implementation Pattern:**
+```tsx
+// Navbar component
+<motion.nav className="sticky top-0 z-50 backdrop-blur-sm hairline-b bg-[color:var(--background)]/90 ...">
+
+// Global layout no longer needs compensating top padding
+<Navbar />
+<div className="min-h-screen flex flex-col">
+```
+
+**Impact:** Content now starts directly below the navbar without manual offsets, reducing layout duplication and ensuring consistent spacing on every page.
+
+---
 
 #### Potential Enhancement #1: Automated Browser Testing
 **Idea:** Create automated test suite using Browser MCP  

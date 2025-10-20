@@ -91,13 +91,19 @@ export default function Home() {
             </p>
             <div className="flex flex-wrap items-center gap-4">
               <a
-                href="https://chromewebstore.google.com/"
+                href="https://chromewebstore.google.com/detail/keythings-wallet/jhngbkboonmpephhenljbljnpffabloh?hl=en"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center justify-center rounded-full bg-white px-6 py-3 text-sm font-semibold text-black shadow-[0_20px_50px_rgba(15,15,20,0.35)] transition hover:bg-white/90"
               >
                 Install on Chrome
               </a>
+              <Link
+                href="/dashboard"
+                className="inline-flex items-center justify-center rounded-full border border-soft px-6 py-3 text-sm font-semibold text-foreground transition hover:bg-[color:color-mix(in_oklab,var(--foreground)_14%,transparent)]"
+              >
+                Enter the dApp
+              </Link>
               <Link
                 href="/docs"
                 className="inline-flex items-center justify-center rounded-full border border-soft px-6 py-3 text-sm font-semibold text-foreground transition hover:bg-[color:color-mix(in_oklab,var(--foreground)_14%,transparent)]"

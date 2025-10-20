@@ -10,7 +10,7 @@ export default function ConditionalFooter(): React.JSX.Element | null {
 
   // Pages where footer should NOT be shown
   const noFooterPages: readonly string[] = [
-    "/home",
+    "/dashboard",
     "/assets",
     "/settings",
     "/trade",

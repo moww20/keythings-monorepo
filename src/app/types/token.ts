@@ -10,6 +10,8 @@ export interface WalletTokenBalance {
   address: string;
   balance: string;
   formattedAmount: string;
+  formattedUsdValue?: string;
+  rawBalance?: string;
 }
 
 export interface TokenChoice extends TokenCatalogEntry {

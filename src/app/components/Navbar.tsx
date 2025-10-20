@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { createPortal } from "react-dom";
 import Link from "next/link";
@@ -27,11 +27,19 @@ export default function Navbar(): React.JSX.Element {
   const [mounted, setMounted] = useState(false);
   const [walletConnected, setWalletConnected] = useState(false);
   const [walletAddress, setWalletAddress] = useState<string | null>(null);
+  const navRef = useRef<HTMLElement | null>(null);
+
+  const updateNavHeight = useCallback(() => {
+    if (typeof window === "undefined") return;
+    const element = navRef.current;
+    if (!element) return;
+    document.documentElement.style.setProperty("--app-nav-height", `${element.offsetHeight}px`);
+  }, []);
 
   const isActive = (path: string) => pathname === path;
 
   const menuItems: MenuItem[] = [
-    { path: '/home', label: 'Dashboard', icon: LayoutDashboard, enabled: true },
+    { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, enabled: true },
     { path: '/trade', label: 'Trade', icon: TrendingUp, enabled: true },
     { path: null, label: 'OTC Swap', icon: ArrowLeftRight, enabled: false },
     { path: null, label: 'Launchpad', icon: Rocket, enabled: false },
@@ -50,10 +58,10 @@ export default function Navbar(): React.JSX.Element {
     }
   };
 
-  const redirectToHome = useCallback(() => {
+  const redirectToDashboard = useCallback(() => {
     if (typeof window === "undefined") return;
-    if (window.location.pathname !== "/home") {
-      router.push("/home");
+    if (window.location.pathname !== "/dashboard") {
+      router.push("/dashboard");
     }
   }, [router]);
 
@@ -74,19 +82,35 @@ export default function Navbar(): React.JSX.Element {
           setWalletAddress(accounts[0] ?? null);
           // Only redirect to home if we're on the root page
           if (window.location.pathname === "/" || window.location.pathname === "") {
-            redirectToHome();
+            redirectToDashboard();
           }
         }
       } catch (error) {
         console.log("No wallet connected", error);
       }
     }
-  }, [redirectToHome]);
+  }, [redirectToDashboard]);
 
   useEffect(() => {
     // Close mobile menu on route change
     setMobileOpen(false);
   }, [pathname]);
+
+  useEffect(() => {
+    updateNavHeight();
+    if (typeof window === "undefined") return;
+
+    const handleResize = () => updateNavHeight();
+    window.addEventListener("resize", handleResize);
+
+    return () => {
+      window.removeEventListener("resize", handleResize);
+    };
+  }, [updateNavHeight]);
+
+  useEffect(() => {
+    updateNavHeight();
+  }, [updateNavHeight, walletConnected, mobileOpen]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -113,9 +137,9 @@ export default function Navbar(): React.JSX.Element {
         if (accounts && accounts.length > 0) {
           setWalletConnected(true);
           setWalletAddress(accounts[0] ?? null);
-          // Only redirect to home if we're on the root page
+          // Only redirect to dashboard if we're on the root page
           if (window.location.pathname === "/" || window.location.pathname === "") {
-            redirectToHome();
+            redirectToDashboard();
           }
         } else {
           setWalletConnected(false);
@@ -150,7 +174,7 @@ export default function Navbar(): React.JSX.Element {
       clearTimeout(timeoutId);
       detachListeners?.();
     };
-  }, [checkWalletConnection, redirectToHome]);
+  }, [checkWalletConnection, redirectToDashboard]);
 
   const waitForWallet = async (maxAttempts = 20): Promise<KeetaProvider | null> => {
     for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
@@ -186,9 +210,9 @@ export default function Navbar(): React.JSX.Element {
       if (accounts && accounts.length > 0) {
         setWalletConnected(true);
         setWalletAddress(accounts[0] ?? null);
-        // Only redirect to home if we're on the root page
+        // Only redirect to dashboard if we're on the root page
         if (window.location.pathname === "/" || window.location.pathname === "") {
-          redirectToHome();
+          redirectToDashboard();
         }
       }
     } catch (error) {
@@ -227,7 +251,8 @@ export default function Navbar(): React.JSX.Element {
     `px-3 py-1.5 rounded-full text-sm transition ${pathname.startsWith(href) ? "bg-white/10 text-foreground" : "text-foreground/90 hover:bg-white/5"}`;
   return (
     <motion.nav
-      className="fixed top-0 left-0 right-0 z-50 backdrop-blur-sm hairline-b"
+      ref={navRef}
+      className="sticky top-0 z-50 backdrop-blur-sm hairline-b bg-[color:var(--background)]/90 [html[data-theme='light']_&]:bg-[color:var(--background)]/95"
       initial={{ opacity: 0, y: -12 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.6 }}

@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 
 import type { KeetaProvider } from "@/types/keeta";
 
-const HOME_PATH = "/home";
+const DASHBOARD_PATH = "/dashboard";
 
 export default function WalletRedirector(): null {
   const router = useRouter();
@@ -18,22 +18,37 @@ export default function WalletRedirector(): null {
     let provider: KeetaProvider | null = null;
     let detectionInterval: ReturnType<typeof setInterval> | null = null;
 
-    const redirectToHome = () => {
+    const shouldSkipRedirect = () => {
+      if (typeof window === "undefined") return false;
+      const { pathname, search } = window.location;
+      if (pathname === "/" || pathname === "") {
+        return true;
+      }
+      try {
+        const params = new URLSearchParams(search);
+        return params.has("stayOnLanding");
+      } catch {
+        return false;
+      }
+    };
+
+    const redirectToDashboard = () => {
       if (typeof window === "undefined") return;
-      if (window.location.pathname !== HOME_PATH) {
-        router.push(HOME_PATH);
+      if (shouldSkipRedirect()) return;
+      if (window.location.pathname !== DASHBOARD_PATH) {
+        router.push(DASHBOARD_PATH);
       }
     };
 
     const handleAccountsChanged = (...args: unknown[]) => {
       const accounts = args[0] as string[] | undefined;
       if (Array.isArray(accounts) && accounts.length > 0) {
-        redirectToHome();
+        redirectToDashboard();
       }
     };
 
     const handleConnect = (...args: unknown[]) => {
-      redirectToHome();
+      redirectToDashboard();
     };
 
     const detachListeners = () => {
@@ -66,18 +81,18 @@ export default function WalletRedirector(): null {
           if (typeof provider.getAccounts === "function") {
             const accounts = await provider.getAccounts();
             if (Array.isArray(accounts) && accounts.length > 0) {
-              redirectToHome();
+              redirectToDashboard();
               return;
             }
           }
 
           if (typeof provider.isConnected === "boolean" && provider.isConnected) {
-            redirectToHome();
+            redirectToDashboard();
           } else if (typeof provider.isConnected === "function") {
             try {
               const connected = await provider.isConnected();
               if (connected) {
-                redirectToHome();
+                redirectToDashboard();
               }
             } catch (error) {
               console.debug("Keeta provider isConnected check failed", error);

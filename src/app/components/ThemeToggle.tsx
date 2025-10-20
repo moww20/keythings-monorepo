@@ -15,8 +15,10 @@ function applyTheme(theme: ThemeMode): void {
   const el = document.documentElement;
   if (theme === "light") {
     el.setAttribute("data-theme", "light");
+    el.classList.remove("dark");
   } else {
     el.removeAttribute("data-theme");
+    el.classList.add("dark");
   }
 }
 

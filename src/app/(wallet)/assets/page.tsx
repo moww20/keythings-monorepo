@@ -113,9 +113,6 @@ export default function AssetsPage() {
               balance={wallet.balance}
               isConnecting={isConnecting}
               onConnect={handleConnectWallet}
-              onReceive={handleReceive}
-              onSend={handleSend}
-              onTransfer={handleTransfer}
               tokens={[]}
               ktaPriceData={null}
             />

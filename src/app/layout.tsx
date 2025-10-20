@@ -2,10 +2,9 @@ import type { Metadata } from "next";
 import type { ReactNode } from "react";
 
 import "./globals.css";
-import Navbar from "./components/Navbar";
-import ConditionalFooter from "./components/ConditionalFooter";
 import AppProviders from "./components/AppProviders";
 import WalletRedirector from "./components/WalletRedirector";
+import ForceDarkTheme from "./components/ForceDarkTheme";
 
 export const metadata: Metadata = {
   title: "Keythings Wallet",
@@ -32,12 +31,12 @@ export default function RootLayout({ children }: RootLayoutProps) {
     <html lang="en">
       <body className="antialiased font-sans">
         <AppProviders>
-          <WalletRedirector />
-          <Navbar />
-          <div className="pt-16 min-h-screen flex flex-col">
-            <main className="flex-1">{children}</main>
-            <ConditionalFooter />
-          </div>
+          <ForceDarkTheme>
+            <WalletRedirector />
+            <main className="min-h-screen">
+              {children}
+            </main>
+          </ForceDarkTheme>
         </AppProviders>
       </body>
     </html>

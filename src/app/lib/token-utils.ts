@@ -341,6 +341,7 @@ export interface ProcessedToken {
   ticker: string;
   balance: string;
   formattedAmount: string;
+  formattedUsdValue?: string;
   decimals: number;
   fieldType: TokenFieldType;
   isBaseToken: boolean;
@@ -613,6 +614,7 @@ export async function processTokenForDisplay(
   balance: string | number | bigint,
   metadata: string | null | undefined,
   baseTokenAddress: string | null | undefined,
+  price?: number,
 ): Promise<ProcessedToken> {
   const isBaseToken = Boolean(baseTokenAddress && tokenAddress === baseTokenAddress);
 
@@ -649,6 +651,14 @@ export async function processTokenForDisplay(
 
   const formattedAmount = formatTokenAmount(balance, decimals, fieldType, displayDecimals);
   const displayAmount = formatAmountWithCommas(formattedAmount);
+  let formattedUsdValue: string | undefined;
+  if (price) {
+    const numericAmount = Number(formattedAmount.replace(/,/g, ""));
+    if (Number.isFinite(numericAmount)) {
+      const usdAmount = numericAmount * price;
+      formattedUsdValue = formatAmountWithCommas(usdAmount.toFixed(2));
+    }
+  }
 
   const iconFromMetadata = metadata ? getTokenIconFromMetadata(metadata) : null;
   let iconDataUrl = iconFromMetadata ? getTokenIconDataUrl(iconFromMetadata) : "";
@@ -672,6 +682,7 @@ export async function processTokenForDisplay(
     ticker,
     balance: balance.toString(),
     formattedAmount: displayAmount,
+    formattedUsdValue,
     decimals,
     fieldType,
     isBaseToken,

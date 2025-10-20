@@ -1,39 +1,47 @@
 "use client";
 
 import React from "react";
-import { ArrowDownLeft, ArrowUpRight, ArrowRightLeft, TrendingUp, AlertCircle } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { TrendingUp, AlertCircle } from "lucide-react";
+
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 
 import type { ProcessedToken } from "../lib/token-utils";
 
-interface KtaPriceData {
+export interface KtaPriceData {
   usd: number;
   usd_market_cap?: number;
   usd_24h_vol?: number;
+  usd_24h_change?: number;
 }
 
-interface EstimatedBalanceProps {
+export interface EstimatedBalanceProps {
   balance: string | number | bigint | null;
   isConnecting?: boolean;
   onConnect?: () => void;
-  onReceive?: () => void;
-  onSend?: () => void;
-  onTransfer?: () => void;
   tokens?: ProcessedToken[];
   ktaPriceData?: KtaPriceData | null;
   // Trading status props (for display only)
   isTradingEnabled?: boolean;
   tradingError?: string | null;
+  className?: string;
+  title?: string;
 }
 
 export default function EstimatedBalance({
   balance,
-  onReceive,
-  onSend,
-  onTransfer,
   tokens = [],
   ktaPriceData = null,
   isTradingEnabled = false,
   tradingError = null,
+  className,
+  title = "Estimated Balance",
 }: EstimatedBalanceProps): React.JSX.Element {
   const calculateTotalUsdValue = (): number => {
     if (!tokens || tokens.length === 0) return 0;
@@ -84,108 +92,54 @@ export default function EstimatedBalance({
   };
 
   return (
-    <div className="mb-2 glass rounded-lg p-4 border border-hairline shadow-[0_20px_60px_rgba(6,7,10,0.45)]">
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-2">
-          <h2 className="text-lg font-semibold text-foreground">Estimated Balance</h2>
-          <button className="p-1" aria-label="Toggle balance visibility">
-            <svg className="h-5 w-5 text-muted" fill="currentColor" viewBox="0 0 24 24">
-              <path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-              <path d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-            </svg>
-          </button>
+    <Card className={cn("@container/card h-full", className)}>
+      <CardHeader className="pb-3">
+        <div className="space-y-1">
+          <CardTitle className="text-lg">{title}</CardTitle>
+          <CardDescription>Across all tokens and assets</CardDescription>
         </div>
-        
-        {/* Market Cap and Volume */}
-        {ktaPriceData && (ktaPriceData.usd_market_cap || ktaPriceData.usd_24h_vol) && (
-          <div className="flex items-center gap-4 text-sm text-muted">
-            {ktaPriceData.usd_market_cap && (
-              <span>MC: ${formatLargeNumber(ktaPriceData.usd_market_cap)}</span>
-            )}
-            {ktaPriceData.usd_24h_vol && (
-              <span>24h Vol: ${formatLargeNumber(ktaPriceData.usd_24h_vol)}</span>
-            )}
-          </div>
-        )}
-      </div>
-
-      <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4">
-        <div>
-          <div className="flex items-baseline gap-2 mb-2">
-            {balance === null ? (
-              <div className="flex items-center gap-2">
-                <svg className="animate-spin h-8 w-8 text-accent" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
-                <span className="text-lg text-muted">Connecting...</span>
+      </CardHeader>
+      <CardContent className="flex h-full flex-col gap-3">
+        <div className="space-y-2">
+          {balance === null ? (
+            <div className="flex items-center gap-2 text-muted">
+              <svg className="animate-spin h-6 w-6 text-accent" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+              <span>Connecting...</span>
+            </div>
+          ) : (
+            <div className="space-y-1">
+              <div className="flex items-baseline gap-2">
+                <span className="text-3xl font-semibold text-foreground">{calculateKtaEquivalent()}</span>
+                <span className="text-lg text-muted-foreground">KTA</span>
               </div>
-            ) : (
-              <>
-                <span className="text-3xl font-bold text-foreground">
-                  {calculateKtaEquivalent()}
-                </span>
-                <span className="text-lg text-muted">KTA</span>
-                <svg className="h-4 w-4 text-muted" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M7 10l5 5 5-5z" />
-                </svg>
-              </>
-            )}
-          </div>
-          <div className="text-sm text-muted mb-2">
-            ~ ${calculateTotalUsdValue().toFixed(2)}
-          </div>
-          <div className="flex items-center gap-1 text-sm">
-            <span className="text-muted">Today&apos;s PnL</span>
-            <span className="text-red-500">-$0.18(0.02%)</span>
-            <svg className="h-4 w-4 text-muted" fill="currentColor" viewBox="0 0 24 24">
-              <path d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
+              <div className="text-sm text-muted-foreground">~ ${calculateTotalUsdValue().toFixed(2)}</div>
+            </div>
+          )}
+          <div className="flex items-center gap-1 text-xs text-muted-foreground">
+            <span>Today&apos;s PnL</span>
+            <span className="text-red-500">-$0.18 (0.02%)</span>
           </div>
         </div>
 
-        <div className="flex flex-col gap-3">
-          {/* Trading Error Message */}
+        <div className="space-y-3 text-sm">
           {tradingError && (
-            <div className="flex items-center gap-2 p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
-              <AlertCircle className="h-4 w-4 text-red-500 flex-shrink-0" />
-              <p className="text-sm text-red-500">{tradingError}</p>
+            <div className="flex items-center gap-2 rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-red-500">
+              <AlertCircle className="h-4 w-4 flex-shrink-0" />
+              <p className="text-sm">{tradingError}</p>
             </div>
           )}
-          
-          {/* Trading Status Banner */}
+
           {isTradingEnabled && (
-            <div className="flex items-center gap-2 p-3 bg-green-500/10 border border-green-500/20 rounded-lg">
-              <TrendingUp className="h-4 w-4 text-green-500 flex-shrink-0" />
-              <p className="text-sm text-green-500 font-medium">Trading Enabled</p>
+            <div className="flex items-center gap-2 rounded-lg border border-green-500/20 bg-green-500/10 px-3 py-2 text-emerald-400">
+              <TrendingUp className="h-4 w-4 flex-shrink-0" />
+              <p className="text-sm font-medium">Trading Enabled</p>
             </div>
           )}
-          
-          <div className="flex flex-col sm:flex-row gap-3">
-            <button 
-              onClick={onReceive}
-              className="inline-flex items-center justify-center gap-2 bg-surface border border-hairline text-foreground px-6 py-2.5 rounded-lg font-medium hover:bg-surface-strong transition-colors duration-200 min-w-[120px]"
-            >
-              <ArrowDownLeft className="h-4 w-4" />
-              Receive
-            </button>
-            <button 
-              onClick={onSend}
-              className="inline-flex items-center justify-center gap-2 bg-surface border border-hairline text-foreground px-6 py-2.5 rounded-lg font-medium hover:bg-surface-strong transition-colors duration-200 min-w-[120px]"
-            >
-              <ArrowUpRight className="h-4 w-4" />
-              Send
-            </button>
-            <button 
-              onClick={onTransfer}
-              className="inline-flex items-center justify-center gap-2 bg-surface border border-hairline text-foreground px-6 py-2.5 rounded-lg font-medium hover:bg-surface-strong transition-colors duration-200 min-w-[120px]"
-            >
-              <ArrowRightLeft className="h-4 w-4" />
-              Transfer
-            </button>
-          </div>
         </div>
-      </div>
-    </div>
+      </CardContent>
+    </Card>
   );
 }

@@ -1,0 +1,167 @@
+[
+  {
+    "id": 1,
+    "name": "Keeta",
+    "symbol": "KEETA",
+    "balance": "1,250.50",
+    "value": "$12,450.00",
+    "change24h": "+8.2%",
+    "type": "Native",
+    "status": "Active",
+    "network": "Keeta Network"
+  },
+  {
+    "id": 2,
+    "name": "Bitcoin",
+    "symbol": "BTC",
+    "balance": "0.025",
+    "value": "$1,250.00",
+    "change24h": "+2.1%",
+    "type": "Crypto",
+    "status": "Active",
+    "network": "Bitcoin"
+  },
+  {
+    "id": 3,
+    "name": "Ethereum",
+    "symbol": "ETH",
+    "balance": "2.5",
+    "value": "$6,250.00",
+    "change24h": "-1.5%",
+    "type": "Crypto",
+    "status": "Active",
+    "network": "Ethereum"
+  },
+  {
+    "id": 4,
+    "name": "USD Coin",
+    "symbol": "USDC",
+    "balance": "1,000.00",
+    "value": "$1,000.00",
+    "change24h": "0.0%",
+    "type": "Stablecoin",
+    "status": "Active",
+    "network": "Ethereum"
+  },
+  {
+    "id": 5,
+    "name": "Keeta Token",
+    "symbol": "KTT",
+    "balance": "5,000.00",
+    "value": "$2,500.00",
+    "change24h": "+15.3%",
+    "type": "Native",
+    "status": "Active",
+    "network": "Keeta Network"
+  },
+  {
+    "id": 6,
+    "name": "Polygon",
+    "symbol": "MATIC",
+    "balance": "500.00",
+    "value": "$250.00",
+    "change24h": "+5.2%",
+    "type": "Crypto",
+    "status": "Active",
+    "network": "Polygon"
+  },
+  {
+    "id": 7,
+    "name": "Chainlink",
+    "symbol": "LINK",
+    "balance": "25.0",
+    "value": "$375.00",
+    "change24h": "-3.1%",
+    "type": "Crypto",
+    "status": "Active",
+    "network": "Ethereum"
+  },
+  {
+    "id": 8,
+    "name": "Uniswap",
+    "symbol": "UNI",
+    "balance": "50.0",
+    "value": "$500.00",
+    "change24h": "+7.8%",
+    "type": "Crypto",
+    "status": "Active",
+    "network": "Ethereum"
+  },
+  {
+    "id": 9,
+    "name": "Aave",
+    "symbol": "AAVE",
+    "balance": "2.5",
+    "value": "$625.00",
+    "change24h": "+12.4%",
+    "type": "Crypto",
+    "status": "Active",
+    "network": "Ethereum"
+  },
+  {
+    "id": 10,
+    "name": "Compound",
+    "symbol": "COMP",
+    "balance": "5.0",
+    "value": "$300.00",
+    "change24h": "-2.3%",
+    "type": "Crypto",
+    "status": "Active",
+    "network": "Ethereum"
+  },
+  {
+    "id": 11,
+    "name": "Maker",
+    "symbol": "MKR",
+    "balance": "0.5",
+    "value": "$1,250.00",
+    "change24h": "+4.7%",
+    "type": "Crypto",
+    "status": "Active",
+    "network": "Ethereum"
+  },
+  {
+    "id": 12,
+    "name": "SushiSwap",
+    "symbol": "SUSHI",
+    "balance": "100.0",
+    "value": "$150.00",
+    "change24h": "+9.1%",
+    "type": "Crypto",
+    "status": "Active",
+    "network": "Ethereum"
+  },
+  {
+    "id": 13,
+    "name": "Yearn Finance",
+    "symbol": "YFI",
+    "balance": "0.1",
+    "value": "$1,000.00",
+    "change24h": "-5.2%",
+    "type": "Crypto",
+    "status": "Active",
+    "network": "Ethereum"
+  },
+  {
+    "id": 14,
+    "name": "Curve",
+    "symbol": "CRV",
+    "balance": "200.0",
+    "value": "$200.00",
+    "change24h": "+3.6%",
+    "type": "Crypto",
+    "status": "Active",
+    "network": "Ethereum"
+  },
+  {
+    "id": 15,
+    "name": "Balancer",
+    "symbol": "BAL",
+    "balance": "25.0",
+    "value": "$125.00",
+    "change24h": "+1.8%",
+    "type": "Crypto",
+    "status": "Active",
+    "network": "Ethereum"
+  }
+]
