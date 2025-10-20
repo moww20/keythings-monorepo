@@ -14,11 +14,14 @@ export default function ConditionalFooter(): React.JSX.Element | null {
     "/assets",
     "/settings",
     "/trade",
+    "/explorer",
     // Add other dashboard/admin pages here if needed
   ];
 
   // Check if current page should not have footer
-  const shouldHideFooter = noFooterPages.some((page) => pathname === page);
+  const shouldHideFooter = noFooterPages.some((page) => 
+    pathname === page || pathname.startsWith(page + "/")
+  );
 
   // Don't render footer on specified pages
   if (shouldHideFooter) {
