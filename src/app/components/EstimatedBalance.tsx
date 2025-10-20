@@ -2,7 +2,7 @@
 
 import React from "react";
 import { cn } from "@/lib/utils";
-import { TrendingUp, AlertCircle } from "lucide-react";
+import { AlertCircle } from "lucide-react";
 
 import {
   Card,
@@ -132,12 +132,6 @@ export default function EstimatedBalance({
             </div>
           )}
 
-          {isTradingEnabled && (
-            <div className="flex items-center gap-2 rounded-lg border border-green-500/20 bg-green-500/10 px-3 py-2 text-emerald-400">
-              <TrendingUp className="h-4 w-4 flex-shrink-0" />
-              <p className="text-sm font-medium">Trading Enabled</p>
-            </div>
-          )}
         </div>
       </CardContent>
     </Card>
