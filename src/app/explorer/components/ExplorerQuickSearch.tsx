@@ -35,27 +35,27 @@ export default function ExplorerQuickSearch(): React.JSX.Element {
       let destination = target.path;
 
       if (target.type === "account") {
-        const response = await fetch(`/api/explorer/account/${trimmed}`);
+        // Prefer client-side wallet lookup via Keeta provider to avoid server 404s
+        const keeta = typeof window !== 'undefined' ? (window as typeof window & { keeta?: { getAccountInfo?: (addr: string) => Promise<unknown> } }).keeta : undefined;
+        if (keeta?.getAccountInfo) {
+          try {
+            const info = await keeta.getAccountInfo(trimmed);
+            const account: any = info ?? {};
+            const accountType = String(account?.type ?? '').toUpperCase();
 
-        if (response.status === 404) {
-          const message = "Account not found on the explorer network.";
-          setError(message);
-          Toast.error(message);
-          return;
-        }
-
-        if (!response.ok) {
-          throw new Error(`Explorer lookup failed (${response.status})`);
-        }
-
-        const data = await response.json() as { account?: { type?: string } };
-        const accountType = data?.account?.type;
-
-        if (accountType === "STORAGE") {
-          destination = `/explorer/storage/${trimmed}`;
-        } else if (accountType === "TOKEN") {
-          destination = `/explorer/token/${trimmed}`;
+            if (accountType === 'STORAGE') {
+              destination = `/explorer/storage/${trimmed}`;
+            } else if (accountType === 'TOKEN') {
+              destination = `/explorer/token/${trimmed}`;
+            } else {
+              destination = `/explorer/account/${trimmed}`;
+            }
+          } catch (e) {
+            // If lookup fails, still navigate to the generic account view
+            destination = `/explorer/account/${trimmed}`;
+          }
         } else {
+          // Fallback: navigate directly; the page will handle fetching/empty states
           destination = `/explorer/account/${trimmed}`;
         }
       }
