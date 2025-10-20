@@ -22,6 +22,17 @@ interface ExplorerAccount {
     issuedAt: string | null;
     expiresAt: string | null;
   }>;
+  activity: Array<{
+    id: string;
+    block: string;
+    timestamp: number;
+    type: string;
+    amount: string;
+    from: string;
+    to: string;
+    token: string;
+    operationType: string;
+  }>;
 }
 
 interface ExplorerDataState {
@@ -69,7 +80,7 @@ export function useExplorerData() {
       const account = accountInfo as any; // Type assertion since we don't know the exact structure
       console.log('[EXPLORER_DATA] Transformed account object:', account);
 
-      // Try to enrich with balances if the queried account matches the connected account
+      // Try to enrich with balances - attempt for both current account and queried account
       let tokens: ExplorerAccount["tokens"] = [];
       try {
         console.log('[EXPLORER_DATA] Attempting to get connected accounts...');
@@ -79,8 +90,9 @@ export function useExplorerData() {
         const isCurrent = Array.isArray(connectedAccounts) && connectedAccounts.includes(publicKey);
         console.log('[EXPLORER_DATA] Is current account:', isCurrent);
         
-        if (isCurrent && keeta.getAllBalances) {
-          console.log('[EXPLORER_DATA] Getting balances for current account...');
+        // Try to get balances for any account, not just the current one
+        if (keeta.getAllBalances) {
+          console.log('[EXPLORER_DATA] Getting balances...');
           const balances = await keeta.getAllBalances();
           console.log('[EXPLORER_DATA] Raw balances:', balances);
           
@@ -112,9 +124,65 @@ export function useExplorerData() {
             console.log('[EXPLORER_DATA] Processed tokens:', tokens);
           }
         }
+        
+        // If no tokens from balances, try to get account-specific token info
+        if (tokens.length === 0 && keeta.getAccountInfo) {
+          console.log('[EXPLORER_DATA] No tokens from balances, trying account-specific info...');
+          try {
+            // Try to get more detailed account info that might include tokens
+            const detailedInfo = await keeta.getAccountInfo(publicKey);
+            console.log('[EXPLORER_DATA] Detailed account info:', detailedInfo);
+            
+            // Check if the account info includes token information
+            if (detailedInfo && typeof detailedInfo === 'object') {
+              const accountData = detailedInfo as any;
+              if (accountData.tokens && Array.isArray(accountData.tokens)) {
+                tokens = accountData.tokens.map((token: any) => ({
+                  publicKey: String(token?.publicKey ?? token?.token ?? ''),
+                  name: token?.name ?? null,
+                  ticker: token?.ticker ?? token?.symbol ?? null,
+                  decimals: token?.decimals ?? null,
+                  totalSupply: token?.totalSupply ?? null,
+                  balance: String(token?.balance ?? '0'),
+                }));
+                console.log('[EXPLORER_DATA] Tokens from account info:', tokens);
+              }
+            }
+          } catch (error) {
+            console.log('[EXPLORER_DATA] Error getting detailed account info:', error);
+          }
+        }
       } catch (error) {
         console.log('[EXPLORER_DATA] Error enriching with balances:', error);
         // best-effort enrichment only
+      }
+
+      // Try to get transaction history if available
+      let activity: any[] = [];
+      try {
+        console.log('[EXPLORER_DATA] Attempting to get transaction history...');
+        if (keeta.history && typeof keeta.history === 'function') {
+          const historyResult = await keeta.history({ depth: 10 });
+          console.log('[EXPLORER_DATA] History result:', historyResult);
+          
+          if (historyResult && Array.isArray(historyResult.records)) {
+            activity = historyResult.records.map((record: any) => ({
+              id: record.id || record.block || record.hash,
+              block: record.block || record.hash,
+              timestamp: record.timestamp || Date.now(),
+              type: record.type || 'Transaction',
+              amount: record.amount || '0',
+              from: record.from || '',
+              to: record.to || '',
+              token: record.token || '',
+              operationType: record.operationType || 'UNKNOWN',
+            }));
+            console.log('[EXPLORER_DATA] Processed activity:', activity);
+          }
+        }
+      } catch (error) {
+        console.log('[EXPLORER_DATA] Error fetching history:', error);
+        // Continue without activity data
       }
 
       const result = {
@@ -127,8 +195,9 @@ export function useExplorerData() {
         info: account.info || {},
         tokens: tokens.length > 0 ? tokens : (account.tokens || []),
         certificates: account.certificates || [],
+        activity: activity,
       };
-      
+
       console.log('[EXPLORER_DATA] Final result:', result);
       return result;
     } catch (error) {

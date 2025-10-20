@@ -114,6 +114,7 @@ export default function AccountPage(): React.JSX.Element {
   const hasAccountData = account.representative || account.owner || account.signers?.length > 0 || account.headBlock || Object.keys(account.info || {}).length > 0;
   const hasTokens = account.tokens?.length > 0;
   const hasCertificates = account.certificates?.length > 0;
+  const hasActivity = account.activity?.length > 0;
 
   const representativeLink = account.representative
     ? resolveExplorerPath(account.representative)
@@ -324,8 +325,75 @@ export default function AccountPage(): React.JSX.Element {
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-semibold text-foreground">Recent Activity</h2>
             </div>
-            <div className="rounded-2xl border border-hairline bg-surface p-6">
-              <p className="text-muted">Transaction history will be available when connected to the Keeta network.</p>
+            <div className="overflow-hidden rounded-2xl border border-hairline bg-surface">
+              <div className="hidden grid-cols-[1fr_1fr_2fr_1fr_1fr] gap-6 border-b border-hairline px-6 py-3 text-xs font-medium uppercase tracking-[0.3em] text-muted md:grid">
+                <span>Type</span>
+                <span>Amount</span>
+                <span>From/To</span>
+                <span>Block</span>
+                <span>Time</span>
+              </div>
+              <div className="divide-y divide-hairline">
+                {!hasActivity ? (
+                  <div className="px-6 py-4 text-sm text-muted">No recent activity found.</div>
+                ) : (
+                  account.activity.slice(0, 10).map((activity, index) => (
+                    <div key={activity.id || index} className="grid gap-4 px-6 py-4 text-sm text-foreground md:grid-cols-[1fr_1fr_2fr_1fr_1fr]">
+                      <div className="flex flex-col">
+                        <span className="font-medium">{activity.type}</span>
+                        <span className="text-xs text-muted">{activity.operationType}</span>
+                      </div>
+                      <div className="flex flex-col">
+                        <span className="text-foreground">
+                          {activity.amount !== '0' ? activity.amount : "—"}
+                        </span>
+                        {activity.token && (
+                          <span className="text-xs text-muted">{activity.token}</span>
+                        )}
+                      </div>
+                      <div className="space-y-1">
+                        {activity.from && (
+                          <div className="text-sm">
+                            <span className="text-muted">From: </span>
+                            <Link
+                              href={resolveExplorerPath(activity.from) ?? "#"}
+                              className="text-accent hover:text-foreground"
+                            >
+                              {truncateIdentifier(activity.from, 8, 6)}
+                            </Link>
+                          </div>
+                        )}
+                        {activity.to && (
+                          <div className="text-sm">
+                            <span className="text-muted">To: </span>
+                            <Link
+                              href={resolveExplorerPath(activity.to) ?? "#"}
+                              className="text-accent hover:text-foreground"
+                            >
+                              {truncateIdentifier(activity.to, 8, 6)}
+                            </Link>
+                          </div>
+                        )}
+                      </div>
+                      <div className="text-sm text-foreground">
+                        {activity.block ? (
+                          <Link
+                            href={`/explorer/block/${activity.block}`}
+                            className="text-accent hover:text-foreground"
+                          >
+                            {truncateIdentifier(activity.block, 8, 6)}
+                          </Link>
+                        ) : (
+                          "—"
+                        )}
+                      </div>
+                      <div className="text-sm text-subtle">
+                        {new Date(activity.timestamp).toLocaleString()}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
             </div>
           </section>
         </div>
