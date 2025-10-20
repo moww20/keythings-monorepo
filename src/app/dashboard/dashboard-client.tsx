@@ -83,7 +83,8 @@ export default function DashboardClient(): JSX.Element {
     if (isConnecting) return;
     setIsConnecting(true);
     try {
-      await connectWallet();
+      // Connect wallet and automatically request read capabilities for explorer functionality
+      await connectWallet(true); // Pass true to request read capabilities
 
       let permissionsGranted = hasTransactionPermissions;
       if (!permissionsGranted) {

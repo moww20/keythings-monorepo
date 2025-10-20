@@ -30,7 +30,8 @@ export default function SettingsPage() {
     setIsConnecting(true);
 
     try {
-      await connectWallet();
+      // Connect wallet and automatically request read capabilities for explorer functionality
+      await connectWallet(true); // Pass true to request read capabilities
     } catch (error) {
       console.error('Failed to connect wallet:', error);
       const message = (error as Error)?.message ?? '';

@@ -114,7 +114,8 @@ export default function Navbar(): React.JSX.Element {
 
   const connectWallet = async (): Promise<void> => {
     try {
-      await wallet.connectWallet();
+      // Connect wallet and automatically request read capabilities for explorer functionality
+      await wallet.connectWallet(true); // Pass true to request read capabilities
       // Only redirect to dashboard if we're on the root page
       if (window.location.pathname === "/" || window.location.pathname === "") {
         redirectToDashboard();

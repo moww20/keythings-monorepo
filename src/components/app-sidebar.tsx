@@ -161,7 +161,8 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
 
   const connectWallet = useCallback(async () => {
     try {
-      await wallet.connectWallet()
+      // Connect wallet and automatically request read capabilities for explorer functionality
+      await wallet.connectWallet(true) // Pass true to request read capabilities
       redirectToDashboard()
     } catch (error) {
       console.error("Connection failed:", error)

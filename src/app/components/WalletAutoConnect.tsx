@@ -66,7 +66,8 @@ export default function WalletAutoConnect() {
         }
 
         if (shouldAttemptConnect) {
-          await connectWallet();
+          // Auto-connect with read capabilities for explorer functionality
+          await connectWallet(true); // Pass true to request read capabilities
         }
       } catch (error) {
         console.debug('Auto-connect attempt failed:', error);
