@@ -390,19 +390,29 @@ export function useTokenBalances(shouldFetch: boolean = false) {
         console.debug('Failed to get capability token for getAllBalances:', capError);
       }
 
-      // Use RPC method with capability token
-      // The wallet extension expects capability tokens wrapped in an object: { capabilityToken: token }
+      // Prefer normalized balances RPC, fallback to all balances
       let result;
       if (typeof provider.request === 'function' && readToken) {
-        console.debug('Fetching balances via RPC with capability token...');
-        result = await provider.request({
-          method: 'keeta_getAllBalances',
-          params: [{ capabilityToken: readToken }]
-        });
+        console.debug('Fetching balances via normalized RPC with capability token...');
+        try {
+          result = await provider.request({
+            method: 'keeta_getNormalizedBalances',
+            params: [{ capabilityToken: readToken }]
+          });
+        } catch (e) {
+          console.debug('Normalized balances RPC failed, falling back to getAllBalances:', e);
+          result = await provider.request({
+            method: 'keeta_getAllBalances',
+            params: [{ capabilityToken: readToken }]
+          });
+        }
       } else {
         console.debug('Fetching balances via direct method...');
-        // Fallback to direct method call (may fail without token)
-        result = await provider.getAllBalances();
+        if (typeof (provider as any).getNormalizedBalances === 'function') {
+          result = await (provider as any).getNormalizedBalances();
+        } else {
+          result = await provider.getAllBalances();
+        }
       }
       
       if (!isMountedRef.current) return;

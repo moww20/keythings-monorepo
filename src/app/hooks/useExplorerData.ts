@@ -124,7 +124,19 @@ export function useExplorerData() {
               await keeta.requestCapabilities(['read', 'transact']);
             }
             
-            const balances = await keeta.getAllBalances();
+            let balances: any = [];
+            try {
+              if (typeof (keeta as any).getNormalizedBalances === 'function') {
+                balances = await (keeta as any).getNormalizedBalances();
+              } else if (typeof keeta.request === 'function') {
+                balances = await keeta.request({ method: 'keeta_getNormalizedBalances' });
+              } else {
+                balances = await keeta.getAllBalances();
+              }
+            } catch (normErr) {
+              console.debug('[EXPLORER_DATA] Normalized RPC failed, falling back to getAllBalances:', normErr);
+              balances = await keeta.getAllBalances();
+            }
             console.log('[EXPLORER_DATA] Raw balances:', balances);
 
             if (Array.isArray(balances)) {
@@ -133,6 +145,19 @@ export function useExplorerData() {
                   const tokenAddress = String(entry?.token ?? '');
                   const rawBalance = entry?.balance ?? '0';
                   const metadata = typeof entry?.metadata === 'string' ? entry.metadata : undefined;
+                  if (entry && typeof entry === 'object' && 'formattedAmount' in entry) {
+                    return {
+                      publicKey: tokenAddress,
+                      name: entry.name ?? null,
+                      ticker: entry.ticker ?? null,
+                      decimals: entry.decimals ?? null,
+                      fieldType: entry.fieldType,
+                      formattedAmount: entry.formattedAmount,
+                      icon: entry.icon ?? null,
+                      totalSupply: null,
+                      balance: String(rawBalance),
+                    };
+                  }
                   try {
                     const p = await processTokenForDisplay(
                       tokenAddress,
