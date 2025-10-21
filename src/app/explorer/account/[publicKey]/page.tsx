@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { useParams } from "next/navigation";
 import { useEffect } from "react";
 
@@ -271,7 +272,7 @@ export default function AccountPage(): React.JSX.Element {
                     <div key={token.publicKey} className="grid gap-4 px-6 py-4 text-sm text-foreground md:grid-cols-[2fr_1fr_1fr]">
                       <div className="flex items-center gap-3">
                         {token.icon ? (
-                          <img src={token.icon} alt="token" className="h-6 w-6 rounded-full" />
+                          <Image src={token.icon} alt="token" width={24} height={24} className="h-6 w-6 rounded-full" unoptimized />
                         ) : null}
                         <div className="flex flex-col">
                           <span className="font-medium">{token.name ?? "Unnamed Token"}</span>

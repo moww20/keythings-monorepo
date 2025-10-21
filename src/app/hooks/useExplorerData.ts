@@ -148,8 +148,8 @@ export function useExplorerData() {
                   if (entry && typeof entry === 'object' && 'formattedAmount' in entry) {
                     return {
                       publicKey: tokenAddress,
-                      name: entry.name ?? null,
-                      ticker: entry.ticker ?? null,
+                      name: typeof entry.name === 'string' && entry.name.trim().length > 0 ? entry.name : null,
+                      ticker: typeof entry.ticker === 'string' && entry.ticker.trim().length > 0 ? entry.ticker : null,
                       decimals: entry.decimals ?? null,
                       fieldType: entry.fieldType,
                       formattedAmount: entry.formattedAmount,
@@ -168,8 +168,8 @@ export function useExplorerData() {
                     );
                     return {
                       publicKey: tokenAddress,
-                      name: p.name || null,
-                      ticker: p.ticker || null,
+                      name: p.name?.trim().length > 0 ? p.name : null,
+                      ticker: p.ticker?.trim().length > 0 ? p.ticker : null,
                       decimals: p.decimals,
                       fieldType: p.fieldType,
                       formattedAmount: p.formattedAmount,
@@ -198,23 +198,32 @@ export function useExplorerData() {
           }
         }
         
-        // If no tokens from balances, try to get account-specific token info
-        if (tokens.length === 0 && keeta.getAccountInfo) {
-          console.log('[EXPLORER_DATA] No tokens from balances, trying account-specific info...');
+        if (tokens.length === 0) {
           try {
-            // Try to get more detailed account info that might include tokens
-            const detailedInfo = await keeta.getAccountInfo(publicKey);
-            console.log('[EXPLORER_DATA] Detailed account info:', detailedInfo);
-            
-            // Check if the account info includes token information
-            if (detailedInfo && typeof detailedInfo === 'object') {
-              const accountData = detailedInfo as any;
-              if (accountData.tokens && Array.isArray(accountData.tokens)) {
+            if (keeta.requestCapabilities) {
+              await keeta.requestCapabilities(['read']);
+            }
+            if (typeof keeta.request === 'function') {
+              const balances = await keeta.request({ method: 'keeta_getBalancesForAccount', params: [publicKey] });
+              if (Array.isArray(balances)) {
                 const processed = await Promise.all(
-                  accountData.tokens.map(async (token: any) => {
-                    const tokenAddress = String(token?.publicKey ?? token?.token ?? '');
-                    const rawBalance = token?.balance ?? '0';
-                    const metadata = typeof token?.metadata === 'string' ? token.metadata : undefined;
+                  balances.map(async (entry: any) => {
+                    const tokenAddress = String(entry?.token ?? '');
+                    const rawBalance = entry?.balance ?? '0';
+                    const metadata = typeof entry?.metadata === 'string' ? entry.metadata : undefined;
+                    if (entry && typeof entry === 'object' && 'formattedAmount' in entry) {
+                      return {
+                        publicKey: tokenAddress,
+                        name: typeof entry.name === 'string' && entry.name.trim().length > 0 ? entry.name : null,
+                        ticker: typeof entry.ticker === 'string' && entry.ticker.trim().length > 0 ? entry.ticker : null,
+                        decimals: entry.decimals ?? null,
+                        fieldType: entry.fieldType,
+                        formattedAmount: entry.formattedAmount,
+                        icon: entry.icon ?? null,
+                        totalSupply: null,
+                        balance: String(rawBalance),
+                      };
+                    }
                     try {
                       const p = await processTokenForDisplay(
                         tokenAddress,
@@ -225,33 +234,33 @@ export function useExplorerData() {
                       );
                       return {
                         publicKey: tokenAddress,
-                        name: p.name || token?.name || null,
-                        ticker: p.ticker || token?.ticker || token?.symbol || null,
+                        name: p.name || null,
+                        ticker: p.ticker || null,
                         decimals: p.decimals,
                         fieldType: p.fieldType,
                         formattedAmount: p.formattedAmount,
                         icon: p.icon || null,
-                        totalSupply: token?.totalSupply ?? null,
+                        totalSupply: null,
                         balance: String(rawBalance),
                       };
                     } catch {
                       return {
                         publicKey: tokenAddress,
-                        name: token?.name ?? null,
-                        ticker: token?.ticker ?? token?.symbol ?? null,
-                        decimals: token?.decimals ?? null,
-                        totalSupply: token?.totalSupply ?? null,
+                        name: null,
+                        ticker: null,
+                        decimals: null,
+                        totalSupply: null,
                         balance: String(rawBalance),
                       };
                     }
                   })
                 );
                 tokens = processed;
-                console.log('[EXPLORER_DATA] Tokens from account info:', tokens);
+                console.log('[EXPLORER_DATA] Tokens from wallet RPC:', tokens);
               }
             }
           } catch (error) {
-            console.log('[EXPLORER_DATA] Error getting detailed account info:', error);
+            console.log('[EXPLORER_DATA] Error getting balances for account via wallet:', error);
           }
         }
       } catch (error) {
@@ -259,7 +268,7 @@ export function useExplorerData() {
         // best-effort enrichment only
       }
 
-      // Try to get transaction history if this is the currently connected account
+      // Try to get transaction history for any account
       let activity: any[] = [];
       try {
         console.log('[EXPLORER_DATA] Attempting to get transaction history...');
@@ -269,10 +278,8 @@ export function useExplorerData() {
             console.log('[EXPLORER_DATA] Requesting read and transact capabilities for history...');
             await keeta.requestCapabilities(['read', 'transact']);
           }
-          
-          const historyResult = await keeta.history({ depth: 10 });
-          console.log('[EXPLORER_DATA] History result:', historyResult);
-          
+          const historyResult = await keeta.history({ depth: 25 });
+          console.log('[EXPLORER_DATA] History result (current):', historyResult);
           if (historyResult && Array.isArray(historyResult.records)) {
             activity = historyResult.records.map((record: any) => ({
               id: record.id || record.block || record.hash,
@@ -285,13 +292,25 @@ export function useExplorerData() {
               token: record.token || '',
               operationType: record.operationType || 'UNKNOWN',
             }));
-            console.log('[EXPLORER_DATA] Processed activity:', activity);
+            console.log('[EXPLORER_DATA] Processed activity (current):', activity);
+          }
+        } else {
+          // Public account path via wallet RPC
+          console.log('[EXPLORER_DATA] Fetching public account history via wallet RPC...');
+          if (keeta.requestCapabilities) {
+            await keeta.requestCapabilities(['read']);
+          }
+          if (typeof keeta.request === 'function') {
+            const data = await keeta.request({ method: 'keeta_getHistoryForAccount', params: [publicKey, { depth: 25 }] });
+            if (data && typeof data === 'object' && data !== null && Array.isArray((data as any).records)) {
+              activity = (data as any).records;
+            }
           }
         }
-        } catch (error) {
-          console.log('[EXPLORER_DATA] Error fetching history:', error);
-          // Continue without activity data - this is expected for non-connected accounts
-        }
+      } catch (error) {
+        console.log('[EXPLORER_DATA] Error fetching history:', error);
+        // Continue without activity data
+      }
 
       const result = {
         publicKey: account.publicKey || publicKey,
@@ -319,52 +338,6 @@ export function useExplorerData() {
     setState(prev => ({ ...prev, loading: true, error: null }));
 
     try {
-      console.log('[EXPLORER_DATA] Trying backend API first...');
-      
-      // Try backend API first
-      try {
-        const response = await fetch(`http://localhost:8080/api/ledger/v1/accounts/${publicKey}/history?limit=20&includeOps=true`);
-        if (response.ok) {
-          const historyData = await response.json();
-          console.log('[EXPLORER_DATA] Backend history data:', historyData);
-          
-          // Transform backend response to ExplorerAccount format
-          const account = {
-            publicKey: publicKey,
-            type: 'ACCOUNT',
-            representative: null,
-            owner: null,
-            signers: [],
-            headBlock: null,
-            info: {},
-            tokens: [],
-            certificates: [],
-            activity: historyData.relevantOps?.map((op: any) => ({
-              id: op.type || 'unknown',
-              block: op.stapleHash || 'unknown',
-              timestamp: op.timestamp || Date.now(),
-              type: op.type || 'Transaction',
-              amount: op.amount || '0',
-              from: op.from || '',
-              to: op.to || '',
-              token: op.token || '',
-              operationType: op.type || 'UNKNOWN',
-            })) || []
-          };
-          
-          console.log('[EXPLORER_DATA] Backend account data:', account);
-          setState({
-            account,
-            loading: false,
-            error: null,
-          });
-          return;
-        }
-      } catch (backendError) {
-        console.log('[EXPLORER_DATA] Backend API failed, falling back to wallet:', backendError);
-      }
-      
-      // Fallback to wallet extension
       console.log('[EXPLORER_DATA] Calling fetchAccountInfo...');
       const account = await fetchAccountInfo(publicKey);
       console.log('[EXPLORER_DATA] fetchAccountInfo returned:', account);
