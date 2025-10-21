@@ -127,10 +127,10 @@ export function useWalletData() {
       // Only request capabilities if explicitly requested
       let capabilityTokens: any = null;
       if (requestCapabilities) {
-        console.debug('Requesting read capabilities...');
+        console.debug('Requesting read and transact capabilities...');
         try {
           if (typeof provider.requestCapabilities === 'function') {
-            capabilityTokens = await provider.requestCapabilities(['read']);
+            capabilityTokens = await provider.requestCapabilities(['read', 'transact']);
             console.debug('Read capability tokens obtained:', capabilityTokens);
           }
         } catch (capError) {
@@ -229,12 +229,6 @@ export function useWalletData() {
     try {
       setErrorState(null);
       setLoadingState(true);
-      
-      // First check if wallet is locked
-      const isLocked = await provider.isLocked?.() ?? true;
-      if (isLocked) {
-        throw new Error('Wallet is locked. Please unlock your wallet first.');
-      }
 
       // Request account access with minimal permissions
       let accounts: unknown = null;
@@ -242,8 +236,7 @@ export function useWalletData() {
       if (typeof provider.request === 'function') {
         accounts = await provider.request({
           method: 'keeta_requestAccounts',
-          // Don't request any additional permissions here
-          params: [],
+          params: requestCapabilities ? [{ capabilities: ['read', 'transact'] }] : [],
         });
       } else if (typeof provider.getAccounts === 'function') {
         // Fallback for providers that expose getAccounts() directly
@@ -387,7 +380,7 @@ export function useTokenBalances(shouldFetch: boolean = false) {
       let readToken: string | null = null;
       try {
         if (typeof provider.requestCapabilities === 'function') {
-          const tokens = await provider.requestCapabilities(['read']);
+          const tokens = await provider.requestCapabilities(['read', 'transact']);
           if (Array.isArray(tokens) && tokens.length > 0 && tokens[0] && typeof tokens[0] === 'object' && 'token' in tokens[0]) {
             readToken = tokens[0].token as string;
             console.debug('Got read capability token for getAllBalances');

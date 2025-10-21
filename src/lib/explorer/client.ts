@@ -153,18 +153,29 @@ export type ExplorerCertificate = z.infer<typeof accountCertificateSchema>["cert
 
 export async function fetchNetworkStats() {
   try {
-    // Real Keeta network data - for now return basic stats
-    // In the future, this will fetch real network statistics
+    // Use wallet extension for network stats if available
+    if (typeof window !== 'undefined' && window.keeta) {
+      console.log('[CLIENT] Using wallet extension for network stats');
+      return await fetchNetworkStatsFromWallet();
+    }
+    
+    console.log('[CLIENT] Wallet extension not available, using fallback stats');
     return {
-      blockCount: 0, // Will be populated with real data from Keeta network
-      transactionCount: 0, // Will be populated with real data from Keeta network
-      representativeCount: 0, // Will be populated with real data from Keeta network
+      blockCount: 0,
+      transactionCount: 0,
+      representativeCount: 0,
       queryTime: 0,
       time: new Date().toISOString(),
     };
   } catch (error) {
     console.error('Error fetching network stats:', error);
-    throw new Error('Failed to fetch network statistics');
+    return {
+      blockCount: 0,
+      transactionCount: 0,
+      representativeCount: 0,
+      queryTime: 0,
+      time: new Date().toISOString(),
+    };
   }
 }
 
@@ -200,28 +211,217 @@ export interface ExplorerTransactionsQuery {
 
 export async function fetchTransactions(query?: ExplorerTransactionsQuery): Promise<ExplorerTransactionsResponse> {
   try {
-    // Real Keeta network data - for now return empty results
-    // In the future, this will fetch real transaction data from Keeta network
+    // Use wallet extension directly instead of backend
+    if (typeof window !== 'undefined' && window.keeta && query?.publicKey) {
+      console.log('[CLIENT] Using wallet extension for transaction data');
+      return await fetchTransactionsFromWallet(query);
+    }
+    
+    console.log('[CLIENT] Wallet extension not available or no public key provided');
     return {
       nextCursor: null,
       stapleOperations: [],
     };
   } catch (error) {
     console.error('Error fetching transactions:', error);
-    throw new Error('Failed to fetch transaction data');
+    return {
+      nextCursor: null,
+      stapleOperations: [],
+    };
   }
 }
 
 export async function fetchAccount(publicKey: string): Promise<ExplorerAccount | null> {
   try {
     console.log('[CLIENT] fetchAccount called with publicKey:', publicKey);
-    // Real Keeta network data - for now return null to indicate account not found
-    // In the future, this will fetch real account data from Keeta network
-    console.log('[CLIENT] Returning null (not implemented yet)');
+    
+    // Use wallet extension directly instead of backend
+    if (typeof window !== 'undefined' && window.keeta) {
+      console.log('[CLIENT] Using wallet extension for account data');
+      return await fetchAccountFromWallet(publicKey);
+    }
+    
+    console.log('[CLIENT] Wallet extension not available');
     return null;
   } catch (error) {
     console.error('[CLIENT] Error fetching account:', error);
     throw new Error('Failed to fetch account data');
+  }
+}
+
+async function fetchNetworkStatsFromWallet() {
+  try {
+    console.log('[CLIENT] Fetching network stats from wallet extension');
+    
+    // Get user client for network operations
+    if (!window.keeta) {
+      throw new Error('Wallet extension not available');
+    }
+    const userClient = await window.keeta.getUserClient!();
+    if (!userClient) {
+      throw new Error('User client not available');
+    }
+    
+    // For now, return basic stats since the wallet extension doesn't expose network stats directly
+    // In the future, we could add network stats to the wallet extension
+    return {
+      blockCount: 0,
+      transactionCount: 0,
+      representativeCount: 0,
+      queryTime: Date.now(),
+      time: new Date().toISOString(),
+    };
+  } catch (error) {
+    console.error('[CLIENT] Error fetching network stats from wallet:', error);
+    return {
+      blockCount: 0,
+      transactionCount: 0,
+      representativeCount: 0,
+      queryTime: 0,
+      time: new Date().toISOString(),
+    };
+  }
+}
+
+async function fetchTransactionsFromWallet(query: ExplorerTransactionsQuery): Promise<ExplorerTransactionsResponse> {
+  try {
+    console.log('[CLIENT] Fetching transactions from wallet extension');
+    
+    // Get user client for advanced operations
+    if (!window.keeta) {
+      throw new Error('Wallet extension not available');
+    }
+    const userClient = await window.keeta.getUserClient!();
+    if (!userClient) {
+      throw new Error('User client not available');
+    }
+    
+    // Get history using the wallet's SDK client
+    const historyOptions = {
+      depth: query.depth || 20,
+      cursor: query.startBlock || null,
+    };
+    
+    const historyResult = await (userClient as any).history(historyOptions);
+    console.log('[CLIENT] History from wallet:', historyResult);
+    
+    // Transform wallet history to frontend format
+    const stapleOperations = historyResult.records?.map((record: any) => ({
+      type: record.operationType || 'Transaction',
+      voteStapleHash: record.block || '',
+      toAccount: record.to || '',
+      block: {
+        $hash: record.block || '',
+        date: new Date(record.timestamp || Date.now()).toISOString(),
+        account: query.publicKey || '',
+      },
+      operation: {
+        type: record.operationType,
+        from: record.from,
+        to: record.to,
+        amount: record.amount,
+        token: record.token,
+      },
+    })) || [];
+    
+    return {
+      nextCursor: historyResult.cursor,
+      stapleOperations,
+    };
+  } catch (error) {
+    console.error('[CLIENT] Error fetching transactions from wallet:', error);
+    return {
+      nextCursor: null,
+      stapleOperations: [],
+    };
+  }
+}
+
+async function fetchAccountFromWallet(publicKey: string): Promise<ExplorerAccount | null> {
+  try {
+    console.log('[CLIENT] Fetching account data from wallet extension for:', publicKey);
+    
+    // Get account info from wallet extension
+    if (!window.keeta) {
+      throw new Error('Wallet extension not available');
+    }
+    const accountInfo = await window.keeta.getAccountInfo!(publicKey);
+    console.log('[CLIENT] Account info from wallet:', accountInfo);
+    
+    // Get all balances for this account
+    const allBalances = await window.keeta.getAllBalances();
+    console.log('[CLIENT] All balances from wallet:', allBalances);
+    
+    // Transform wallet data to ExplorerAccount format
+    const account: ExplorerAccount = {
+      publicKey: publicKey,
+      type: 'ACCOUNT',
+      representative: null,
+      owner: null,
+      signers: [],
+      headBlock: undefined,
+      info: (accountInfo as Record<string, unknown>) || {},
+      tokens: allBalances.map((balance: any) => ({
+        publicKey: balance.token || '',
+        name: null,
+        ticker: null,
+        decimals: null,
+        totalSupply: null,
+        balance: balance.balance?.toString() || '0',
+      })),
+      certificates: [],
+      activity: [] // Will be populated by history if needed
+    };
+    
+    console.log('[CLIENT] Transformed account data:', account);
+    return account;
+  } catch (error) {
+    console.error('[CLIENT] Error fetching account from wallet:', error);
+    return null;
+  }
+}
+
+async function fetchAccountFromBackend(publicKey: string): Promise<ExplorerAccount | null> {
+  try {
+    // Fetch account data from backend API
+    const response = await fetch(`http://localhost:8080/api/ledger/v1/accounts/${publicKey}/history?limit=20&includeOps=true`);
+    
+    if (!response.ok) {
+      console.log('[CLIENT] Account not found in backend database');
+      return null;
+    }
+    
+    const historyData = await response.json();
+    console.log('[CLIENT] Account history from backend:', historyData);
+    
+    // Transform backend response to ExplorerAccount format
+    const account: ExplorerAccount = {
+      publicKey: publicKey,
+      type: 'ACCOUNT',
+      representative: null,
+      owner: null,
+      signers: [],
+      headBlock: undefined,
+      info: {},
+      tokens: [],
+      certificates: [],
+      activity: historyData.relevantOps?.map((op: any) => ({
+        id: op.type || 'unknown',
+        block: op.stapleHash || 'unknown',
+        timestamp: op.timestamp || Date.now(),
+        type: op.type || 'Transaction',
+        amount: op.amount || '0',
+        from: op.from || '',
+        to: op.to || '',
+        token: op.token || '',
+        operationType: op.type || 'UNKNOWN',
+      })) || []
+    };
+    
+    return account;
+  } catch (error) {
+    console.error('[CLIENT] Backend API fetch error:', error);
+    return null;
   }
 }
 
@@ -260,7 +460,7 @@ export async function fetchStorage(accountPublicKey: string) {
       representative: null,
       owner: null,
       signers: [],
-      headBlock: null,
+      headBlock: undefined,
       info: {},
       tokens: [],
       certificates: [],
@@ -287,7 +487,7 @@ export async function fetchToken(tokenPublicKey: string) {
       accessMode: null,
       defaultPermissions: [],
       type: null,
-      headBlock: null,
+      headBlock: undefined,
     };
   } catch (error) {
     console.error('Error fetching token:', error);

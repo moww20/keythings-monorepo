@@ -67,6 +67,13 @@ export function useExplorerData() {
 
     try {
       console.log('[EXPLORER_DATA] Calling keeta.getAccountInfo for:', publicKey);
+      
+      // Request read and transact capabilities first
+      if (keeta.requestCapabilities) {
+        console.log('[EXPLORER_DATA] Requesting read and transact capabilities for account info...');
+        await keeta.requestCapabilities(['read', 'transact']);
+      }
+      
       // Use the wallet extension to get account info
       const accountInfo = await keeta.getAccountInfo(publicKey);
       console.log('[EXPLORER_DATA] Raw account info from wallet:', accountInfo);
@@ -82,18 +89,26 @@ export function useExplorerData() {
 
       // Try to enrich with balances - attempt for both current account and queried account
       let tokens: ExplorerAccount["tokens"] = [];
+      let isCurrent = false; // Declare isCurrent outside the try block
+      
       try {
         console.log('[EXPLORER_DATA] Attempting to get connected accounts...');
         const connectedAccounts = await keeta.getAccounts?.();
         console.log('[EXPLORER_DATA] Connected accounts:', connectedAccounts);
         
-        const isCurrent = Array.isArray(connectedAccounts) && connectedAccounts.includes(publicKey);
+        isCurrent = Array.isArray(connectedAccounts) && connectedAccounts.includes(publicKey);
         console.log('[EXPLORER_DATA] Is current account:', isCurrent);
         
         // Only try to get balances if this is the currently connected account
         if (isCurrent && keeta.getAllBalances) {
           console.log('[EXPLORER_DATA] Getting balances for connected account...');
           try {
+            // Request read and transact capabilities first
+            if (keeta.requestCapabilities) {
+              console.log('[EXPLORER_DATA] Requesting read and transact capabilities...');
+              await keeta.requestCapabilities(['read', 'transact']);
+            }
+            
             const balances = await keeta.getAllBalances();
             console.log('[EXPLORER_DATA] Raw balances:', balances);
           
@@ -167,6 +182,12 @@ export function useExplorerData() {
       try {
         console.log('[EXPLORER_DATA] Attempting to get transaction history...');
         if (isCurrent && keeta.history && typeof keeta.history === 'function') {
+          // Request read and transact capabilities for history
+          if (keeta.requestCapabilities) {
+            console.log('[EXPLORER_DATA] Requesting read and transact capabilities for history...');
+            await keeta.requestCapabilities(['read', 'transact']);
+          }
+          
           const historyResult = await keeta.history({ depth: 10 });
           console.log('[EXPLORER_DATA] History result:', historyResult);
           
@@ -216,6 +237,52 @@ export function useExplorerData() {
     setState(prev => ({ ...prev, loading: true, error: null }));
 
     try {
+      console.log('[EXPLORER_DATA] Trying backend API first...');
+      
+      // Try backend API first
+      try {
+        const response = await fetch(`http://localhost:8080/api/ledger/v1/accounts/${publicKey}/history?limit=20&includeOps=true`);
+        if (response.ok) {
+          const historyData = await response.json();
+          console.log('[EXPLORER_DATA] Backend history data:', historyData);
+          
+          // Transform backend response to ExplorerAccount format
+          const account = {
+            publicKey: publicKey,
+            type: 'ACCOUNT',
+            representative: null,
+            owner: null,
+            signers: [],
+            headBlock: null,
+            info: {},
+            tokens: [],
+            certificates: [],
+            activity: historyData.relevantOps?.map((op: any) => ({
+              id: op.type || 'unknown',
+              block: op.stapleHash || 'unknown',
+              timestamp: op.timestamp || Date.now(),
+              type: op.type || 'Transaction',
+              amount: op.amount || '0',
+              from: op.from || '',
+              to: op.to || '',
+              token: op.token || '',
+              operationType: op.type || 'UNKNOWN',
+            })) || []
+          };
+          
+          console.log('[EXPLORER_DATA] Backend account data:', account);
+          setState({
+            account,
+            loading: false,
+            error: null,
+          });
+          return;
+        }
+      } catch (backendError) {
+        console.log('[EXPLORER_DATA] Backend API failed, falling back to wallet:', backendError);
+      }
+      
+      // Fallback to wallet extension
       console.log('[EXPLORER_DATA] Calling fetchAccountInfo...');
       const account = await fetchAccountInfo(publicKey);
       console.log('[EXPLORER_DATA] fetchAccountInfo returned:', account);
