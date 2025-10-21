@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { processTokenForDisplay } from '@/app/lib/token-utils';
 
 interface ExplorerAccount {
   publicKey: string;
@@ -13,6 +14,9 @@ interface ExplorerAccount {
     name: string | null;
     ticker: string | null;
     decimals: number | null;
+    fieldType?: 'decimalPlaces' | 'decimals';
+    formattedAmount?: string;
+    icon?: string | null;
     totalSupply: string | null;
     balance: string;
   }>;
@@ -68,6 +72,17 @@ export function useExplorerData() {
     try {
       console.log('[EXPLORER_DATA] Calling keeta.getAccountInfo for:', publicKey);
       
+      // Resolve base token address for consistent KTA handling
+      let baseTokenAddress: string | null = null;
+      try {
+        const baseToken = await (keeta as any).getBaseToken?.();
+        if (baseToken && typeof baseToken === 'object' && baseToken !== null && 'address' in baseToken) {
+          baseTokenAddress = String((baseToken as any).address);
+        }
+      } catch {
+        baseTokenAddress = null;
+      }
+      
       // Request read and transact capabilities first
       if (keeta.requestCapabilities) {
         console.log('[EXPLORER_DATA] Requesting read and transact capabilities for account info...');
@@ -111,32 +126,45 @@ export function useExplorerData() {
             
             const balances = await keeta.getAllBalances();
             console.log('[EXPLORER_DATA] Raw balances:', balances);
-          
+
             if (Array.isArray(balances)) {
-              tokens = balances.map((entry: any) => {
-                // Metadata may be base64-encoded JSON; decode best-effort
-                let name: string | null = null;
-                let ticker: string | null = null;
-                let decimals: number | null = null;
-                try {
-                  if (entry?.metadata && typeof entry.metadata === 'string') {
-                    const json = JSON.parse(atob(entry.metadata));
-                    name = json?.displayName ?? json?.name ?? null;
-                    ticker = json?.symbol ?? json?.ticker ?? null;
-                    decimals = typeof json?.decimalPlaces === 'number' ? json.decimalPlaces : (typeof json?.decimals === 'number' ? json.decimals : null);
+              const processed = await Promise.all(
+                balances.map(async (entry: any) => {
+                  const tokenAddress = String(entry?.token ?? '');
+                  const rawBalance = entry?.balance ?? '0';
+                  const metadata = typeof entry?.metadata === 'string' ? entry.metadata : undefined;
+                  try {
+                    const p = await processTokenForDisplay(
+                      tokenAddress,
+                      rawBalance,
+                      metadata,
+                      baseTokenAddress ?? undefined,
+                      undefined,
+                    );
+                    return {
+                      publicKey: tokenAddress,
+                      name: p.name || null,
+                      ticker: p.ticker || null,
+                      decimals: p.decimals,
+                      fieldType: p.fieldType,
+                      formattedAmount: p.formattedAmount,
+                      icon: p.icon || null,
+                      totalSupply: null,
+                      balance: String(rawBalance),
+                    };
+                  } catch {
+                    return {
+                      publicKey: tokenAddress,
+                      name: null,
+                      ticker: null,
+                      decimals: null,
+                      totalSupply: null,
+                      balance: String(rawBalance),
+                    };
                   }
-                } catch {
-                  // ignore metadata parse errors
-                }
-                return {
-                  publicKey: String(entry?.token ?? ''),
-                  name,
-                  ticker,
-                  decimals,
-                  totalSupply: null,
-                  balance: String(entry?.balance ?? '0'),
-                };
-              });
+                })
+              );
+              tokens = processed;
               console.log('[EXPLORER_DATA] Processed tokens:', tokens);
             }
           } catch (balanceError) {
@@ -157,14 +185,43 @@ export function useExplorerData() {
             if (detailedInfo && typeof detailedInfo === 'object') {
               const accountData = detailedInfo as any;
               if (accountData.tokens && Array.isArray(accountData.tokens)) {
-                tokens = accountData.tokens.map((token: any) => ({
-                  publicKey: String(token?.publicKey ?? token?.token ?? ''),
-                  name: token?.name ?? null,
-                  ticker: token?.ticker ?? token?.symbol ?? null,
-                  decimals: token?.decimals ?? null,
-                  totalSupply: token?.totalSupply ?? null,
-                  balance: String(token?.balance ?? '0'),
-                }));
+                const processed = await Promise.all(
+                  accountData.tokens.map(async (token: any) => {
+                    const tokenAddress = String(token?.publicKey ?? token?.token ?? '');
+                    const rawBalance = token?.balance ?? '0';
+                    const metadata = typeof token?.metadata === 'string' ? token.metadata : undefined;
+                    try {
+                      const p = await processTokenForDisplay(
+                        tokenAddress,
+                        rawBalance,
+                        metadata,
+                        baseTokenAddress ?? undefined,
+                        undefined,
+                      );
+                      return {
+                        publicKey: tokenAddress,
+                        name: p.name || token?.name || null,
+                        ticker: p.ticker || token?.ticker || token?.symbol || null,
+                        decimals: p.decimals,
+                        fieldType: p.fieldType,
+                        formattedAmount: p.formattedAmount,
+                        icon: p.icon || null,
+                        totalSupply: token?.totalSupply ?? null,
+                        balance: String(rawBalance),
+                      };
+                    } catch {
+                      return {
+                        publicKey: tokenAddress,
+                        name: token?.name ?? null,
+                        ticker: token?.ticker ?? token?.symbol ?? null,
+                        decimals: token?.decimals ?? null,
+                        totalSupply: token?.totalSupply ?? null,
+                        balance: String(rawBalance),
+                      };
+                    }
+                  })
+                );
+                tokens = processed;
                 console.log('[EXPLORER_DATA] Tokens from account info:', tokens);
               }
             }

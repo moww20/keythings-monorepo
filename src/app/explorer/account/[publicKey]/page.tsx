@@ -269,18 +269,23 @@ export default function AccountPage(): React.JSX.Element {
                 ) : (
                   account.tokens.map((token) => (
                     <div key={token.publicKey} className="grid gap-4 px-6 py-4 text-sm text-foreground md:grid-cols-[2fr_1fr_1fr]">
-                      <div className="flex flex-col">
-                        <span className="font-medium">{token.name ?? "Unnamed Token"}</span>
-                        <Link
-                          href={resolveExplorerPath(token.publicKey) ?? "#"}
-                          className="text-xs text-accent hover:text-foreground"
-                        >
-                          {truncateIdentifier(token.publicKey, 10, 8)}
-                        </Link>
+                      <div className="flex items-center gap-3">
+                        {token.icon ? (
+                          <img src={token.icon} alt="token" className="h-6 w-6 rounded-full" />
+                        ) : null}
+                        <div className="flex flex-col">
+                          <span className="font-medium">{token.name ?? "Unnamed Token"}</span>
+                          <Link
+                            href={resolveExplorerPath(token.publicKey) ?? "#"}
+                            className="text-xs text-accent hover:text-foreground"
+                          >
+                            {truncateIdentifier(token.publicKey, 10, 8)}
+                          </Link>
+                        </div>
                       </div>
                       <div className="text-sm text-subtle">{token.ticker ?? "—"}</div>
                       <div className="text-sm text-foreground">
-                        {formatTokenAmount(token.balance, token.decimals ?? null)}
+                        {token.formattedAmount ?? formatTokenAmount(token.balance, token.decimals ?? null)}
                       </div>
                     </div>
                   ))
