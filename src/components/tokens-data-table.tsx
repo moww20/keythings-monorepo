@@ -21,23 +21,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
-import {
-  IconChevronDown,
-  IconChevronLeft,
-  IconChevronRight,
-  IconChevronsLeft,
-  IconChevronsRight,
-  IconCircleCheckFilled,
-  IconDotsVertical,
-  IconGripVertical,
-  IconLayoutColumns,
-  IconPlus,
-  IconTrendingUp,
-  IconTrendingDown,
-  IconCoins,
-  IconSend,
-  IconReceipt,
-} from "@tabler/icons-react"
+import { ChevronDown, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, CircleCheck, MoreVertical, GripVertical, Columns3, Plus, TrendingUp, TrendingDown, Coins, Send, Download } from "lucide-react"
 import {
   ColumnDef,
   ColumnFiltersState,
@@ -145,7 +129,7 @@ function DragHandle({ id }: { id: number }) {
       size="icon"
       className="text-muted-foreground size-7 hover:bg-transparent"
     >
-      <IconGripVertical className="text-muted-foreground size-3" />
+      <GripVertical className="text-muted-foreground size-3" />
       <span className="sr-only">Drag to reorder</span>
     </Button>
   )
@@ -239,8 +223,8 @@ const columns: ColumnDef<z.infer<typeof schema>>[] = [
         <div className={`flex items-center justify-end gap-1 ${
           isPositive ? 'text-green-600' : isNegative ? 'text-red-600' : 'text-gray-600'
         }`}>
-          {isPositive && <IconTrendingUp className="size-3" />}
-          {isNegative && <IconTrendingDown className="size-3" />}
+          {isPositive && <TrendingUp className="size-3" />}
+          {isNegative && <TrendingDown className="size-3" />}
           {change}
         </div>
       )
@@ -296,7 +280,7 @@ const columns: ColumnDef<z.infer<typeof schema>>[] = [
               toast.success(`Sending ${token.symbol}...`)
             }}
           >
-            <IconSend className="h-4 w-4" />
+            <Send className="h-4 w-4" />
             <span className="sr-only">Send</span>
           </Button>
           <Button
@@ -307,7 +291,7 @@ const columns: ColumnDef<z.infer<typeof schema>>[] = [
               toast.success(`Receiving ${token.symbol}...`)
             }}
           >
-            <IconReceipt className="h-4 w-4" />
+            <Download className="h-4 w-4" />
             <span className="sr-only">Receive</span>
           </Button>
           <DropdownMenu>
@@ -317,7 +301,7 @@ const columns: ColumnDef<z.infer<typeof schema>>[] = [
                 className="data-[state=open]:bg-muted text-muted-foreground flex size-8"
                 size="icon"
               >
-                <IconDotsVertical />
+                <MoreVertical />
                 <span className="sr-only">Open menu</span>
               </Button>
             </DropdownMenuTrigger>
@@ -474,10 +458,10 @@ export function TokensDataTable({
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="outline" size="sm">
-                <IconLayoutColumns />
+                <Columns3 />
                 <span className="hidden lg:inline">Customize Columns</span>
                 <span className="lg:hidden">Columns</span>
-                <IconChevronDown />
+                <ChevronDown />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56">
@@ -505,7 +489,7 @@ export function TokensDataTable({
             </DropdownMenuContent>
           </DropdownMenu>
           <Button variant="outline" size="sm">
-            <IconPlus />
+            <Plus />
             <span className="hidden lg:inline">Add Token</span>
           </Button>
         </div>
@@ -612,7 +596,7 @@ export function TokensDataTable({
                 disabled={!table.getCanPreviousPage()}
               >
                 <span className="sr-only">Go to first page</span>
-                <IconChevronsLeft />
+                <ChevronsLeft />
               </Button>
               <Button
                 variant="outline"
@@ -622,7 +606,7 @@ export function TokensDataTable({
                 disabled={!table.getCanPreviousPage()}
               >
                 <span className="sr-only">Go to previous page</span>
-                <IconChevronLeft />
+                <ChevronLeft />
               </Button>
               <Button
                 variant="outline"
@@ -632,7 +616,7 @@ export function TokensDataTable({
                 disabled={!table.getCanNextPage()}
               >
                 <span className="sr-only">Go to next page</span>
-                <IconChevronRight />
+                <ChevronRight />
               </Button>
               <Button
                 variant="outline"
@@ -642,7 +626,7 @@ export function TokensDataTable({
                 disabled={!table.getCanNextPage()}
               >
                 <span className="sr-only">Go to last page</span>
-                <IconChevronsRight />
+                <ChevronsRight />
               </Button>
             </div>
           </div>
@@ -699,7 +683,7 @@ function TokenCellViewer({ item }: { item: z.infer<typeof schema> }) {
 
     return (
       <span className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-primary">
-        <IconCoins className="h-4 w-4" />
+        <Coins className="h-4 w-4" />
       </span>
     )
   }, [item.icon, item.fallbackIcon, item.name, tokenInitial])
@@ -758,11 +742,11 @@ function TokenCellViewer({ item }: { item: z.infer<typeof schema> }) {
           <div className="space-y-4">
             <div className="flex gap-2">
               <Button className="flex-1">
-                <IconSend className="mr-2 h-4 w-4" />
+                <Send className="mr-2 h-4 w-4" />
                 Send
               </Button>
               <Button variant="outline" className="flex-1">
-                <IconReceipt className="mr-2 h-4 w-4" />
+                <Download className="mr-2 h-4 w-4" />
                 Receive
               </Button>
             </div>

@@ -1,5 +1,3 @@
-import "server-only";
-
 import { z } from "zod";
 
 // Real Keeta Network integration
@@ -181,17 +179,100 @@ export async function fetchNetworkStats() {
 
 export async function fetchVoteStaple(blockhash: string) {
   try {
-    // Real Keeta network data - for now return basic structure
-    // In the future, this will fetch real vote staple data from Keeta network
+    // If wallet is available, try to reconstruct staple and operations using SDK/client
+    if (typeof window !== 'undefined' && window.keeta) {
+      // 1) Try provider history which may include voteStaple inlined
+      try {
+        const result: any = await window.keeta.history?.({ depth: 50, cursor: null, includeTokenMetadata: true } as any);
+        if (result && Array.isArray(result.records)) {
+          const match = result.records.find((r: any) => r && (r.block === blockhash || r.id === blockhash));
+          if (match && match.voteStaple && Array.isArray(match.voteStaple.blocks)) {
+            // Basic shape passthrough; add $hash for convenience
+            const blocks = match.voteStaple.blocks.map((b: any) => ({
+              hash: b?.hash || b?.$hash || blockhash,
+              $hash: b?.$hash || b?.hash || blockhash,
+              createdAt: b?.createdAt || b?.date || new Date().toISOString(),
+              account: (b?.account && typeof b.account === 'string') ? b.account : (b?.account?.publicKeyString?.toString?.() ?? ''),
+              // Prefer operations if available, else transactions; leave as-is for parseExplorerOperations to validate
+              operations: Array.isArray(b?.operations) ? b.operations : undefined,
+              transactions: Array.isArray(b?.transactions) ? b.transactions : undefined,
+            }));
+            return {
+              voteStaple: { blocks },
+              previousBlockHash: null,
+              nextBlockHash: null,
+            };
+          }
+        }
+      } catch (e) {
+        console.log('[CLIENT] fetchVoteStaple history path failed:', e);
+      }
+
+      // 2) Fallback: use SDK user client to get block and derive a minimal staple with operations
+      try {
+        const uc: any = await window.keeta.getUserClient?.();
+        if (uc && typeof uc.block === 'function') {
+          const block = await uc.block(blockhash);
+          if (block) {
+            const normAddr = (v: any) => {
+              if (typeof v === 'string') return v;
+              try {
+                if (v?.publicKeyString && typeof v.publicKeyString === 'string') return v.publicKeyString;
+                if (v?.publicKeyString?.toString) return String(v.publicKeyString.toString());
+                if (v?.toString) {
+                  const s = String(v.toString());
+                  if (s && s !== '[object Object]') return s;
+                }
+              } catch {}
+              return '';
+            };
+            const ts = (block?.date instanceof Date) ? block.date.toISOString() : (block?.createdAt ?? new Date().toISOString());
+            const account = normAddr((block as any)?.account);
+            const ops: any[] = Array.isArray((block as any)?.operations) ? (block as any).operations : [];
+            const operations = ops.map((op: any) => {
+              const type = (op?.type?.toString?.() ?? String(op?.type ?? 'UNKNOWN')).toUpperCase();
+              const amount = typeof op?.amount === 'bigint' ? op.amount.toString() : typeof op?.amount === 'number' ? String(Math.trunc(op.amount)) : (op?.amount ?? '0');
+              const from = normAddr(op?.from);
+              const to = normAddr(op?.to);
+              const token = normAddr(op?.token ?? op?.tokenAddress ?? op?.account ?? op?.target);
+              return {
+                type,
+                block: { $hash: blockhash, date: ts, account },
+                operation: { type, amount, from, to, token },
+              };
+            });
+            return {
+              voteStaple: {
+                blocks: [
+                  {
+                    hash: blockhash,
+                    $hash: blockhash,
+                    createdAt: ts,
+                    account,
+                    operations,
+                  },
+                ],
+              },
+              previousBlockHash: null,
+              nextBlockHash: null,
+            };
+          }
+        }
+      } catch (e) {
+        console.log('[CLIENT] fetchVoteStaple SDK block path failed:', e);
+      }
+    }
+
+    // Final fallback: minimal structure without operations
     return {
       voteStaple: {
         blocks: [
           {
             hash: blockhash,
             createdAt: new Date().toISOString(),
-            account: "keeta_account",
+            account: '',
             transactions: [],
-          }
+          },
         ],
       },
       previousBlockHash: null,
@@ -382,47 +463,9 @@ async function fetchAccountFromWallet(publicKey: string): Promise<ExplorerAccoun
 }
 
 async function fetchAccountFromBackend(publicKey: string): Promise<ExplorerAccount | null> {
-  try {
-    // Fetch account data from backend API
-    const response = await fetch(`http://localhost:8080/api/ledger/v1/accounts/${publicKey}/history?limit=20&includeOps=true`);
-    
-    if (!response.ok) {
-      console.log('[CLIENT] Account not found in backend database');
-      return null;
-    }
-    
-    const historyData = await response.json();
-    console.log('[CLIENT] Account history from backend:', historyData);
-    
-    // Transform backend response to ExplorerAccount format
-    const account: ExplorerAccount = {
-      publicKey: publicKey,
-      type: 'ACCOUNT',
-      representative: null,
-      owner: null,
-      signers: [],
-      headBlock: undefined,
-      info: {},
-      tokens: [],
-      certificates: [],
-      activity: historyData.relevantOps?.map((op: any) => ({
-        id: op.type || 'unknown',
-        block: op.stapleHash || 'unknown',
-        timestamp: op.timestamp || Date.now(),
-        type: op.type || 'Transaction',
-        amount: op.amount || '0',
-        from: op.from || '',
-        to: op.to || '',
-        token: op.token || '',
-        operationType: op.type || 'UNKNOWN',
-      })) || []
-    };
-    
-    return account;
-  } catch (error) {
-    console.error('[CLIENT] Backend API fetch error:', error);
-    return null;
-  }
+  // Explorer backend disabled; rely on wallet SDK
+  console.log('[CLIENT] fetchAccountFromBackend is disabled; use wallet provider instead');
+  return null;
 }
 
 export async function fetchAccountCertificate(accountPublicKey: string, certificateHash: string) {

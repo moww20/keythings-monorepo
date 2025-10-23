@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useMemo } from 'react';
 import Link from "next/link";
 import { useRouter, useParams } from 'next/navigation';
 import { useStorage } from "@/hooks/useApi";
@@ -81,14 +81,10 @@ export default function StoragePage() {
   const params = useParams();
   const storagePublicKey = params.publicKey as string;
   const { data, loading, error } = useStorage(storagePublicKey);
-  const [storageAccount, setStorageAccount] = useState<StorageAccount | null>(null);
-  const [lastUpdated, setLastUpdated] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (data) {
-      setStorageAccount(data);
-      setLastUpdated(data.updatedAt ? formatRelativeTime(new Date(data.updatedAt)) : null);
-    }
+  const storageAccount = data ?? null;
+  const lastUpdated = useMemo(() => {
+    if (!data?.updatedAt) return null;
+    return formatRelativeTime(new Date(data.updatedAt));
   }, [data]);
 
   // Handle loading and error states
@@ -184,9 +180,9 @@ export default function StoragePage() {
               <h1 className="text-3xl font-semibold text-foreground md:text-4xl">
                 {truncateIdentifier(storageAccount.publicKey, 16, 12)}
               </h1>
-              {lastUpdated && (
+              {lastUpdated ? (
                 <p className="text-xs text-faint">Last activity {lastUpdated}</p>
-              )}
+              ) : null}
             </div>
           </header>
 
@@ -234,7 +230,7 @@ export default function StoragePage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-hairline">
-                    {storageAccount.tokens.map((token) => (
+                    {storageAccount.tokens.map((token: any) => (
                       <tr key={token.tokenId} className="group hover:bg-surface-strong/50">
                         <td className="py-3 pr-4">
                           <div className="flex items-center">
@@ -302,7 +298,7 @@ export default function StoragePage() {
               </div>
             ) : (
               <div className="mt-4 space-y-3">
-                {storageAccount.certificates.map((certificate) => (
+                {storageAccount.certificates.map((certificate: any) => (
                   <div
                     key={certificate.id}
                     className="group rounded-xl border border-soft bg-surface-strong/50 p-4 transition-colors hover:bg-surface-strong"

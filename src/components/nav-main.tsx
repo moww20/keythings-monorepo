@@ -1,7 +1,7 @@
 "use client"
 
 import { usePathname } from "next/navigation"
-import { type Icon } from "@tabler/icons-react"
+import type { LucideIcon } from "lucide-react"
 import {
   SidebarGroup,
   SidebarGroupContent,
@@ -16,7 +16,8 @@ export function NavMain({
   items: {
     title: string
     url: string
-    icon?: Icon
+    icon?: LucideIcon
+    disabled?: boolean
   }[]
 }) {
   const pathname = usePathname()
@@ -36,16 +37,25 @@ export function NavMain({
             <SidebarMenuItem key={item.title}>
               <SidebarMenuButton
                 tooltip={item.title}
-                asChild
+                asChild={!item.disabled}
                 isActive={isActivePath(item.url)}
+                disabled={item.disabled}
+                className={item.disabled ? "opacity-50 cursor-not-allowed" : ""}
               >
-                <a
-                  href={item.url}
-                  aria-current={isActivePath(item.url) ? "page" : undefined}
-                >
-                  {item.icon && <item.icon />}
-                  <span>{item.title}</span>
-                </a>
+                {item.disabled ? (
+                  <div className="flex items-center gap-2">
+                    {item.icon && <item.icon />}
+                    <span>{item.title}</span>
+                  </div>
+                ) : (
+                  <a
+                    href={item.url}
+                    aria-current={isActivePath(item.url) ? "page" : undefined}
+                  >
+                    {item.icon && <item.icon />}
+                    <span>{item.title}</span>
+                  </a>
+                )}
               </SidebarMenuButton>
             </SidebarMenuItem>
           ))}

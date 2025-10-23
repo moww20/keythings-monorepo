@@ -1,16 +1,34 @@
+"use client";
+
 import Link from "next/link";
 
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import type { ExplorerOperation } from "@/lib/explorer/client";
 
-import { formatRelativeTime, summarizeOperation } from "../utils/operation-format";
-import { resolveExplorerPath, truncateIdentifier } from "../utils/resolveExplorerPath";
+import {
+  formatRelativeTime,
+  summarizeOperation,
+} from "../utils/operation-format";
+import {
+  resolveExplorerPath,
+  truncateIdentifier,
+} from "../utils/resolveExplorerPath";
 
 interface ExplorerOperationsTableProps {
   operations: ExplorerOperation[];
   emptyLabel?: string;
 }
 
-function resolveLink(identifier: string | null | undefined): { href: string; label: string } | null {
+function resolveLink(
+  identifier: string | null | undefined,
+): { href: string; label: string } | null {
   if (!identifier) {
     return null;
   }
@@ -29,70 +47,91 @@ export default function ExplorerOperationsTable(
 ): React.JSX.Element {
   if (!operations.length) {
     return (
-      <div className="rounded-xl border border-hairline bg-surface p-6 text-sm text-muted">
+      <div className="rounded-xl border border-hairline bg-[color:color-mix(in_oklab,var(--foreground)_6%,transparent)] px-6 py-6 text-sm text-muted">
         {emptyLabel}
       </div>
     );
   }
 
   return (
-    <div className="overflow-hidden rounded-xl border border-hairline bg-surface">
-      <div className="hidden grid-cols-[1.5fr_1fr_1fr_2fr_1fr] gap-4 border-b border-hairline px-6 py-3 text-xs font-medium uppercase tracking-[0.3em] text-muted md:grid">
-        <span>Block</span>
-        <span>Type</span>
-        <span>Participants</span>
-        <span>Details</span>
-        <span>Age</span>
-      </div>
-      <div className="divide-y divide-hairline">
-        {operations.map((operation) => {
-          const summary = summarizeOperation(operation);
-          const blockLink = `/explorer/block/${operation.block.$hash}`;
-          const fromLink = resolveLink(summary.participants.from ?? null);
-          const toLink = resolveLink(summary.participants.to ?? null);
-          const relative = formatRelativeTime(summary.timestamp) ?? "Just now";
+    <div className="overflow-hidden rounded-2xl border border-hairline bg-[color:color-mix(in_oklab,var(--foreground)_3%,transparent)]">
+      <div className="min-w-[720px]">
+        <Table className="w-full">
+          <TableHeader className="bg-[color:color-mix(in_oklab,var(--foreground)_6%,transparent)] text-xs uppercase tracking-[0.3em] text-muted">
+            <TableRow className="border-hairline text-muted">
+              <TableHead className="px-6 py-3">Block</TableHead>
+              <TableHead className="px-6 py-3">Type</TableHead>
+              <TableHead className="px-6 py-3">Participants</TableHead>
+              <TableHead className="px-6 py-3">Details</TableHead>
+              <TableHead className="px-6 py-3">Age</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {operations.map((operation) => {
+              const summary = summarizeOperation(operation);
+              const blockLink = `/explorer/block/${operation.block.$hash}`;
+              const fromLink = resolveLink(summary.participants.from ?? null);
+              const toLink = resolveLink(summary.participants.to ?? null);
+              const relative = formatRelativeTime(summary.timestamp) ?? "Just now";
 
-          return (
-            <div
-              key={`${operation.block.$hash}-${operation.voteStapleHash ?? operation.type}`}
-              className="grid gap-6 px-6 py-4 text-sm text-foreground md:grid-cols-[1.5fr_1fr_1fr_2fr_1fr]"
-            >
-              <div className="flex flex-col gap-1">
-                <Link href={blockLink} className="font-medium text-accent hover:text-foreground">
-                  {truncateIdentifier(operation.block.$hash, 12, 8)}
-                </Link>
-                {operation.block.account && (
-                  <span className="text-xs text-muted">{truncateIdentifier(operation.block.account)}</span>
-                )}
-              </div>
-              <div className="font-medium uppercase tracking-[0.3em] text-muted">
-                {operation.type}
-              </div>
-              <div className="flex flex-col gap-1 text-sm text-subtle">
-                {fromLink ? (
-                  <Link href={fromLink.href} className="hover:text-accent">
-                    From {fromLink.label}
-                  </Link>
-                ) : (
-                  <span>From —</span>
-                )}
-                {toLink ? (
-                  <Link href={toLink.href} className="hover:text-accent">
-                    To {toLink.label}
-                  </Link>
-                ) : (
-                  <span>To —</span>
-                )}
-              </div>
-              <div className="text-sm text-subtle">
-                {summary.description}
-              </div>
-              <div className="text-sm text-muted">
-                {relative}
-              </div>
-            </div>
-          );
-        })}
+              return (
+                <TableRow
+                  key={`${operation.block.$hash}-${operation.voteStapleHash ?? operation.type}`}
+                  className="border-hairline text-sm text-foreground"
+                >
+                  <TableCell className="px-6 py-4">
+                    <div className="flex flex-col gap-1">
+                      <Link
+                        href={blockLink}
+                        className="font-medium text-accent hover:text-foreground"
+                      >
+                        {truncateIdentifier(operation.block.$hash, 12, 8)}
+                      </Link>
+                      {operation.block.account ? (
+                        <span className="text-xs text-muted">
+                          {truncateIdentifier(operation.block.account)}
+                        </span>
+                      ) : null}
+                    </div>
+                  </TableCell>
+                  <TableCell className="px-6 py-4 text-xs font-semibold uppercase tracking-[0.3em] text-muted">
+                    {operation.type}
+                  </TableCell>
+                  <TableCell className="px-6 py-4">
+                    <div className="flex flex-col gap-1 text-sm text-subtle">
+                      <span>
+                        From{" "}
+                        {fromLink ? (
+                          <Link href={fromLink.href} className="text-accent hover:text-foreground">
+                            {fromLink.label}
+                          </Link>
+                        ) : (
+                          "—"
+                        )}
+                      </span>
+                      <span>
+                        To{" "}
+                        {toLink ? (
+                          <Link href={toLink.href} className="text-accent hover:text-foreground">
+                            {toLink.label}
+                          </Link>
+                        ) : (
+                          "—"
+                        )}
+                      </span>
+                    </div>
+                  </TableCell>
+                  <TableCell className="px-6 py-4 text-sm text-subtle">
+                    {summary.description}
+                  </TableCell>
+                  <TableCell className="px-6 py-4 text-sm text-muted">
+                    {relative}
+                  </TableCell>
+                </TableRow>
+              );
+            })}
+          </TableBody>
+        </Table>
       </div>
     </div>
   );

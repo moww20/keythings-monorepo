@@ -70,7 +70,7 @@ export function RFQOrderBook({ onPairChange }: RFQOrderBookProps = {}): React.JS
       return `${tokenA.symbol} → ${tokenB.symbol}`;
     }
     return pair || 'Select tokens';
-  }, [pair, tokenA?.symbol, tokenB?.symbol]);
+  }, [pair, tokenA, tokenB]);
 
   return (
     <div className="flex h-full flex-col gap-4">

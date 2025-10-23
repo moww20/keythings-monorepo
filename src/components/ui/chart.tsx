@@ -254,13 +254,13 @@ const ChartLegend = RechartsPrimitive.Legend
 
 function ChartLegendContent({
   className,
-  hideIcon = false,
+  hide = false,
   payload,
   verticalAlign = "bottom",
   nameKey,
 }: React.ComponentProps<"div"> &
   Pick<RechartsPrimitive.LegendProps, "payload" | "verticalAlign"> & {
-    hideIcon?: boolean
+    hide?: boolean
     nameKey?: string
   }) {
   const { config } = useChart()
@@ -290,7 +290,7 @@ function ChartLegendContent({
                 "[&>svg]:text-muted-foreground flex items-center gap-1.5 [&>svg]:h-3 [&>svg]:w-3"
               )}
             >
-              {itemConfig?.icon && !hideIcon ? (
+              {itemConfig?.icon && !hide ? (
                 <itemConfig.icon />
               ) : (
                 <div

@@ -5,6 +5,7 @@ import { X, Droplets, Info, AlertCircle, ChevronDown, ExternalLink } from 'lucid
 import { WizardProgress, type WizardProgressStep } from './WizardProgress';
 import { useWallet } from '../contexts/WalletContext';
 import { StorageAccountManager } from '../lib/storage-account-manager';
+import type { ProcessedToken } from '../lib/token-utils';
 
 interface CreatePoolModalProps {
   isOpen: boolean;
@@ -19,7 +20,7 @@ interface Token {
   address: string; // Full Keeta address for SDK calls
   decimals: number;
   icon: string;
-  fallbackIcon: any; // TokenIcon from ProcessedToken
+  fallbackIcon: ProcessedToken["fallbackIcon"]; // Token from ProcessedToken
 }
 
 const POOL_TYPES = [

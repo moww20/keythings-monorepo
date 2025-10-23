@@ -2,7 +2,7 @@ import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Badge } from "@/components/ui/badge"
-import { IconWallet, IconShield } from "@tabler/icons-react"
+import { Wallet, Shield } from "lucide-react"
 
 export function SiteHeader() {
   return (
@@ -16,7 +16,7 @@ export function SiteHeader() {
         <h1 className="text-base font-medium">Wallet Dashboard</h1>
         <div className="ml-auto flex items-center gap-2">
           <Badge variant="outline" className="hidden sm:flex">
-            <IconShield className="mr-1 h-3 w-3" />
+            <Shield className="mr-1 h-3 w-3" />
             Secure
           </Badge>
           <Button variant="ghost" asChild size="sm" className="hidden sm:flex">
@@ -24,7 +24,7 @@ export function SiteHeader() {
               href="/settings"
               className="dark:text-foreground"
             >
-              <IconWallet className="mr-1 h-3 w-3" />
+              <Wallet className="mr-1 h-3 w-3" />
               Settings
             </a>
           </Button>

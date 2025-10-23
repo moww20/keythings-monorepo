@@ -1,6 +1,6 @@
 "use client"
 
-import { IconTrendingUp } from "@tabler/icons-react"
+import { TrendingUp } from "lucide-react"
 
 import EstimatedBalance, { type EstimatedBalanceProps, type KtaPriceData } from "@/app/components/EstimatedBalance"
 import { Badge } from "@/components/ui/badge"
@@ -63,7 +63,7 @@ function KtaSummaryCard({
             <CardDescription>Network token performance</CardDescription>
           </div>
           <Badge variant="outline" className="flex items-center gap-1">
-            <IconTrendingUp className="h-4 w-4" />
+            <TrendingUp className="h-4 w-4" />
             <span>Live</span>
           </Badge>
         </div>

@@ -23,14 +23,15 @@ function applyTheme(theme: ThemeMode): void {
 }
 
 export default function ThemeToggle(): React.JSX.Element {
-  const [theme, setTheme] = useState<ThemeMode>("dark");
-
-  useEffect(() => {
-    const saved = typeof window !== "undefined" ? localStorage.getItem("theme") : null;
-    const initial = (saved === "light" || saved === "dark") ? saved : (getSystemPrefersDark() ? "dark" : "light");
-    setTheme(initial);
+  const [theme, setTheme] = useState<ThemeMode>(() => {
+    if (typeof window === "undefined") {
+      return "dark";
+    }
+    const saved = localStorage.getItem("theme");
+    const initial = saved === "light" || saved === "dark" ? saved : (getSystemPrefersDark() ? "dark" : "light");
     applyTheme(initial);
-  }, []);
+    return initial;
+  });
 
   useEffect(() => {
     applyTheme(theme);

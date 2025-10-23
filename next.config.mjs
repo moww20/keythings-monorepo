@@ -1,9 +1,40 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  experimental: {
-    browserDebugInfoInTerminal: true,
+  // Turbopack is now the default bundler in Next.js 16
+  // browserDebugInfoInTerminal is now stable and enabled by default
+  
+  // Webpack optimization to handle empty chunks
+  webpack: (config, { isServer }) => {
+    if (!isServer) {
+      // Prevent empty polyfills chunk by optimizing splitChunks
+      config.optimization = {
+        ...config.optimization,
+        splitChunks: {
+          ...config.optimization?.splitChunks,
+          cacheGroups: {
+            ...config.optimization?.splitChunks?.cacheGroups,
+            // Only create polyfills chunk if there are actual polyfills
+            polyfills: {
+              test: /[\\/]node_modules[\\/](core-js|regenerator-runtime|@babel[\\/]runtime)[\\/]/,
+              name: 'polyfills',
+              chunks: 'all',
+              enforce: true,
+              minSize: 0, // Allow empty chunks to be merged
+            },
+            // Merge small chunks to prevent empty chunks
+            default: {
+              minChunks: 2,
+              priority: -20,
+              reuseExistingChunk: true,
+              minSize: 0,
+            },
+          },
+        },
+      };
+    }
+    return config;
   },
-  // Turbopack handles Node.js built-ins automatically, no explicit config needed
+  
   async headers() {
     return [
       {

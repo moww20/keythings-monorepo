@@ -1,4 +1,4 @@
-import { IconSend, IconReceipt, IconArrowsExchange, IconPlus, IconHistory } from "@tabler/icons-react"
+import { Send, Download, ArrowLeftRight, Plus, History, TrendingUp } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -13,27 +13,16 @@ export function QuickActionsCard() {
   return (
     <Card className="@container/card h-full">
       <CardHeader className="pb-3">
-        <CardTitle className="text-lg">Quick Actions</CardTitle>
-        <CardDescription>Common wallet operations</CardDescription>
+        <CardTitle className="text-lg">Open Position</CardTitle>
+        <CardDescription>Coming soon</CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
-        <div className="grid grid-cols-2 gap-2">
-          <Button className="h-12 flex-col gap-1">
-            <IconSend className="h-4 w-4" />
-            <span className="text-xs">Send</span>
-          </Button>
-          <Button variant="outline" className="h-12 flex-col gap-1">
-            <IconReceipt className="h-4 w-4" />
-            <span className="text-xs">Receive</span>
-          </Button>
-          <Button variant="outline" className="h-12 flex-col gap-1">
-            <IconArrowsExchange className="h-4 w-4" />
-            <span className="text-xs">Swap</span>
-          </Button>
-          <Button variant="outline" className="h-12 flex-col gap-1">
-            <IconPlus className="h-4 w-4" />
-            <span className="text-xs">Buy</span>
-          </Button>
+        <div className="flex items-center justify-center h-24 bg-surface rounded-lg border border-hairline">
+          <div className="text-center">
+            <TrendingUp className="h-8 w-8 text-muted mx-auto mb-2" />
+            <p className="text-sm text-muted">Position management</p>
+            <p className="text-xs text-faint">Feature coming soon</p>
+          </div>
         </div>
       </CardContent>
     </Card>
@@ -72,7 +61,7 @@ export function RecentActivityCard() {
           </div>
         </div>
         <Button variant="outline" size="sm" className="w-full">
-          <IconHistory className="mr-2 h-4 w-4" />
+          <History className="mr-2 h-4 w-4" />
           View All
         </Button>
       </CardContent>

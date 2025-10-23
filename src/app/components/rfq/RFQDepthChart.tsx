@@ -38,17 +38,20 @@ export function RFQDepthChart(): React.JSX.Element {
 
     const groupedRows = Object.values(grouped).sort((left, right) => left.price - right.price);
 
-    let cumulativeSell = 0;
-    let cumulativeBuy = 0;
-
-    return groupedRows.map((row) => {
+    return groupedRows.reduce((acc, row) => {
+      const lastSell = acc.filter(r => r.side === 'sell').pop()?.cumulative || 0;
+      const lastBuy = acc.filter(r => r.side === 'buy').pop()?.cumulative || 0;
+      
       if (row.side === 'sell') {
-        cumulativeSell += row.size;
-        return { ...row, cumulative: cumulativeSell };
+        const cumulative = lastSell + row.size;
+        acc.push({ ...row, cumulative });
+      } else {
+        const cumulative = lastBuy + row.size;
+        acc.push({ ...row, cumulative });
       }
-      cumulativeBuy += row.size;
-      return { ...row, cumulative: cumulativeBuy };
-    });
+      
+      return acc;
+    }, [] as Array<typeof groupedRows[0] & { cumulative: number }>);
   }, [buckets.open]);
 
   const maxCumulative = useMemo(() => Math.max(...rows.map((row) => row.cumulative), 1), [rows]);

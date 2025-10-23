@@ -207,10 +207,13 @@ export function WalletProvider({ children }: WalletProviderProps) {
     });
   }, [userClient]);
   
-  // Reset permission state when wallet disconnects or locks
+  // Set transaction permissions when wallet is connected and unlocked
   useEffect(() => {
     if (!walletData.wallet.connected || walletData.wallet.isLocked) {
       setHasTransactionPermissions(false);
+    } else {
+      // Since we now request transaction permissions by default, set to true when connected and unlocked
+      setHasTransactionPermissions(true);
     }
   }, [walletData.wallet.connected, walletData.wallet.isLocked]);
 
@@ -535,7 +538,15 @@ export function WalletProvider({ children }: WalletProviderProps) {
 
   const requestTransactionPermissions = useCallback(async (): Promise<boolean> => {
     try {
-      await walletData.fetchWalletState(true);
+      // If wallet is already connected, just refresh state
+      if (walletData.wallet.connected) {
+        await walletData.fetchWalletState(true);
+        setHasTransactionPermissions(true);
+        return true;
+      }
+      
+      // If wallet is not connected, connect with transaction permissions
+      await walletData.connectWallet(true);
       setHasTransactionPermissions(true);
       return true;
     } catch (error) {
@@ -1092,7 +1103,7 @@ export function WalletProvider({ children }: WalletProviderProps) {
       wallet,
       error: walletData.error,
       isLoading: walletData.isLoading,
-      connectWallet: (requestCapabilities = false) => walletData.connectWallet(requestCapabilities),
+      connectWallet: (requestCapabilities = true) => walletData.connectWallet(requestCapabilities),
       refreshWallet: walletData.refreshWallet,
       fetchWalletState: walletData.fetchWalletState,
 

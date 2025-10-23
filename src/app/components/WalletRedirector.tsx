@@ -24,6 +24,10 @@ export default function WalletRedirector(): null {
       if (pathname === "/" || pathname === "") {
         return true;
       }
+      // Skip redirect for wallet pages to prevent pop-ups
+      if (pathname.startsWith("/send") || pathname.startsWith("/receive") || pathname.startsWith("/profile")) {
+        return true;
+      }
       try {
         const params = new URLSearchParams(search);
         return params.has("stayOnLanding");

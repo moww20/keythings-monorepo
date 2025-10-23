@@ -26,8 +26,11 @@ export default function Navbar(): React.JSX.Element {
   const pathname = usePathname();
   const router = useRouter();
   const wallet = useWallet();
-  const [mobileOpen, setMobileOpen] = useState(false);
-  const [mounted, setMounted] = useState(false);
+  const [openMenuPath, setOpenMenuPath] = useState<string | null>(null);
+  const mobileOpen = openMenuPath === pathname;
+  const openMobileMenu = useCallback(() => setOpenMenuPath(pathname), [pathname]);
+  const closeMobileMenu = useCallback(() => setOpenMenuPath(null), []);
+  const isClient = typeof window !== "undefined";
   const navRef = useRef<HTMLElement | null>(null);
 
   const updateNavHeight = useCallback(() => {
@@ -69,11 +72,6 @@ export default function Navbar(): React.JSX.Element {
   // Wallet connection state is now managed by the centralized wallet context
 
   useEffect(() => {
-    // Close mobile menu on route change
-    setMobileOpen(false);
-  }, [pathname]);
-
-  useEffect(() => {
     updateNavHeight();
     if (typeof window === "undefined") return;
 
@@ -91,16 +89,13 @@ export default function Navbar(): React.JSX.Element {
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setMobileOpen(false);
+      if (event.key === "Escape") {
+        closeMobileMenu();
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, []);
-
-  useEffect(() => {
-    setMounted(true);
-    // Wallet connection state is now managed by the centralized wallet context
-  }, []);
+  }, [closeMobileMenu]);
 
   const waitForWallet = async (maxAttempts = 20): Promise<KeetaProvider | null> => {
     for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
@@ -220,7 +215,7 @@ export default function Navbar(): React.JSX.Element {
             type="button"
             aria-label="Open menu"
             className="lg:hidden inline-flex items-center justify-center w-9 h-9 rounded-full hover:bg-white/5 text-foreground/90"
-            onClick={() => setMobileOpen((v) => !v)}
+            onClick={() => (mobileOpen ? closeMobileMenu() : openMobileMenu())}
           >
             <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
               <path d="M4 7h16M4 12h16M4 17h16" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
@@ -256,7 +251,7 @@ export default function Navbar(): React.JSX.Element {
           })}
         </div>
       </div>
-      {mounted && createPortal(
+      {isClient && createPortal(
         (
           <AnimatePresence>
             {mobileOpen && (
@@ -268,7 +263,7 @@ export default function Navbar(): React.JSX.Element {
                   animate={{ opacity: 0.45 }}
                   exit={{ opacity: 0 }}
                   transition={{ duration: 0.2 }}
-                  onClick={() => setMobileOpen(false)}
+                  onClick={closeMobileMenu}
                 />
                 <motion.div
                   className="fixed inset-y-0 right-0 z-[101] w-80 max-w-[85vw] bg-[#0b0b0b] shadow-2xl hairline-l sm:hidden p-4"
@@ -282,7 +277,7 @@ export default function Navbar(): React.JSX.Element {
                     <button
                       aria-label="Close"
                       className="inline-flex items-center justify-center w-8 h-8 rounded-full hover:bg-white/5"
-                      onClick={() => setMobileOpen(false)}
+                      onClick={closeMobileMenu}
                     >
                       <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                         <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />

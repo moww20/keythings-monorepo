@@ -1,26 +1,9 @@
 "use client"
 
-import React, { useCallback, useEffect, useState } from "react"
+import React, { useCallback } from "react"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
-import {
-  IconWallet,
-  IconCoins,
-  IconChartBar,
-  IconDashboard,
-  IconHistory,
-  IconSettings,
-  IconHelp,
-  IconSend,
-  IconReceipt,
-  IconTrendingUp,
-  IconUser,
-  IconKey,
-  IconDatabase,
-  IconMail,
-  IconWorld,
-  IconFileText,
-} from "@tabler/icons-react"
+import { Wallet, Coins, BarChart3, LayoutDashboard, History, Settings, HelpCircle, Send, Download, ArrowLeftRight, TrendingUp, User, Key, Database, Mail, Globe2, FileText } from "lucide-react"
 import { BookOpen } from "lucide-react"
 import { siX, siDiscord } from "simple-icons"
 
@@ -31,7 +14,6 @@ import { NavMain } from "@/components/nav-main"
 import { NavSecondary } from "@/components/nav-secondary"
 import { NavTransactions } from "@/components/nav-transactions"
 import { NavUser } from "@/components/nav-user"
-import type { KeetaProvider } from "@/types/keeta"
 import {
   Sidebar,
   SidebarContent,
@@ -47,87 +29,97 @@ const data = {
     email: "user@keeta.network",
     avatar: "/icons/TLEOfKos_400x400.jpg",
   },
-  navMain: [
+  navPortfolio: [
     {
       title: "Dashboard",
       url: "/dashboard",
-      icon: IconDashboard,
-    },
-    {
-      title: "Tokens",
-      url: "/tokens",
-      icon: IconCoins,
-    },
-    {
-      title: "Explorer",
-      url: "/explorer",
-      icon: IconTrendingUp,
-    },
-    {
-      title: "Analytics",
-      url: "/analytics",
-      icon: IconChartBar,
+      icon: LayoutDashboard,
     },
     {
       title: "History",
       url: "/history",
-      icon: IconHistory,
+      icon: History,
+      disabled: true,
+    },
+  ],
+  navNetwork: [
+    {
+      title: "Network Explorer",
+      url: "/explorer",
+      icon: TrendingUp,
+    },
+    {
+      title: "Token Sniffer",
+      url: "/tokens",
+      icon: Coins,
+    },
+    {
+      title: "Network Analytics",
+      url: "/analytics",
+      icon: BarChart3,
+      disabled: true,
     },
   ],
   navTransactions: [
     {
       name: "Send",
-      icon: IconSend,
+      icon: Send,
       url: "/send",
     },
     {
       name: "Receive",
-      icon: IconReceipt,
+      icon: Download,
       url: "/receive",
+      disabled: true,
     },
     {
       name: "OTC Swap",
-      icon: IconTrendingUp,
+      icon: ArrowLeftRight,
       url: "/otc-swap",
+      disabled: true,
     },
   ],
   navSecondary: [
     {
       title: "Settings",
       url: "/settings",
-      icon: IconSettings,
+      icon: Settings,
     },
     {
       title: "About Us",
       url: "/about",
-      icon: IconHelp,
+      icon: HelpCircle,
     },
   ],
   documents: [
     {
       name: "Feed",
       url: "/feed",
-      icon: IconTrendingUp,
+      icon: TrendingUp,
+      disabled: true,
     },
     {
       name: "Messages",
       url: "/messages",
-      icon: IconMail,
+      icon: Mail,
+      disabled: true,
     },
     {
       name: "World Chat",
       url: "/world-chat",
-      icon: IconWorld,
+      icon: Globe2,
+      disabled: true,
     },
     {
       name: "Articles",
       url: "/articles",
-      icon: IconFileText,
+      icon: FileText,
+      disabled: true,
     },
     {
       name: "Profile",
       url: "/profile",
-      icon: IconUser,
+      icon: User,
     },
   ],
 }
@@ -135,12 +127,8 @@ const data = {
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const pathname = usePathname()
   const router = useRouter()
-  const wallet = useWallet()
-  const [hasHydrated, setHasHydrated] = useState(false)
-
-  useEffect(() => {
-    setHasHydrated(true)
-  }, [])
+  const walletContext = useWallet()
+  const walletState = walletContext.wallet
 
   const redirectToDashboard = useCallback(() => {
     if (typeof window === "undefined") return
@@ -149,20 +137,10 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     }
   }, [router])
 
-  const waitForWallet = useCallback(async (maxAttempts = 20): Promise<KeetaProvider | null> => {
-    for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
-      if (typeof window.keeta !== "undefined" && window.keeta) {
-        return window.keeta
-      }
-      await new Promise((resolve) => setTimeout(resolve, 100))
-    }
-    return null
-  }, [])
-
   const connectWallet = useCallback(async () => {
     try {
       // Connect wallet and automatically request read capabilities for explorer functionality
-      await wallet.connectWallet(true) // Pass true to request read capabilities
+      await walletContext.connectWallet(true) // Pass true to request read capabilities
       redirectToDashboard()
     } catch (error) {
       console.error("Connection failed:", error)
@@ -185,7 +163,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         Toast.error("Failed to connect wallet. Please try again.")
       }
     }
-  }, [wallet, redirectToDashboard])
+  }, [walletContext, redirectToDashboard])
 
   const disconnectWallet = useCallback(() => {
     // The wallet context handles disconnection automatically
@@ -201,15 +179,16 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
 
   const isDocsRoute = pathname.startsWith("/docs")
 
-  const hydratedWalletConnected = hasHydrated && wallet.isConnected
-  const hydratedWalletAddress = hasHydrated ? wallet.publicKey : null
+  const isWalletLoading = walletContext.isLoading || walletState.isInitializing
+  const hydratedWalletConnected = !isWalletLoading && walletState.connected && !walletState.isLocked
+  const hydratedWalletAddress = walletState.connected ? walletContext.publicKey : null
 
   return (
     <Sidebar collapsible="offcanvas" {...props}>
       <SidebarHeader className="gap-4">
         <div className="flex items-center justify-between gap-3 rounded-lg bg-[color:var(--background)]/60 px-2 py-2">
           <Link href="/dashboard" className="flex items-center gap-2 text-foreground">
-            <IconWallet className="h-5 w-5" />
+            <Wallet className="h-5 w-5" />
             <span className="text-base font-semibold">Keythings Wallet</span>
           </Link>
           <ThemeToggle />
@@ -224,9 +203,22 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       </SidebarHeader>
 
       <SidebarContent>
-        <NavMain items={data.navMain} />
-        <NavTransactions items={data.navTransactions} />
-        <NavDocuments items={data.documents} />
+        <div className="px-2 py-1">
+          <h2 className="mb-2 text-xs font-semibold text-muted tracking-wider">Portfolio</h2>
+          <NavMain items={data.navPortfolio} />
+        </div>
+        <div className="px-2 py-1">
+          <h2 className="mb-2 text-xs font-semibold text-muted tracking-wider">Network</h2>
+          <NavMain items={data.navNetwork} />
+        </div>
+        <div className="px-2 py-1">
+          <h2 className="mb-2 text-xs font-semibold text-muted tracking-wider">Transactions</h2>
+          <NavTransactions items={data.navTransactions} />
+        </div>
+        <div className="px-2 py-1">
+          <h2 className="mb-2 text-xs font-semibold text-muted tracking-wider">Social</h2>
+          <NavDocuments items={data.documents} />
+        </div>
         <NavSecondary items={data.navSecondary} className="mt-auto" />
       </SidebarContent>
 
@@ -274,6 +266,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             onConnectWallet={connectWallet}
             onDisconnectWallet={disconnectWallet}
             formatAddress={formatAddress}
+            isLoading={isWalletLoading}
           />
         </div>
       </SidebarFooter>

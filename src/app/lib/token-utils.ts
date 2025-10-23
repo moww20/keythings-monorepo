@@ -350,6 +350,39 @@ export interface ProcessedToken {
   hasMetadata: boolean;
 }
 
+export interface TokenChipPresentation {
+  iconUrl: string | null;
+  fallback?: TokenIcon | null;
+  ticker: string;
+  name?: string;
+}
+
+export function getTokenChipPresentation(token: ProcessedToken): TokenChipPresentation {
+  if (token.icon) {
+    return {
+      iconUrl: token.icon,
+      fallback: token.fallbackIcon,
+      ticker: token.ticker,
+      name: token.name,
+    };
+  }
+
+  if (token.fallbackIcon) {
+    return {
+      iconUrl: null,
+      fallback: token.fallbackIcon,
+      ticker: token.ticker,
+      name: token.name,
+    };
+  }
+
+  return {
+    iconUrl: null,
+    ticker: token.ticker,
+    name: token.name,
+  };
+}
+
 /**
  * Parse base64 encoded metadata
  */

@@ -9,17 +9,17 @@ import { Wallet } from "lucide-react";
  */
 interface UnifiedLoadingScreenProps {
   message?: string;
-  showWalletIcon?: boolean;
+  showWallet?: boolean;
 }
 
 export default function UnifiedLoadingScreen({
   message = "Loading your wallet...",
-  showWalletIcon = true,
+  showWallet = true,
 }: UnifiedLoadingScreenProps): React.JSX.Element {
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-[color:var(--background)] text-center p-6 animate-fade-in">
       <div className="glass rounded-lg border border-hairline shadow-[0_20px_60px_rgba(6,7,10,0.45)] p-8 max-w-md animate-slide-up">
-        {showWalletIcon && (
+        {showWallet && (
           <div className="flex justify-center mb-6">
             <div className="relative">
               <Wallet className="h-16 w-16 text-accent animate-pulse" />

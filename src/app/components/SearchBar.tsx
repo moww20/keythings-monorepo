@@ -52,12 +52,6 @@ export default function SearchBar(): React.JSX.Element {
   }, [query]);
 
   useEffect(() => {
-    if (results.length === 0 || activeIndex >= results.length) {
-      setActiveIndex(0);
-    }
-  }, [results, activeIndex]);
-
-  useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       // Quick open with '/'
       if (event.key === "/" && document.activeElement !== inputRef.current) {
@@ -106,12 +100,19 @@ export default function SearchBar(): React.JSX.Element {
           onKeyDown={(event) => {
             if (event.key === "ArrowDown") {
               event.preventDefault();
-              setActiveIndex((index) => Math.min(index + 1, Math.max(results.length - 1, 0)));
+              setActiveIndex((index) => {
+                if (results.length === 0) return 0;
+                return Math.min(index + 1, results.length - 1);
+              });
             } else if (event.key === "ArrowUp") {
               event.preventDefault();
-              setActiveIndex((index) => Math.max(index - 1, 0));
+              setActiveIndex((index) => {
+                if (results.length === 0) return 0;
+                return Math.max(index - 1, 0);
+              });
             } else if (event.key === "Enter") {
-              if (results[activeIndex]) onSelect(results[activeIndex].href);
+              const target = results[activeIndex];
+              if (target) onSelect(target.href);
             } else if (event.key === "Escape") {
               setOpen(false);
             }

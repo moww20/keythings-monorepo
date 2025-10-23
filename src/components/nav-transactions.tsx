@@ -1,29 +1,13 @@
 "use client"
 
 import { usePathname } from "next/navigation"
-import {
-  IconDots,
-  IconFolder,
-  IconShare3,
-  IconTrash,
-  type Icon,
-} from "@tabler/icons-react"
+import type { LucideIcon } from "lucide-react"
 
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
-import {
   SidebarGroup,
-  SidebarGroupLabel,
   SidebarMenu,
-  SidebarMenuAction,
   SidebarMenuButton,
   SidebarMenuItem,
-  useSidebar,
 } from "@/components/ui/sidebar"
 
 export function NavTransactions({
@@ -32,12 +16,11 @@ export function NavTransactions({
   items: {
     name: string
     url: string
-    icon: Icon
+    icon: LucideIcon
+    disabled?: boolean
   }[]
 }) {
   const pathname = usePathname()
-  const { isMobile } = useSidebar()
-
   const isActivePath = (url: string) => {
     if (url === "/") {
       return pathname === url
@@ -47,57 +30,32 @@ export function NavTransactions({
 
   return (
     <SidebarGroup className="group-data-[collapsible=icon]:hidden">
-      <SidebarGroupLabel>Transactions</SidebarGroupLabel>
       <SidebarMenu>
         {items.map((item) => (
           <SidebarMenuItem key={item.name}>
-            <SidebarMenuButton asChild isActive={isActivePath(item.url)}>
-              <a
-                href={item.url}
-                aria-current={isActivePath(item.url) ? "page" : undefined}
-              >
-                <item.icon />
-                <span>{item.name}</span>
-              </a>
-            </SidebarMenuButton>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <SidebarMenuAction
-                  showOnHover
-                  className="data-[state=open]:bg-accent rounded-sm"
+            <SidebarMenuButton 
+              asChild={!item.disabled}
+              isActive={isActivePath(item.url)}
+              disabled={item.disabled}
+              className={item.disabled ? "opacity-50 cursor-not-allowed" : ""}
+            >
+              {item.disabled ? (
+                <div className="flex items-center gap-2">
+                  <item.icon />
+                  <span>{item.name}</span>
+                </div>
+              ) : (
+                <a
+                  href={item.url}
+                  aria-current={isActivePath(item.url) ? "page" : undefined}
                 >
-                  <IconDots />
-                  <span className="sr-only">More</span>
-                </SidebarMenuAction>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent
-                className="w-24 rounded-lg"
-                side={isMobile ? "bottom" : "right"}
-                align={isMobile ? "end" : "start"}
-              >
-                <DropdownMenuItem>
-                  <IconFolder />
-                  <span>Open</span>
-                </DropdownMenuItem>
-                <DropdownMenuItem>
-                  <IconShare3 />
-                  <span>Share</span>
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem variant="destructive">
-                  <IconTrash />
-                  <span>Delete</span>
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+                  <item.icon />
+                  <span>{item.name}</span>
+                </a>
+              )}
+            </SidebarMenuButton>
           </SidebarMenuItem>
         ))}
-        <SidebarMenuItem>
-          <SidebarMenuButton className="text-sidebar-foreground/70">
-            <IconDots className="text-sidebar-foreground/70" />
-            <span>More</span>
-          </SidebarMenuButton>
-        </SidebarMenuItem>
       </SidebarMenu>
     </SidebarGroup>
   )
