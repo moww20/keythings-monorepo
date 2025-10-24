@@ -450,19 +450,32 @@ export function useExplorerData() {
               const inlineMeta = items.find(it => it?.token === addr && it?.tokenMetadata);
               if (inlineMeta && inlineMeta.tokenMetadata && typeof inlineMeta.tokenMetadata === 'object') {
                 const tm = inlineMeta.tokenMetadata as any;
+                const inlineMetadata = typeof tm.metadata === 'string'
+                  ? tm.metadata
+                  : deepFindString(tm, ['metadata', 'serializedMetadata', 'rawMetadata', 'raw']);
                 metadataByToken[addr] = {
-                  metadata: null,
-                  decimals: typeof tm.decimals === 'number' ? tm.decimals : null,
-                  ticker: typeof tm.ticker === 'string' ? tm.ticker : null,
-                  name: typeof tm.name === 'string' ? tm.name : null,
+                  metadata: inlineMetadata,
+                  decimals: typeof tm.decimals === 'number'
+                    ? tm.decimals
+                    : deepFindNumber(tm, ['decimals', 'decimalPlaces', 'precision']),
+                  ticker: typeof tm.ticker === 'string'
+                    ? tm.ticker
+                    : typeof tm.symbol === 'string'
+                      ? tm.symbol
+                      : deepFindString(tm, ['ticker', 'symbol', 'currencyCode']),
+                  name: typeof tm.name === 'string'
+                    ? tm.name
+                    : typeof tm.displayName === 'string'
+                      ? tm.displayName
+                      : deepFindString(tm, ['name', 'displayName']),
                 };
               } else {
                 const info = await keeta.getAccountInfo?.(addr);
                 if (info && typeof info === 'object') {
-                  const metadata = deepFindString(info, ['metadata']);
+                  const metadata = deepFindString(info, ['metadata', 'serializedMetadata', 'rawMetadata', 'raw']);
                   const ticker = deepFindString(info, ['ticker', 'symbol', 'currencyCode']);
                   const name = deepFindString(info, ['name', 'displayName']);
-                  const decimals = deepFindNumber(info, ['decimals', 'decimalPlaces']);
+                  const decimals = deepFindNumber(info, ['decimals', 'decimalPlaces', 'precision']);
                   metadataByToken[addr] = { metadata, decimals, ticker, name };
                 }
               }
@@ -477,8 +490,12 @@ export function useExplorerData() {
             const tokenAddress = typeof it.token === 'string' && it.token.trim().length > 0 ? it.token : null;
             if (!tokenAddress) return it;
 
-            const meta = metadataByToken[tokenAddress];
-            if (!meta) return it;
+            const meta = metadataByToken[tokenAddress] ?? {
+              metadata: null,
+              decimals: null,
+              ticker: null,
+              name: null,
+            };
 
             try {
               const amountSource = typeof it.rawAmount === 'string' && it.rawAmount.trim().length > 0
@@ -487,10 +504,18 @@ export function useExplorerData() {
                   ? it.amount
                   : '0';
 
+              const inlineMetadata = typeof it.metadata === 'string'
+                ? it.metadata
+                : typeof it.tokenMetadata === 'string'
+                  ? it.tokenMetadata
+                  : typeof it.tokenMetadata === 'object' && it.tokenMetadata
+                    ? deepFindString(it.tokenMetadata, ['metadata', 'serializedMetadata', 'rawMetadata', 'raw'])
+                    : null;
+
               const processed = await processTokenForDisplay(
                 tokenAddress,
                 amountSource,
-                meta.metadata ?? null,
+                meta.metadata ?? inlineMetadata ?? null,
                 baseTokenAddress ?? undefined,
                 undefined,
               );
