@@ -90,13 +90,24 @@ export default function ExplorerOperationsTable(
                 (typeof receiveOp.token === "string" && receiveOp.token) ? receiveOp.token :
                 operation.token;
 
-              const formattedAmount = (operation as any).formattedAmount && typeof (operation as any).formattedAmount === "string" && (operation as any).formattedAmount.trim().length > 0
-                ? (operation as any).formattedAmount
-                : resolvedAmount && (operation as any).tokenTicker
-                  ? `${resolvedAmount} ${(operation as any).tokenTicker}`
-                  : resolvedAmount && resolvedToken
-                    ? `${resolvedAmount} ${resolvedToken}`
-                    : resolvedAmount ?? resolvedToken ?? "—";
+              const operationAny = operation as any;
+              const enrichedFormattedAmount = typeof operationAny.formattedAmount === "string" && operationAny.formattedAmount.trim().length > 0
+                ? operationAny.formattedAmount.trim()
+                : null;
+              const enrichedTicker = typeof operationAny.tokenTicker === "string" && operationAny.tokenTicker.trim().length > 0
+                ? operationAny.tokenTicker.trim()
+                : null;
+              const metadataTicker = typeof operationAny.tokenMetadata?.ticker === "string" && operationAny.tokenMetadata.ticker.trim().length > 0
+                ? operationAny.tokenMetadata.ticker.trim()
+                : null;
+              const displayTicker = enrichedTicker ?? metadataTicker ?? (typeof resolvedToken === "string" && resolvedToken.trim().length > 0 ? resolvedToken : null);
+
+              const formattedAmount = enrichedFormattedAmount
+                ?? (resolvedAmount && displayTicker
+                  ? `${resolvedAmount} ${displayTicker}`
+                  : resolvedAmount
+                    ?? displayTicker
+                    ?? "—");
 
               return (
                 <TableRow
