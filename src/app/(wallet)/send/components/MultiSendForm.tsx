@@ -1,5 +1,6 @@
 'use client';
 
+import Image from "next/image";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useFieldArray, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -264,9 +265,11 @@ const MultiSendForm = () => {
                           <SelectItem key={token.value} value={token.value}>
                             <div className="flex items-center gap-3">
                               {token.iconUrl ? (
-                                <img
+                                <Image
                                   src={token.iconUrl}
                                   alt={token.label}
+                                  width={24}
+                                  height={24}
                                   className="h-6 w-6 rounded-full object-cover"
                                 />
                               ) : token.fallbackIcon ? (

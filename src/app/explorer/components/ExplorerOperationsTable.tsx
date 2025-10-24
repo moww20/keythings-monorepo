@@ -62,7 +62,7 @@ export default function ExplorerOperationsTable(
               <TableHead className="px-6 py-3">Block</TableHead>
               <TableHead className="px-6 py-3">Type</TableHead>
               <TableHead className="px-6 py-3">Participants</TableHead>
-              <TableHead className="px-6 py-3">Details</TableHead>
+              <TableHead className="px-6 py-3">Token</TableHead>
               <TableHead className="px-6 py-3">Age</TableHead>
             </TableRow>
           </TableHeader>
@@ -73,6 +73,30 @@ export default function ExplorerOperationsTable(
               const fromLink = resolveLink(summary.participants.from ?? null);
               const toLink = resolveLink(summary.participants.to ?? null);
               const relative = formatRelativeTime(summary.timestamp) ?? "Just now";
+
+              const primaryOp = operation.operation ?? {};
+              const sendOp = operation.operationSend ?? {};
+              const receiveOp = operation.operationReceive ?? {};
+
+              const resolvedAmount =
+                (typeof primaryOp.amount === "string" && primaryOp.amount) ? primaryOp.amount :
+                (typeof sendOp.amount === "string" && sendOp.amount) ? sendOp.amount :
+                (typeof receiveOp.amount === "string" && receiveOp.amount) ? receiveOp.amount :
+                null;
+
+              const resolvedToken =
+                (typeof primaryOp.token === "string" && primaryOp.token) ? primaryOp.token :
+                (typeof sendOp.token === "string" && sendOp.token) ? sendOp.token :
+                (typeof receiveOp.token === "string" && receiveOp.token) ? receiveOp.token :
+                operation.token;
+
+              const formattedAmount = (operation as any).formattedAmount && typeof (operation as any).formattedAmount === "string" && (operation as any).formattedAmount.trim().length > 0
+                ? (operation as any).formattedAmount
+                : resolvedAmount && (operation as any).tokenTicker
+                  ? `${resolvedAmount} ${(operation as any).tokenTicker}`
+                  : resolvedAmount && resolvedToken
+                    ? `${resolvedAmount} ${resolvedToken}`
+                    : resolvedAmount ?? resolvedToken ?? "—";
 
               return (
                 <TableRow
@@ -122,7 +146,7 @@ export default function ExplorerOperationsTable(
                     </div>
                   </TableCell>
                   <TableCell className="px-6 py-4 text-sm text-subtle">
-                    {summary.description}
+                    {formattedAmount}
                   </TableCell>
                   <TableCell className="px-6 py-4 text-sm text-muted">
                     {relative}

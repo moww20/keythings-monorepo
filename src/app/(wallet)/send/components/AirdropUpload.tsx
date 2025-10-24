@@ -1,5 +1,6 @@
 'use client';
 
+import Image from "next/image";
 import { useCallback, useMemo, useState } from "react";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -302,9 +303,11 @@ const AirdropUpload = () => {
                           <SelectItem key={token.value} value={token.value}>
                             <div className="flex items-center gap-3">
                               {token.iconUrl ? (
-                                <img
+                                <Image
                                   src={token.iconUrl}
                                   alt={token.label}
+                                  width={24}
+                                  height={24}
                                   className="h-6 w-6 rounded-full object-cover"
                                 />
                               ) : token.fallbackIcon ? (

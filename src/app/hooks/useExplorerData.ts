@@ -37,6 +37,11 @@ interface ExplorerAccount {
     to: string;
     token: string;
     operationType: string;
+    tokenMetadata?: {
+      name?: string | null;
+      ticker?: string | null;
+      decimals?: number | null;
+    } | null;
   }>;
 }
 
@@ -357,20 +362,7 @@ export function useExplorerData() {
                   // The enhanced RPC method already returns the detailed structure with from/to/token
                   if (data && typeof data === 'object' && 'records' in data && Array.isArray(data.records)) {
                     globalThis.console.warn('[EXPLORER_DATA] Processing enhanced records:', data.records.length);
-                    
-                    // Convert the enhanced records to our activity format
-                    activity = data.records.map((record: any) => ({
-                      id: record.id || `${record.block || 'unknown'}-${record.operationType || 'unknown'}-${record.timestamp || Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-                      block: record.block || '',
-                      timestamp: record.timestamp || Date.now(),
-                      type: record.type || record.operationType || 'Transaction',
-                      amount: record.amount || '0',
-                      from: record.from || '',
-                      to: record.to || '',
-                      token: record.token || '',
-                      operationType: record.operationType || record.type || 'UNKNOWN'
-                    }));
-                    
+                    activity = normalizeHistoryResponse(data, publicKey);
                     globalThis.console.warn('[EXPLORER_DATA] Enhanced activity result:', activity?.length);
                     globalThis.console.warn('[EXPLORER_DATA] Sample enhanced record:', activity[0]);
                   } else {
@@ -481,21 +473,48 @@ export function useExplorerData() {
 
           // Format amounts and label tokens
           const enriched = await Promise.all(items.map(async (it) => {
-            if (!it?.token) return it;
-            const meta = metadataByToken[it.token];
+            if (!it) return it;
+            const tokenAddress = typeof it.token === 'string' && it.token.trim().length > 0 ? it.token : null;
+            if (!tokenAddress) return it;
+
+            const meta = metadataByToken[tokenAddress];
             if (!meta) return it;
+
             try {
+              const amountSource = typeof it.rawAmount === 'string' && it.rawAmount.trim().length > 0
+                ? it.rawAmount
+                : typeof it.amount === 'string' && it.amount.trim().length > 0
+                  ? it.amount
+                  : '0';
+
               const processed = await processTokenForDisplay(
-                it.token,
-                it.amount ?? '0',
+                tokenAddress,
+                amountSource,
                 meta.metadata ?? null,
                 baseTokenAddress ?? undefined,
                 undefined,
               );
+
+              const formattedWithTicker = processed.formattedAmount
+                ? `${processed.formattedAmount}${processed.ticker ? ` ${processed.ticker}` : ''}`.trim()
+                : amountSource;
+
+              const mergedTokenMetadata = {
+                name: processed.name ?? it.tokenMetadata?.name ?? meta.name ?? null,
+                ticker: processed.ticker ?? it.tokenMetadata?.ticker ?? meta.ticker ?? null,
+                decimals: typeof processed.decimals === 'number' && Number.isFinite(processed.decimals)
+                  ? processed.decimals
+                  : it.tokenMetadata?.decimals ?? meta.decimals ?? null,
+              } as { name?: string | null; ticker?: string | null; decimals?: number | null };
+
               return {
                 ...it,
-                amount: processed.formattedAmount,
-                token: processed.ticker || it.token,
+                formattedAmount: formattedWithTicker,
+                tokenTicker: processed.ticker ?? it.tokenTicker ?? meta.ticker ?? null,
+                tokenDecimals: typeof processed.decimals === 'number' && Number.isFinite(processed.decimals)
+                  ? processed.decimals
+                  : it.tokenDecimals ?? meta.decimals ?? null,
+                tokenMetadata: mergedTokenMetadata,
               };
             } catch {
               return it;

@@ -1,5 +1,6 @@
 'use client';
 
+import Image from "next/image";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -424,9 +425,11 @@ const SendModal = ({
                           {selectedToken ? (
                             <div className="flex items-center gap-2">
                               {selectedToken.iconUrl ? (
-                                <img
+                                <Image
                                   src={selectedToken.iconUrl}
                                   alt={selectedToken.label}
+                                  width={20}
+                                  height={20}
                                   className="h-5 w-5 rounded-full object-cover"
                                 />
                               ) : selectedToken.fallbackIcon ? (
@@ -456,9 +459,11 @@ const SendModal = ({
                           <SelectItem key={tokenOption.value} value={tokenOption.value}>
                             <div className="flex items-center gap-3">
                               {tokenOption.iconUrl ? (
-                                <img
+                                <Image
                                   src={tokenOption.iconUrl}
                                   alt={tokenOption.label}
+                                  width={24}
+                                  height={24}
                                   className="h-6 w-6 rounded-full object-cover"
                                 />
                               ) : tokenOption.fallbackIcon ? (

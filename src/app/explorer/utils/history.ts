@@ -1,5 +1,26 @@
 import { z } from "zod";
-import { processTokenMetadata, formatTokenAmount, type TokenInfo } from './token-metadata';
+import { processTokenMetadata, formatTokenAmount, parseTokenMetadata, type TokenInfo } from './token-metadata';
+
+// Define the operation types used in Keeta network
+export type ExplorerOperationType = 
+  | "SEND" 
+  | "RECEIVE" 
+  | "SWAP" 
+  | "SWAP_FORWARD" 
+  | "TOKEN_ADMIN_SUPPLY" 
+  | "TOKEN_ADMIN_MODIFY_BALANCE"
+  | "UNKNOWN";
+
+// Define the operation type labels mapping
+const OPERATION_TYPE_LABELS: Record<string, string> = {
+  "SEND": "Send",
+  "RECEIVE": "Receive", 
+  "SWAP": "Swap",
+  "SWAP_FORWARD": "Swap Forward",
+  "TOKEN_ADMIN_SUPPLY": "Token Admin Supply",
+  "TOKEN_ADMIN_MODIFY_BALANCE": "Token Admin Modify Balance",
+  "UNKNOWN": "Unknown"
+};
 
 // Unified Recent Activity item used by the Account page
 export interface RecentActivityItem {
@@ -8,15 +29,145 @@ export interface RecentActivityItem {
   timestamp: number;
   type: string;
   amount: string;
+  formattedAmount?: string;
+  rawAmount?: string;
   from: string;
   to: string;
   token: string;
+  tokenTicker?: string | null;
+  tokenDecimals?: number | null;
   operationType: string;
   tokenMetadata?: {
     name?: string;
     ticker?: string;
     decimals?: number;
   } | null;
+}
+
+type NormalizedTokenMeta = {
+  ticker?: string;
+  name?: string;
+  decimals?: number | null;
+  fieldType?: "decimalPlaces" | "decimals";
+  metadata?: string;
+};
+
+function decodeMetadataBase64(value: string): unknown {
+  try {
+    if (typeof globalThis.atob === "function") {
+      const decoded = globalThis.atob(value);
+      return JSON.parse(decoded);
+    }
+  } catch {}
+  try {
+    if (typeof globalThis.Buffer !== "undefined") {
+      const decoded = globalThis.Buffer.from(value, "base64").toString("utf8");
+      return JSON.parse(decoded);
+    }
+  } catch {}
+  return null;
+}
+
+function normalizeTokenMetadataValue(candidate: unknown): NormalizedTokenMeta | null {
+  if (!candidate) return null;
+  if (typeof candidate === "string") {
+    const parsed = parseTokenMetadata(candidate);
+    if (parsed) {
+      return {
+        ticker: parsed.ticker ?? undefined,
+        name: parsed.name ?? undefined,
+        decimals: typeof parsed.decimals === "number" ? parsed.decimals : undefined,
+        fieldType: parsed.fieldType ?? undefined,
+        metadata: parsed.metadata ?? candidate,
+      };
+    }
+    const decoded = decodeMetadataBase64(candidate);
+    if (decoded && typeof decoded === "object") {
+      const normalized = normalizeTokenMetadataValue(decoded);
+      return normalized ? { ...normalized, metadata: candidate } : { metadata: candidate };
+    }
+    return { metadata: candidate };
+  }
+  if (typeof candidate === "object") {
+    const obj = candidate as Record<string, unknown>;
+    const nestedMeta = typeof obj.metadata === "string" ? normalizeTokenMetadataValue(obj.metadata) : null;
+    const decimals =
+      typeof obj.decimals === "number" && Number.isFinite(obj.decimals)
+        ? obj.decimals
+        : typeof obj.decimalPlaces === "number" && Number.isFinite(obj.decimalPlaces)
+          ? obj.decimalPlaces
+          : nestedMeta?.decimals;
+    const fieldType =
+      typeof obj.fieldType === "string" && (obj.fieldType === "decimalPlaces" || obj.fieldType === "decimals")
+        ? obj.fieldType
+        : typeof obj.decimalPlaces === "number"
+          ? "decimalPlaces"
+          : nestedMeta?.fieldType;
+    const ticker =
+      typeof obj.ticker === "string"
+        ? obj.ticker
+        : typeof obj.symbol === "string"
+          ? obj.symbol
+          : typeof obj.currencyCode === "string"
+            ? obj.currencyCode
+            : nestedMeta?.ticker;
+    const name =
+      typeof obj.name === "string"
+        ? obj.name
+        : typeof obj.displayName === "string"
+          ? obj.displayName
+          : nestedMeta?.name;
+
+    return {
+      ticker: ticker ?? undefined,
+      name: name ?? undefined,
+      decimals: typeof decimals === "number" ? decimals : nestedMeta?.decimals ?? undefined,
+      fieldType: (fieldType ?? nestedMeta?.fieldType) as "decimalPlaces" | "decimals" | undefined,
+      metadata: nestedMeta?.metadata ?? (typeof obj.metadata === "string" ? obj.metadata : undefined),
+    };
+  }
+  return null;
+}
+
+function deriveTokenDetails(amountRaw: string, tokenAddress: string, metadataCandidates: unknown[]): {
+  formattedAmount: string;
+  ticker: string | null;
+  decimals: number | null;
+  metadata: NormalizedTokenMeta | null;
+} {
+  const meta = metadataCandidates.reduce<NormalizedTokenMeta | null>((acc, candidate) => {
+    return acc ?? normalizeTokenMetadataValue(candidate);
+  }, null);
+
+  const decimals =
+    meta && typeof meta.decimals === "number" && Number.isFinite(meta.decimals) && meta.decimals >= 0
+      ? meta.decimals
+      : null;
+
+  const fieldType: "decimalPlaces" | "decimals" = meta?.fieldType === "decimalPlaces" ? "decimalPlaces" : "decimals";
+  const fallbackTicker = tokenAddress ? tokenAddress.slice(0, 6).toUpperCase() : "UNKNOWN";
+  const ticker = meta?.ticker ?? meta?.name ?? fallbackTicker;
+
+  let formattedAmount: string | undefined;
+  if (decimals !== null) {
+    try {
+      const amountBigInt = toBigIntSafe(amountRaw);
+      formattedAmount = formatTokenAmount(amountBigInt, decimals, fieldType, ticker ?? "UNKNOWN");
+    } catch {
+      formattedAmount = undefined;
+    }
+  }
+
+  if (!formattedAmount) {
+    formattedAmount = ticker ? `${amountRaw} ${ticker}` : amountRaw;
+  }
+
+  return {
+    formattedAmount,
+    ticker: ticker ?? null,
+    decimals,
+    metadata: meta,
+  };
 }
 
 // Raw record as returned by wallet history APIs
@@ -175,6 +326,32 @@ export function normalizeHistoryRecord(input: unknown, contextAccount?: string):
     r.token ?? r.operation?.token ?? r.operationSend?.token ?? r.operationReceive?.token ?? r.tokenAddress ?? r.asset ?? r.currency,
   );
 
+  const amountRaw = toStringSafe(r.amount, "0");
+  const metadataCandidates: unknown[] = [
+    (r as any).tokenMetadata,
+    (r as any).metadata,
+    r.operation?.tokenMetadata,
+    (r.operation as any)?.metadata,
+    (r.operation as any)?.token?.metadata,
+    r.operationSend?.tokenMetadata,
+    r.operationReceive?.tokenMetadata,
+    r.operationForward?.tokenMetadata,
+  ];
+  const tokenDetails = deriveTokenDetails(amountRaw, token, metadataCandidates);
+  const normalizedTokenMetadata = tokenDetails.metadata
+    ? {
+        name: tokenDetails.metadata.name,
+        ticker: tokenDetails.metadata.ticker,
+        decimals: typeof tokenDetails.metadata.decimals === "number" ? tokenDetails.metadata.decimals : undefined,
+      }
+    : ((r as any).tokenMetadata && typeof (r as any).tokenMetadata === "object")
+        ? {
+            name: (r as any).tokenMetadata?.name,
+            ticker: (r as any).tokenMetadata?.ticker,
+            decimals: (r as any).tokenMetadata?.decimals,
+          }
+        : null;
+
   const hasSwapHints = Boolean(r.operationSend && r.operationReceive);
   const typeLabel = deriveTypeLabel(r.type, r.operationType, contextAccount, from, to, hasSwapHints);
 
@@ -183,12 +360,16 @@ export function normalizeHistoryRecord(input: unknown, contextAccount?: string):
     block,
     timestamp,
     type: typeLabel,
-    amount: toStringSafe(r.amount, "0"),
+    amount: amountRaw,
+    formattedAmount: tokenDetails.formattedAmount,
+    rawAmount: amountRaw,
     from,
     to,
     token,
+    tokenTicker: tokenDetails.ticker,
+    tokenDecimals: tokenDetails.decimals,
     operationType: toStringSafe(r.operationType) || toStringSafe(r.type) || "UNKNOWN",
-    tokenMetadata: (r as any).tokenMetadata ?? null,
+    tokenMetadata: normalizedTokenMetadata,
   };
 }
 
@@ -555,6 +736,33 @@ const extractTokenAddress = (entry: any): string => {
  * The issue with your current data is that it's already flattened, but Keeta SDK
  * returns voteStaple -> blocks -> operations structure
  */
+function resolveOperationType(value: unknown): ExplorerOperationType {
+	if (typeof value === "string" && value.trim().length > 0) {
+		const upper = value.toUpperCase();
+		if (upper in OPERATION_TYPE_LABELS) {
+			return upper as ExplorerOperationType;
+		}
+	}
+
+	if (typeof value === "number") {
+		// Map numeric operation codes to operation types
+		const numericMapping: Record<number, ExplorerOperationType> = {
+			0: "SEND",
+			1: "RECEIVE", 
+			2: "SWAP",
+			3: "SWAP_FORWARD",
+			4: "TOKEN_ADMIN_SUPPLY",
+			5: "TOKEN_ADMIN_MODIFY_BALANCE"
+		};
+		
+		if (Number.isInteger(value) && value in numericMapping) {
+			return numericMapping[value];
+		}
+	}
+
+	return "UNKNOWN";
+}
+
 export function processKeetaHistoryWithFiltering(
   historyData: unknown,
   contextAccount?: string

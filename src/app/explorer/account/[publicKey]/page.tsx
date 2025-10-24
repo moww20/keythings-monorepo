@@ -50,6 +50,7 @@ import {
   resolveExplorerPath,
   truncateIdentifier,
 } from "../../utils/resolveExplorerPath";
+import type { ExplorerOperation } from "@/lib/explorer/client";
 
 function toDisplayString(value: unknown): string | null {
   if (typeof value === "string") {
@@ -160,7 +161,7 @@ export default function AccountPage(): React.JSX.Element {
     return activity.slice(startIndex, endIndex);
   }, [activity, currentPage, pageSize]);
 
-  const paginatedOperations = useMemo(() => {
+  const paginatedOperations = useMemo<ExplorerOperation[]>(() => {
     return paginatedActivity.map((item, index) => {
       const fallbackHash = `activity-${item.id ?? index}-${account?.publicKey ?? "unknown"}`;
       const blockHash =
@@ -169,30 +170,47 @@ export default function AccountPage(): React.JSX.Element {
         typeof item.timestamp === "number" && Number.isFinite(item.timestamp)
           ? item.timestamp
           : Date.now();
-      const operation: Record<string, unknown> = {
-        amount: item.amount ?? "0",
-        from: item.from ?? undefined,
-        to: item.to ?? undefined,
-        token: item.token ?? undefined,
-        operationType: item.operationType ?? undefined,
-        id: item.id ?? undefined,
-      };
-      Object.keys(operation).forEach((key) => {
-        if (operation[key] === undefined) {
-          delete operation[key];
-        }
-      });
+      const normalizedType = typeof item.type === "string" && item.type.length > 0
+        ? item.type.toUpperCase()
+        : "UNKNOWN";
 
-      return {
-        type: item.type ?? "UNKNOWN",
+      const baseOperation: Record<string, unknown> = {};
+      if (item.amount !== undefined) baseOperation.amount = item.amount;
+      if (item.from) baseOperation.from = item.from;
+      if (item.to) baseOperation.to = item.to;
+      if (item.token) baseOperation.token = item.token;
+      if (item.operationType) baseOperation.operationType = item.operationType;
+      if (item.id) baseOperation.id = item.id;
+      if (item.tokenMetadata) baseOperation.tokenMetadata = item.tokenMetadata;
+
+      const payload: ExplorerOperation = {
+        type: normalizedType,
         voteStapleHash: blockHash,
         block: {
           $hash: blockHash,
           date: new Date(timestampMs),
           account: account?.publicKey,
         },
-        operation,
+        operation: baseOperation,
       };
+
+      if (normalizedType === "SEND") {
+        const opSend: Record<string, unknown> = {};
+        if (item.amount !== undefined) opSend.amount = item.amount;
+        if (item.token) opSend.token = item.token;
+        if (item.to) opSend.to = item.to;
+        if (item.from) opSend.from = item.from;
+        payload.operationSend = opSend;
+      } else if (normalizedType === "RECEIVE") {
+        const opReceive: Record<string, unknown> = {};
+        if (item.amount !== undefined) opReceive.amount = item.amount;
+        if (item.token) opReceive.token = item.token;
+        if (item.from) opReceive.from = item.from;
+        opReceive.to = item.to ?? account?.publicKey;
+        payload.operationReceive = opReceive;
+      }
+
+      return payload;
     });
   }, [paginatedActivity, account?.publicKey]);
 
