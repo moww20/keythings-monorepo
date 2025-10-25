@@ -39,6 +39,8 @@ import {
 } from "@tanstack/react-table"
 import { toast } from "sonner"
 import { z } from "zod"
+import { useWallet } from "@/app/contexts/WalletContext"
+import { StorageList } from "@/components/storage-list"
 
 import { useIsMobile } from "@/hooks/use-mobile"
 import { Badge } from "@/components/ui/badge"
@@ -333,7 +335,7 @@ function DraggableRow({ row }: { row: Row<z.infer<typeof schema>> }) {
       data-state={row.getIsSelected() && "selected"}
       data-dragging={isDragging}
       ref={setNodeRef}
-      className="relative z-0 data-[dragging=true]:z-10 data-[dragging=true]:opacity-80"
+      className="relative z-0 h-16 align-middle data-[dragging=true]:z-10 data-[dragging=true]:opacity-80"
       style={{
         transform: CSS.Transform.toString(transform),
         transition: transition,
@@ -356,6 +358,7 @@ export function TokensDataTable({
 }: {
   data: z.infer<typeof schema>[]
 }) {
+  const { publicKey } = useWallet();
   const [data, setData] = React.useState(() => initialData)
   const [rowSelection, setRowSelection] = React.useState({})
   const [columnVisibility, setColumnVisibility] =
@@ -366,7 +369,7 @@ export function TokensDataTable({
   const [sorting, setSorting] = React.useState<SortingState>([])
   const [pagination, setPagination] = React.useState({
     pageIndex: 0,
-    pageSize: 10,
+    pageSize: 5,
   })
   const sortableId = React.useId()
   const sensors = useSensors(
@@ -378,6 +381,7 @@ export function TokensDataTable({
   React.useEffect(() => {
     setData(initialData)
   }, [initialData])
+
 
   const dataIds = React.useMemo<UniqueIdentifier[]>(
     () => data?.map(({ id }) => id) || [],
@@ -439,20 +443,14 @@ export function TokensDataTable({
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="tokens">Tokens</SelectItem>
+            <SelectItem value="storage">Storage</SelectItem>
             <SelectItem value="nfts">NFTs</SelectItem>
-            <SelectItem value="defi">DeFi</SelectItem>
-            <SelectItem value="staking">Staking</SelectItem>
           </SelectContent>
         </Select>
         <TabsList className="**:data-[slot=badge]:bg-muted-foreground/30 hidden **:data-[slot=badge]:size-5 **:data-[slot=badge]:rounded-full **:data-[slot=badge]:px-1 @4xl/main:flex">
           <TabsTrigger value="tokens">Tokens</TabsTrigger>
-          <TabsTrigger value="nfts">
-            NFTs <Badge variant="secondary">3</Badge>
-          </TabsTrigger>
-          <TabsTrigger value="defi">
-            DeFi <Badge variant="secondary">2</Badge>
-          </TabsTrigger>
-          <TabsTrigger value="staking">Staking</TabsTrigger>
+          <TabsTrigger value="storage">Storage</TabsTrigger>
+          <TabsTrigger value="nfts">NFTs</TabsTrigger>
         </TabsList>
         <div className="flex items-center gap-2">
           <DropdownMenu>
@@ -531,69 +529,97 @@ export function TokensDataTable({
                 ))}
               </TableHeader>
               <TableBody className="**:data-[slot=table-cell]:first:w-8">
-                {table.getRowModel().rows?.length ? (
-                  <SortableContext
-                    items={dataIds}
-                    strategy={verticalListSortingStrategy}
-                  >
-                    {table.getRowModel().rows.map((row) => (
-                      <DraggableRow key={row.id} row={row} />
+                <SortableContext
+                  items={dataIds}
+                  strategy={verticalListSortingStrategy}
+                >
+                  {table.getRowModel().rows.map((row) => (
+                    <DraggableRow key={row.id} row={row} />
+                  ))}
+                </SortableContext>
+                {Array.from({ length: Math.max(0, 5 - table.getRowModel().rows.length) }).map((_, idx) => (
+                  <TableRow key={`empty-${idx}`} className="h-16 align-middle">
+                    {table.getVisibleLeafColumns().map((col) => (
+                      <TableCell key={`${col.id}-${idx}`}></TableCell>
                     ))}
-                  </SortableContext>
-                ) : (
-                  <TableRow>
-                    <TableCell
-                      colSpan={columns.length}
-                      className="h-24 text-center"
-                    >
-                      No tokens found.
-                    </TableCell>
                   </TableRow>
-                )}
+                ))}
               </TableBody>
             </Table>
           </DndContext>
         </div>
-        <div className="flex items-center justify-between px-4">
+        <div className="flex items-center px-4">
           <div className="text-muted-foreground hidden flex-1 text-sm lg:flex">
             {table.getFilteredSelectedRowModel().rows.length} of{" "}
             {table.getFilteredRowModel().rows.length} token(s) selected.
           </div>
+          <div className="ml-auto flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 min-w-[2.5rem] px-2"
+              onClick={() => table.setPageIndex(0)}
+              disabled={!table.getCanPreviousPage()}
+              aria-label="Go to first page"
+            >
+              {"<<"}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 min-w-[2.5rem] px-2"
+              onClick={() => table.previousPage()}
+              disabled={!table.getCanPreviousPage()}
+              aria-label="Go to previous page"
+            >
+              {"<"}
+            </Button>
+            <span className="px-1 text-sm font-medium">
+              Page {table.getState().pagination.pageIndex + 1} of {table.getPageCount()}
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 min-w-[2.5rem] px-2"
+              onClick={() => table.nextPage()}
+              disabled={!table.getCanNextPage()}
+              aria-label="Go to next page"
+            >
+              {">"}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 min-w-[2.5rem] px-2"
+              onClick={() => table.setPageIndex(table.getPageCount() - 1)}
+              disabled={!table.getCanNextPage()}
+              aria-label="Go to last page"
+            >
+              {">>"}
+            </Button>
+          </div>
+        </div>
+      </TabsContent>
+      <TabsContent
+        value="nfts"
+        className="relative flex flex-col gap-4 overflow-auto px-4 lg:px-6"
+      >
+        <div className="overflow-hidden rounded-lg border">
+          <div className="h-[360px] w-full bg-transparent" />
+        </div>
+        <div className="flex items-center justify-between px-4">
+          <div className="text-muted-foreground hidden flex-1 text-sm lg:flex">
+            &nbsp;
+          </div>
           <div className="flex w-full items-center gap-8 lg:w-fit">
-            <div className="hidden items-center gap-2 lg:flex">
-              <Label htmlFor="rows-per-page" className="text-sm font-medium">
-                Rows per page
-              </Label>
-              <Select
-                value={`${table.getState().pagination.pageSize}`}
-                onValueChange={(value) => {
-                  table.setPageSize(Number(value))
-                }}
-              >
-                <SelectTrigger size="sm" className="w-20" id="rows-per-page">
-                  <SelectValue
-                    placeholder={table.getState().pagination.pageSize}
-                  />
-                </SelectTrigger>
-                <SelectContent side="top">
-                  {[10, 20, 30, 40, 50].map((pageSize) => (
-                    <SelectItem key={pageSize} value={`${pageSize}`}>
-                      {pageSize}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
             <div className="flex w-fit items-center justify-center text-sm font-medium">
-              Page {table.getState().pagination.pageIndex + 1} of{" "}
-              {table.getPageCount()}
+              Page 1 of 1
             </div>
             <div className="ml-auto flex items-center gap-2 lg:ml-0">
               <Button
                 variant="outline"
                 className="hidden h-8 w-8 p-0 lg:flex"
-                onClick={() => table.setPageIndex(0)}
-                disabled={!table.getCanPreviousPage()}
+                disabled
               >
                 <span className="sr-only">Go to first page</span>
                 <ChevronsLeft />
@@ -602,8 +628,7 @@ export function TokensDataTable({
                 variant="outline"
                 className="size-8"
                 size="icon"
-                onClick={() => table.previousPage()}
-                disabled={!table.getCanPreviousPage()}
+                disabled
               >
                 <span className="sr-only">Go to previous page</span>
                 <ChevronLeft />
@@ -612,8 +637,7 @@ export function TokensDataTable({
                 variant="outline"
                 className="size-8"
                 size="icon"
-                onClick={() => table.nextPage()}
-                disabled={!table.getCanNextPage()}
+                disabled
               >
                 <span className="sr-only">Go to next page</span>
                 <ChevronRight />
@@ -622,8 +646,7 @@ export function TokensDataTable({
                 variant="outline"
                 className="hidden size-8 lg:flex"
                 size="icon"
-                onClick={() => table.setPageIndex(table.getPageCount() - 1)}
-                disabled={!table.getCanNextPage()}
+                disabled
               >
                 <span className="sr-only">Go to last page</span>
                 <ChevronsRight />
@@ -632,20 +655,12 @@ export function TokensDataTable({
           </div>
         </div>
       </TabsContent>
+      
       <TabsContent
-        value="nfts"
-        className="flex flex-col px-4 lg:px-6"
+        value="storage"
+        className="flex flex-col gap-4 px-4 lg:px-6"
       >
-        <div className="aspect-video w-full flex-1 rounded-lg border border-dashed"></div>
-      </TabsContent>
-      <TabsContent value="defi" className="flex flex-col px-4 lg:px-6">
-        <div className="aspect-video w-full flex-1 rounded-lg border border-dashed"></div>
-      </TabsContent>
-      <TabsContent
-        value="staking"
-        className="flex flex-col px-4 lg:px-6"
-      >
-        <div className="aspect-video w-full flex-1 rounded-lg border border-dashed"></div>
+        <StorageList owner={publicKey} className="w-full" />
       </TabsContent>
     </Tabs>
   )

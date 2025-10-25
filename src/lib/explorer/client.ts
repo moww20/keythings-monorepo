@@ -29,20 +29,57 @@ const accountSchema = z.object({
   }).passthrough(),
 });
 
-const explorerOperationSchema = z.object({
-  type: z.string(),
-  voteStapleHash: z.string().optional(),
-  toAccount: z.string().optional(),
-  block: z.object({
-    $hash: z.string(),
-    date: z.union([z.string(), z.date()]),
-    account: z.string().optional(),
-  }).passthrough(),
-  operation: z.record(z.string(), z.unknown()).optional(),
-  operationSend: z.record(z.string(), z.unknown()).optional(),
-  operationReceive: z.record(z.string(), z.unknown()).optional(),
-  operationForward: z.record(z.string(), z.unknown()).optional(),
-}).passthrough();
+const tokenMetadataSchema = z
+  .union([
+    z
+      .object({
+        name: z.string().optional().nullable(),
+        ticker: z.string().optional().nullable(),
+        symbol: z.string().optional().nullable(),
+        decimals: z.number().optional().nullable(),
+        decimalPlaces: z.number().optional().nullable(),
+        fieldType: z.enum(["decimalPlaces", "decimals"]).optional().nullable(),
+        metadata: z.string().optional().nullable(),
+        raw: z.unknown().optional(),
+      })
+      .passthrough(),
+    z.string(),
+  ])
+  .optional()
+  .nullable();
+
+const amountLikeSchema = z.union([z.string(), z.number(), z.bigint()]).optional();
+
+const explorerOperationSchema = z
+  .object({
+    type: z.string(),
+    voteStapleHash: z.string().optional(),
+    toAccount: z.string().optional(),
+    block: z
+      .object({
+        $hash: z.string(),
+        date: z.union([z.string(), z.date()]),
+        account: z.string().optional(),
+      })
+      .passthrough(),
+    operation: z.record(z.string(), z.unknown()).optional(),
+    operationSend: z.record(z.string(), z.unknown()).optional(),
+    operationReceive: z.record(z.string(), z.unknown()).optional(),
+    operationForward: z.record(z.string(), z.unknown()).optional(),
+    // Flattened wallet history helpers
+    amount: amountLikeSchema,
+    rawAmount: amountLikeSchema,
+    formattedAmount: z.string().optional(),
+    token: z.string().optional(),
+    tokenAddress: z.string().optional(),
+    tokenTicker: z.string().optional(),
+    tokenDecimals: z.number().optional(),
+    tokenMetadata: tokenMetadataSchema,
+    from: z.string().optional(),
+    to: z.string().optional(),
+    operationType: z.union([z.string(), z.number()]).optional(),
+  })
+  .passthrough();
 
 export type ExplorerOperation = z.infer<typeof explorerOperationSchema>;
 
@@ -388,16 +425,22 @@ async function fetchTransactionsFromWallet(query: ExplorerTransactionsQuery): Pr
     
     // Transform wallet history to frontend format
     const stapleOperations = historyResult.records?.map((record: any) => ({
-      type: record.operationType || 'Transaction',
+      type: record.operationType || record.type || 'Transaction',
       voteStapleHash: record.block || '',
       toAccount: record.to || '',
+      // Preserve top-level fields for proper extraction
+      from: record.from,
+      to: record.to,
+      amount: record.amount,
+      token: record.token,
+      tokenMetadata: record.tokenMetadata,
       block: {
-        $hash: record.block || '',
+        $hash: record.block || record.id || '',
         date: new Date(record.timestamp || Date.now()).toISOString(),
         account: query.publicKey || '',
       },
       operation: {
-        type: record.operationType,
+        type: record.operationType || record.type,
         from: record.from,
         to: record.to,
         amount: record.amount,

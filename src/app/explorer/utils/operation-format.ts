@@ -37,17 +37,37 @@ export function formatRelativeTime(value: Date | null): string | null {
 export function describeOperation(operation: ExplorerOperation): string {
   switch (operation.type) {
     case "SEND": {
-      const amount = coerceString(operation.operation?.amount ?? operation.operationSend?.amount);
-      const token = coerceString(operation.operation?.token ?? operation.operationSend?.token);
-      const recipient = coerceString(operation.operation?.to ?? operation.operationSend?.to);
+      const amount = coerceString(
+        (operation as Record<string, unknown>)?.amount ??
+          operation.operation?.amount ??
+          operation.operationSend?.amount
+      );
+      const token = coerceString(
+        (operation as Record<string, unknown>)?.token ??
+          operation.operation?.token ??
+          operation.operationSend?.token
+      );
+      const recipient = coerceString(
+        (operation as Record<string, unknown>)?.to ??
+          operation.operation?.to ??
+          operation.operationSend?.to
+      );
       if (amount && token && recipient) {
         return `Sent ${amount} of ${truncateIdentifier(token, 8, 6)} to ${truncateIdentifier(recipient)}`;
       }
       break;
     }
     case "RECEIVE": {
-      const amount = coerceString(operation.operation?.amount ?? operation.operationReceive?.amount);
-      const sender = coerceString(operation.operation?.from ?? operation.operationReceive?.from);
+      const amount = coerceString(
+        (operation as Record<string, unknown>)?.amount ??
+          operation.operation?.amount ??
+          operation.operationReceive?.amount
+      );
+      const sender = coerceString(
+        (operation as Record<string, unknown>)?.from ??
+          operation.operation?.from ??
+          operation.operationReceive?.from
+      );
       if (amount && sender) {
         return `Received ${amount} from ${truncateIdentifier(sender)}`;
       }
@@ -85,16 +105,90 @@ export function summarizeOperation(operation: ExplorerOperation): OperationSumma
   const participants: OperationParticipants = {};
 
   const blockAccount = coerceString(operation.block.account);
+  // Check top-level fields first, then nested fields
+  const resolvedSendFrom = coerceString(
+    (operation as Record<string, unknown>)?.from ??
+      operation.operation?.from ??
+      operation.operationSend?.from
+  );
+  const resolvedSendTo = coerceString(
+    (operation as Record<string, unknown>)?.to ??
+      (operation as Record<string, unknown>)?.toAccount ??
+      operation.operation?.to ??
+      operation.operationSend?.to
+  );
+  const resolvedReceiveFrom = coerceString(
+    (operation as Record<string, unknown>)?.from ??
+      operation.operation?.from ??
+      operation.operationReceive?.from
+  );
+  const resolvedReceiveTo = coerceString(
+    (operation as Record<string, unknown>)?.to ??
+      (operation as Record<string, unknown>)?.toAccount ??
+      operation.operation?.to ??
+      operation.operationReceive?.to
+  );
+  const resolvedToken = coerceString(
+    (operation as Record<string, unknown>)?.token ??
+      (operation as Record<string, unknown>)?.tokenAddress ??
+      operation.operation?.token ??
+      operation.operationSend?.token ??
+      operation.operationReceive?.token
+  );
+
+          if (process.env.NODE_ENV === "development") {
+            console.log("[ExplorerOperations] summarizeOperation participants", {
+              type: operation.type,
+              blockAccount,
+              resolvedSendFrom,
+              resolvedSendTo,
+              resolvedReceiveFrom,
+              resolvedReceiveTo,
+              resolvedToken,
+              operation,
+            });
+            
+            // Debug the actual field extraction
+            console.log("[ExplorerOperations] Field extraction debug", {
+              "operation.operation?.from": operation.operation?.from,
+              "operation.operationSend?.from": operation.operationSend?.from,
+              "(operation as Record<string, unknown>)?.from": (operation as Record<string, unknown>)?.from,
+              "operation.operation?.to": operation.operation?.to,
+              "operation.operationSend?.to": operation.operationSend?.to,
+              "(operation as Record<string, unknown>)?.to": (operation as Record<string, unknown>)?.to,
+              "operation.operation?.token": operation.operation?.token,
+              "operation.operationSend?.token": operation.operationSend?.token,
+              "(operation as Record<string, unknown>)?.token": (operation as Record<string, unknown>)?.token,
+            });
+            
+            // Debug the full operation structure
+            console.log("[ExplorerOperations] Full operation structure", {
+              operationKeys: Object.keys(operation),
+              operationValues: Object.values(operation),
+              operationStringified: JSON.stringify(operation, null, 2),
+            });
+            
+            // Debug the top-level fields specifically
+            console.log("[ExplorerOperations] Top-level fields debug", {
+              "operation.from": (operation as Record<string, unknown>).from,
+              "operation.to": (operation as Record<string, unknown>).to,
+              "operation.token": (operation as Record<string, unknown>).token,
+              "operation.amount": (operation as Record<string, unknown>).amount,
+              "operation.tokenAddress": (operation as Record<string, unknown>).tokenAddress,
+              "operation.tokenTicker": (operation as Record<string, unknown>).tokenTicker,
+              "operation.rawAmount": (operation as Record<string, unknown>).rawAmount,
+            });
+          }
 
   switch (operation.type) {
     case "SEND": {
-      participants.from = blockAccount;
-      participants.to = coerceString(operation.operation?.to ?? operation.operationSend?.to);
+      participants.from = resolvedSendFrom ?? blockAccount;
+      participants.to = resolvedSendTo ?? resolvedToken ?? coerceString(operation.toAccount ?? undefined);
       break;
     }
     case "RECEIVE": {
-      participants.from = coerceString(operation.operation?.from ?? operation.operationReceive?.from);
-      participants.to = coerceString(operation.toAccount ?? blockAccount ?? undefined);
+      participants.from = resolvedReceiveFrom;
+      participants.to = resolvedReceiveTo ?? coerceString(operation.toAccount ?? blockAccount ?? undefined);
       break;
     }
     case "SWAP": {

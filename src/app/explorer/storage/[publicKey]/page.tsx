@@ -220,45 +220,39 @@ export default function StoragePage() {
                 </p>
               </div>
             ) : (
-              <div className="mt-4 overflow-x-auto">
-                <table className="min-w-full border-collapse text-left text-sm text-subtle">
-                  <thead>
-                    <tr className="border-b border-hairline text-xs uppercase tracking-[0.3em] text-muted">
-                      <th className="py-3 pr-4">Token</th>
-                      <th className="py-3 pr-4">Ticker</th>
-                      <th className="py-3 pr-4 text-right">Balance</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-hairline">
-                    {storageAccount.tokens.map((token: any) => (
-                      <tr key={token.tokenId} className="group hover:bg-surface-strong/50">
-                        <td className="py-3 pr-4">
-                          <div className="flex items-center">
-                            <div className="mr-3 flex h-8 w-8 items-center justify-center rounded-full bg-surface-strong">
-                              <span className="text-xs font-medium text-muted">
-                                {token.symbol?.charAt(0) || 'T'}
-                              </span>
-                            </div>
-                            <div>
-                              <div className="font-medium text-foreground">
-                                {token.name || 'Unnamed Token'}
-                              </div>
-                              <div className="text-xs text-muted">
-                                {truncateIdentifier(token.tokenId, 8, 6)}
-                              </div>
-                            </div>
-                          </div>
-                        </td>
-                        <td className="py-3 pr-4 font-medium text-foreground">
-                          {token.symbol || '—'}
-                        </td>
-                        <td className="py-3 pr-4 text-right font-mono text-foreground">
-                          {formatTokenAmount(token.balance, token.decimals)}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+              <div className="mt-4 overflow-hidden rounded-2xl border border-hairline">
+                <div className="hidden grid-cols-[2fr_1fr_1fr] gap-6 border-b border-hairline bg-[color:color-mix(in_oklab,var(--foreground)_6%,transparent)] px-6 py-3 text-xs font-medium uppercase tracking-[0.3em] text-muted md:grid">
+                  <span>Name</span>
+                  <span>Ticker</span>
+                  <span className="text-right">Balance</span>
+                </div>
+                <div className="divide-y divide-hairline">
+                  {storageAccount.tokens.map((token: any) => (
+                    <div
+                      key={token.tokenId}
+                      className="grid gap-4 px-6 py-4 text-sm text-foreground md:grid-cols-[2fr_1fr_1fr]"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="flex h-6 w-6 items-center justify-center rounded-full bg-[color:color-mix(in_oklab,var(--foreground)_12%,transparent)] text-xs text-muted">
+                          {token.symbol?.slice(0, 3) || 'TK'}
+                        </div>
+                        <div className="flex flex-col">
+                          <span className="font-medium">{token.name || 'Unnamed Token'}</span>
+                          <Link
+                            href={`/explorer/token/${token.tokenId}`}
+                            className="text-xs text-accent hover:text-foreground"
+                          >
+                            {truncateIdentifier(token.tokenId, 12, 10)}
+                          </Link>
+                        </div>
+                      </div>
+                      <div className="text-sm text-subtle">{token.symbol || '—'}</div>
+                      <div className="text-right font-mono">
+                        {formatTokenAmount(token.balance, token.decimals)}
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
           </section>
