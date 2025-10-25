@@ -89,15 +89,11 @@ export function useWalletData() {
       setErrorState(null);
       setLoadingState(true);
 
-      console.debug('Fetching wallet state...');
-
       // Get basic wallet info - these operations work without capability tokens
       const [accounts, isLockedResult] = await Promise.all([
         provider.getAccounts(),
         provider.isLocked?.() ?? Promise.resolve(true),
       ]);
-
-      console.debug('Wallet state:', { accounts, isLocked: isLockedResult });
 
       if (!Array.isArray(accounts) || accounts.length === 0) {
         updateWalletData({
@@ -127,14 +123,11 @@ export function useWalletData() {
       // Only request capabilities if explicitly requested
       let capabilityTokens: any = null;
       if (requestCapabilities) {
-        console.debug('Requesting read and transact capabilities...');
         try {
           if (typeof provider.requestCapabilities === 'function') {
             capabilityTokens = await provider.requestCapabilities(['read', 'transact']);
-            console.debug('Read capability tokens obtained:', capabilityTokens);
           }
-        } catch (capError) {
-          console.debug('Failed to request capabilities (will retry on individual calls):', capError);
+        } catch {
         }
       }
 
@@ -156,10 +149,8 @@ export function useWalletData() {
             params: readToken ? [accounts[0], { capabilityToken: readToken }] : [accounts[0]]
           });
           balance = typeof balanceResult === 'string' ? balanceResult : String(balanceResult ?? '0');
-          console.debug('Balance fetched:', balance);
         }
-      } catch (balanceError) {
-        console.debug('Failed to fetch balance:', balanceError);
+      } catch {
       }
 
       try {
@@ -170,10 +161,8 @@ export function useWalletData() {
             params: readToken ? [{ capabilityToken: readToken }] : []
           });
           network = networkResult;
-          console.debug('Network fetched:', network);
         }
-      } catch (networkError) {
-        console.debug('Failed to fetch network:', networkError);
+      } catch {
       }
 
       updateWalletData({
@@ -186,7 +175,6 @@ export function useWalletData() {
       });
 
     } catch (error) {
-      console.error('Failed to resolve balance/network', error);
       setErrorState(`Failed to fetch wallet data: ${error instanceof Error ? error.message : 'Unknown error'}`);
       
       // Still update with basic info even if balance/network failed
@@ -202,8 +190,7 @@ export function useWalletData() {
           isLocked: isLocked,
           isInitializing: false,
         });
-      } catch (fallbackError) {
-        console.error('Fallback wallet state fetch failed:', fallbackError);
+      } catch {
         updateWalletData({
           connected: false,
           accounts: [],
@@ -265,7 +252,6 @@ export function useWalletData() {
       }
       
     } catch (error) {
-      console.error('Error connecting wallet:', error);
       setErrorState(error instanceof Error ? error.message : 'Failed to connect wallet');
       throw error; // Re-throw to allow calling code to handle the error
     } finally {
@@ -283,12 +269,10 @@ export function useWalletData() {
     if (!provider) return;
 
     const handleAccountsChanged = (accounts: unknown) => {
-      console.debug('Accounts changed:', accounts);
       fetchWalletState(true);
     };
 
     const handleLockChanged = (isLocked: unknown) => {
-      console.debug('Lock status changed:', isLocked);
       updateWalletData({ isLocked: Boolean(isLocked) });
       if (!isLocked) {
         // If wallet was unlocked, refresh the full state with capabilities
@@ -297,7 +281,6 @@ export function useWalletData() {
     };
 
     const handleDisconnect = () => {
-      console.debug('Wallet disconnected');
       updateWalletData({
         connected: false,
         accounts: [],
@@ -374,8 +357,6 @@ export function useTokenBalances(shouldFetch: boolean = false) {
         setError(null);
       }
       
-      console.debug('Fetching token balances...');
-      
       // Request read capability first
       let readToken: string | null = null;
       try {
@@ -383,31 +364,26 @@ export function useTokenBalances(shouldFetch: boolean = false) {
           const tokens = await provider.requestCapabilities(['read', 'transact']);
           if (Array.isArray(tokens) && tokens.length > 0 && tokens[0] && typeof tokens[0] === 'object' && 'token' in tokens[0]) {
             readToken = tokens[0].token as string;
-            console.debug('Got read capability token for getAllBalances');
           }
         }
-      } catch (capError) {
-        console.debug('Failed to get capability token for getAllBalances:', capError);
+      } catch {
       }
 
       // Prefer normalized balances RPC, fallback to all balances
       let result;
       if (typeof provider.request === 'function' && readToken) {
-        console.debug('Fetching balances via normalized RPC with capability token...');
         try {
           result = await provider.request({
             method: 'keeta_getNormalizedBalances',
             params: [{ capabilityToken: readToken }]
           });
-        } catch (e) {
-          console.debug('Normalized balances RPC failed, falling back to getAllBalances:', e);
+        } catch {
           result = await provider.request({
             method: 'keeta_getAllBalances',
             params: [{ capabilityToken: readToken }]
           });
         }
       } else {
-        console.debug('Fetching balances via direct method...');
         if (typeof (provider as any).getNormalizedBalances === 'function') {
           result = await (provider as any).getNormalizedBalances();
         } else {
@@ -418,15 +394,12 @@ export function useTokenBalances(shouldFetch: boolean = false) {
       if (!isMountedRef.current) return;
       
       if (Array.isArray(result)) {
-        console.debug('Token balances received:', result);
         setBalances(result);
       } else {
-        console.debug('No balances received or invalid format');
         setBalances([]);
       }
     } catch (error) {
       if (!isMountedRef.current) return;
-      console.error('Failed to fetch token balances:', error);
       setError(`Failed to fetch balances: ${error instanceof Error ? error.message : 'Unknown error'}`);
       setBalances([]);
     } finally {
@@ -473,12 +446,10 @@ export function useTokenMetadata(tokenAddress: string) {
       setIsLoading(true);
       setError(null);
       
-      console.debug('Fetching token metadata for:', tokenAddress);
       // Note: getTokenMetadata is not available in the current KeetaProvider interface
       // This would need to be implemented via the request method or added to the interface
       setMetadata(null);
     } catch (error) {
-      console.error('Failed to fetch token metadata:', error);
       setError(`Failed to fetch metadata: ${error instanceof Error ? error.message : 'Unknown error'}`);
       setMetadata(null);
     } finally {
@@ -515,7 +486,6 @@ export function useKtaPrice() {
       setIsLoading(true);
       setError(null);
       
-      console.debug('Fetching KTA price...');
       const result = await provider.getKtaPrice?.();
       
       if (result && typeof result === 'object' && 'price' in result) {
@@ -524,7 +494,6 @@ export function useKtaPrice() {
         setPriceData(null);
       }
     } catch (error) {
-      console.error('Failed to fetch KTA price:', error);
       setError(`Failed to fetch price: ${error instanceof Error ? error.message : 'Unknown error'}`);
       setPriceData(null);
     } finally {

@@ -317,6 +317,35 @@ export class StorageAccountManager {
     return hash;
   }
 
+  async updateStorageInfo(
+    storageAccountPubkey: string,
+    info: { name: string; description?: string | null },
+  ): Promise<void> {
+    const builder = this.userClient.initBuilder();
+    if (!builder) {
+      throw new Error("User client did not return a builder instance");
+    }
+
+    const setInfo = this.getMethod(builder, ["setInfo", "info"]);
+    if (!setInfo) {
+      throw new Error("Builder does not provide a setInfo/info method");
+    }
+
+    const storageAccount = normalizeAccountRef(storageAccountPubkey);
+    const payload: Record<string, unknown> = {
+      name: info.name,
+    };
+
+    if (typeof info.description === "string") {
+      payload.description = info.description;
+    } else if (info.description === null) {
+      payload.description = null;
+    }
+
+    await Promise.resolve(setInfo(payload, { account: storageAccount }));
+    await this.userClient.publishBuilder(builder);
+  }
+
   private async generateStorageAccount(builder: KeetaBuilder): Promise<KeetaAccountRef> {
     const strategies: Array<[string, unknown[]]> = [
       ["generateStorageAccount", []],

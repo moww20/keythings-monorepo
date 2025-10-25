@@ -39,7 +39,6 @@ const data = {
       title: "History",
       url: "/history",
       icon: History,
-      disabled: true,
     },
   ],
   navNetwork: [

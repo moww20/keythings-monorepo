@@ -1,9 +1,11 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { useState } from "react";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { useMemo, useState } from "react";
+import { QueryClient } from "@tanstack/react-query";
 import type { QueryClientConfig } from "@tanstack/react-query";
+import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
+import { createSyncStoragePersister } from "@tanstack/query-sync-storage-persister";
 import { ToastProvider, ToastViewport } from "@radix-ui/react-toast";
 
 import WalletEventsManager from "./WalletEventsManager";
@@ -41,21 +43,54 @@ interface AppProvidersProps {
   children: ReactNode;
 }
 
+const noopStorage: Storage = {
+  length: 0,
+  clear() {},
+  getItem() {
+    return null;
+  },
+  key() {
+    return null;
+  },
+  removeItem() {},
+  setItem() {},
+};
+
 export default function AppProviders({ children }: AppProvidersProps) {
   const [queryClient] = useState(() => new QueryClient({
     defaultOptions: defaultQueryOptions,
   }));
 
+  const persister = useMemo(
+    () =>
+      createSyncStoragePersister({
+        storage:
+          typeof window !== 'undefined' && typeof window.localStorage !== 'undefined'
+            ? window.localStorage
+            : noopStorage,
+      }),
+    [],
+  );
+
   return (
     <ToastProvider swipeDirection="right">
-      <QueryClientProvider client={queryClient}>
+      <PersistQueryClientProvider
+        client={queryClient}
+        persistOptions={{
+          persister,
+          dehydrateOptions: {
+            shouldDehydrateQuery: (q: { queryKey: unknown }) => Array.isArray(q.queryKey as unknown[]) && (q.queryKey as unknown[])[0] === 'history',
+          },
+          maxAge: 1000 * 60 * 60 * 24,
+        }}
+      >
         <WalletEventsManager />
         <WalletAutoConnect />
         <WalletProvider>
           <ToastBridge />
           {children}
         </WalletProvider>
-      </QueryClientProvider>
+      </PersistQueryClientProvider>
 
       <ToastViewport className="fixed bottom-4 right-4 z-[100] flex w-[320px] flex-col gap-3" />
     </ToastProvider>

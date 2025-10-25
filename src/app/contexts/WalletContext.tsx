@@ -198,15 +198,6 @@ export function WalletProvider({ children }: WalletProviderProps) {
   const [tradingError, setTradingError] = useState<string | null>(null);
   const [storageAccountAddress, setStorageAccountAddress] = useState<string | null>(null);
   
-  // Debug: Log whenever userClient changes
-  useEffect(() => {
-    console.log('[WalletContext] userClient state changed:', {
-      hasClient: !!userClient,
-      type: typeof userClient,
-      methods: userClient ? Object.keys(userClient).filter(k => typeof userClient[k as keyof KeetaUserClient] === 'function').slice(0, 10) : []
-    });
-  }, [userClient]);
-  
   // Set transaction permissions when wallet is connected and unlocked
   useEffect(() => {
     if (!walletData.wallet.connected || walletData.wallet.isLocked) {
@@ -222,13 +213,11 @@ export function WalletProvider({ children }: WalletProviderProps) {
     const initUserClient = async () => {
       // Clear client if wallet disconnected or locked
       if (!walletData.wallet.connected || walletData.wallet.isLocked) {
-        console.log('[WalletContext] Clearing userClient (wallet locked/disconnected)');
         setUserClient(null);
         return;
       }
 
       if (!hasTransactionPermissions) {
-        console.log('[WalletContext] Waiting for transaction permissions before initializing userClient');
         setUserClient(null);
         return;
       }
@@ -238,22 +227,13 @@ export function WalletProvider({ children }: WalletProviderProps) {
       }
       
       const provider = window.keeta;
-      console.log('[WalletContext] Initializing Keeta SDK user client...');
       
       try {
         // Method 1: Try getUserClient() (async)
         if (typeof provider.getUserClient === 'function') {
           const client = await provider.getUserClient();
-          console.log('[WalletContext] getUserClient() returned:', {
-            hasClient: !!client,
-            type: typeof client,
-            hasInitBuilder: client ? typeof client.initBuilder : 'n/a',
-            methods: client ? Object.keys(client).slice(0, 10) : []
-          });
           if (client && typeof client.initBuilder === 'function') {
-            console.log('[WalletContext] ✅ Got userClient via getUserClient() - SETTING STATE NOW');
             setUserClient(client as KeetaUserClient);
-            console.log('[WalletContext] State updated, userClient should be available');
             return;
           }
         }
@@ -262,25 +242,21 @@ export function WalletProvider({ children }: WalletProviderProps) {
         if (typeof provider.createUserClient === 'function') {
           const client = await provider.createUserClient();
           if (client && typeof client.initBuilder === 'function') {
-            console.log('[WalletContext] ✅ Got userClient via createUserClient()');
             setUserClient(client as KeetaUserClient);
             return;
           }
         }
-        
+
         // Method 3: Use provider directly if it has methods
         const providerAny = provider as any;
-        if (typeof providerAny.initBuilder === 'function' && 
+        if (typeof providerAny.initBuilder === 'function' &&
             typeof providerAny.publishBuilder === 'function') {
-          console.log('[WalletContext] ✅ Using provider directly as userClient');
           setUserClient(providerAny as KeetaUserClient);
           return;
         }
-        
-        console.warn('[WalletContext] Could not initialize userClient - no suitable method found');
+
         setUserClient(null);
       } catch (error) {
-        console.error('[WalletContext] Error initializing userClient:', error);
         setUserClient(null);
       }
     };
@@ -353,7 +329,12 @@ export function WalletProvider({ children }: WalletProviderProps) {
 
       try {
         // Check if user has storage account registered with backend
-        const apiUrl = process.env.NEXT_PUBLIC_DEX_API_URL || 'http://localhost:8080';
+        const apiUrl = (process.env.NEXT_PUBLIC_DEX_API_URL ?? '').trim();
+        if (!apiUrl) {
+          setIsTradingEnabled(false);
+          setStorageAccountAddress(null);
+          return;
+        }
         const response = await fetch(
           `${apiUrl}/api/users/${encodeURIComponent(primaryAccount)}/status`,
           {
@@ -373,7 +354,6 @@ export function WalletProvider({ children }: WalletProviderProps) {
           const result = TradingStatusSchema.safeParse(rawData);
           
           if (!result.success) {
-            console.warn('Invalid trading status response:', result.error);
             setIsTradingEnabled(false);
             setStorageAccountAddress(null);
             return;
@@ -389,10 +369,6 @@ export function WalletProvider({ children }: WalletProviderProps) {
       } catch (error) {
         // Network error or timeout - silently handle and assume trading not enabled
         // This is expected if the backend is not running
-        if (error instanceof Error && error.name !== 'AbortError') {
-          // Only log non-timeout errors for debugging
-          console.debug('Trading backend not available:', error.message);
-        }
         setIsTradingEnabled(false);
         setStorageAccountAddress(null);
       }
@@ -434,7 +410,7 @@ export function WalletProvider({ children }: WalletProviderProps) {
         try {
           userClient = await provider.getUserClient();
         } catch (err) {
-          console.warn('getUserClient() failed:', err);
+          userClient = null;
         }
       }
 
@@ -443,7 +419,7 @@ export function WalletProvider({ children }: WalletProviderProps) {
         try {
           userClient = await provider.createUserClient();
         } catch (err) {
-          console.warn('createUserClient() failed:', err);
+          userClient = null;
         }
       }
 
@@ -451,7 +427,6 @@ export function WalletProvider({ children }: WalletProviderProps) {
       if (!userClient) {
         const providerAsClient = provider as any;
         if (typeof providerAsClient.initBuilder === 'function' && typeof providerAsClient.publishBuilder === 'function') {
-          console.log('Using provider directly as user client');
           userClient = providerAsClient;
         }
       }
@@ -475,13 +450,11 @@ export function WalletProvider({ children }: WalletProviderProps) {
       const manager = new StorageAccountManager(userClient);
 
       // Create storage account with permissions
-      console.log('Creating storage account for trading...');
       const storageAccount = await manager.createStorageAccount(
         EXCHANGE_OPERATOR_PUBKEY,
         ALLOWED_TOKENS
       );
 
-      console.log('Storage account created:', storageAccount);
       setStorageAccountAddress(storageAccount);
 
       // Register with backend
@@ -518,15 +491,9 @@ export function WalletProvider({ children }: WalletProviderProps) {
       const rawData = await response.json();
       const result = RegistrationResponseSchema.safeParse(rawData);
       
-      if (!result.success) {
-        console.warn('Invalid registration response:', result.error);
-      }
-
-      console.log('Successfully registered with exchange backend');
       setIsTradingEnabled(true);
       setTradingError(null);
     } catch (error) {
-      console.error('Failed to enable trading:', error);
       setTradingError(
         error instanceof Error ? error.message : 'An unknown error occurred while enabling trading'
       );
@@ -550,7 +517,6 @@ export function WalletProvider({ children }: WalletProviderProps) {
       setHasTransactionPermissions(true);
       return true;
     } catch (error) {
-      console.error('[WalletContext] Failed to request transaction permissions:', error);
       setHasTransactionPermissions(false);
       return false;
     }

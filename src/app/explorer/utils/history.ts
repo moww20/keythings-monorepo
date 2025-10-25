@@ -236,26 +236,91 @@ function toTimestampMs(value: unknown, fallback: number): number {
   return fallback;
 }
 
-function normalizeAddress(value: unknown): string {
-  if (typeof value === "string") return value;
-  if (!value || typeof value !== "object") return "";
+function normalizeAddress(value: unknown, depth = 0): string {
+  if (typeof value === "string") {
+    return value;
+  }
+
+  if (value === null || value === undefined) {
+    return "";
+  }
+
+  if (depth > 4) {
+    return "";
+  }
+
+  if (Array.isArray(value)) {
+    for (const entry of value) {
+      const resolved = normalizeAddress(entry, depth + 1);
+      if (resolved) {
+        return resolved;
+      }
+    }
+    return "";
+  }
+
+  if (typeof value !== "object") {
+    return "";
+  }
+
   try {
-    const obj = value as any;
-    const pk = obj.publicKeyString;
-    if (typeof pk === "string") return pk;
-    if (pk && typeof pk.toString === "function") {
-      const s = String(pk.toString());
-      if (s && s !== "[object Object]") return s;
+    const obj = value as Record<string, unknown> & {
+      publicKeyString?: unknown;
+      get?: () => unknown;
+      toString?: () => string;
+    };
+
+    const candidateKeys = [
+      "publicKeyString",
+      "publicKey",
+      "address",
+      "account",
+      "token",
+      "tokenAccount",
+      "tokenAddress",
+      "tokenPublicKey",
+      "tokenId",
+      "value",
+      "id",
+      "$hash",
+      "hash",
+    ];
+
+    for (const key of candidateKeys) {
+      if (!(key in obj)) {
+        continue;
+      }
+      const resolved = normalizeAddress(obj[key], depth + 1);
+      if (resolved) {
+        return resolved;
+      }
     }
+
+    if (typeof obj.publicKeyString === "object" && obj.publicKeyString !== null) {
+      const resolved = normalizeAddress(obj.publicKeyString, depth + 1);
+      if (resolved) {
+        return resolved;
+      }
+    }
+
     if (typeof obj.get === "function") {
-      const s = String(obj.get());
-      if (s && s !== "[object Object]") return s;
+      const candidate = obj.get();
+      const resolved = typeof candidate === "string"
+        ? candidate
+        : normalizeAddress(candidate, depth + 1);
+      if (resolved && resolved !== "[object Object]") {
+        return resolved;
+      }
     }
+
     if (typeof obj.toString === "function") {
-      const s = String(obj.toString());
-      if (s && s !== "[object Object]") return s;
+      const result = String(obj.toString()).trim();
+      if (result.length > 0 && result !== "[object Object]") {
+        return result;
+      }
     }
   } catch {}
+
   return "";
 }
 
@@ -881,6 +946,17 @@ export function processKeetaHistoryWithFiltering(
       const from = toAddressString((item as any)?.from);
       const to = toAddressString((item as any)?.to);
       const token = toAddressString((item as any)?.token);
+      
+      // Debug the extracted values
+      globalThis.console.warn('🔍 [PARSING] Extracted addresses:', {
+        from,
+        to,
+        token,
+        rawFrom: (item as any)?.from,
+        rawTo: (item as any)?.to,
+        rawToken: (item as any)?.token,
+        itemKeys: item && typeof item === 'object' ? Object.keys(item) : 'not object'
+      });
       
       // Extract amount
       const amountValue = toBigIntSafe((item as any)?.amount);

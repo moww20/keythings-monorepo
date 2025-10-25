@@ -1,11 +1,11 @@
 /**
  * Token Metadata Hook
  * Centralized hook for fetching token metadata from blockchain
- * Uses wallet provider's getTokenMetadata() as the authoritative source
+ * Uses window.keeta SDK calls (getBaseToken + getAccountState) as the source of truth
  */
 
 import { useState, useEffect, useCallback } from 'react';
-import { useWallet } from '@/app/contexts/WalletContext';
+import { z } from 'zod';
 
 export interface TokenMetadata {
   decimals: number;
@@ -27,16 +27,40 @@ interface UseTokenMetadataResult {
 const metadataCache = new Map<string, TokenMetadata>();
 const loadingStates = new Map<string, boolean>();
 
+// Zod schemas for provider responses
+const AccountStateSchema = z
+  .object({
+    account: z.string().optional().nullable(),
+    info: z
+      .object({
+        name: z.string().optional().nullable(),
+        symbol: z.string().optional().nullable(),
+        ticker: z.string().optional().nullable(),
+        metadata: z.string().optional().nullable(),
+        supply: z.union([z.string(), z.number(), z.bigint()]).optional().nullable(),
+      })
+      .optional()
+      .nullable(),
+  })
+  .passthrough();
+type AccountState = z.infer<typeof AccountStateSchema>;
+
 export function useTokenMetadata(tokenAddress: string): UseTokenMetadataResult {
-  const { userClient, publicKey } = useWallet();
   const [metadata, setMetadata] = useState<TokenMetadata | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const fetchMetadata = useCallback(async () => {
-    if (!tokenAddress || !userClient || !publicKey) {
+    if (!tokenAddress) {
       setMetadata(null);
-      setError('Wallet not connected');
+      setError(null);
+      return;
+    }
+
+    const provider: any = typeof window !== 'undefined' ? (window as any).keeta : null;
+    if (!provider) {
+      setMetadata(null);
+      setError('Keeta provider not available');
       return;
     }
 
@@ -58,93 +82,67 @@ export function useTokenMetadata(tokenAddress: string): UseTokenMetadataResult {
     loadingStates.set(tokenAddress, true);
 
     try {
-      console.log('[useTokenMetadata] Fetching metadata for:', tokenAddress);
-      
-      // Handle base token specially
-      if (tokenAddress === 'base' || tokenAddress === (userClient.baseToken as any)?.publicKeyString) {
-        // Get base token metadata from client
-        const baseTokenInfo = userClient.baseToken;
-        if (baseTokenInfo && typeof baseTokenInfo === 'object' && 'info' in baseTokenInfo) {
-          const info = (baseTokenInfo as any).info;
-          const metadata = info?.metadata;
-          
-          if (metadata) {
-            // Parse metadata using wallet extension pattern
-            const { decimals, fieldType } = extractDecimalsAndFieldTypeFromMetadata(metadata);
-            const result: TokenMetadata = {
-              decimals,
-              fieldType,
-              name: info.name || 'KTA',
-              symbol: info.symbol || 'KTA',
-              ticker: info.ticker || 'KTA',
-              metadata
-            };
-            
-            metadataCache.set(tokenAddress, result);
-            setMetadata(result);
-            return;
-          }
-        }
-      }
-
-      // For regular tokens, use getTokenMetadata if available
-      if ('getTokenMetadata' in userClient && typeof userClient.getTokenMetadata === 'function') {
-        const fetchedMetadata = await userClient.getTokenMetadata(tokenAddress);
-        
-        if (fetchedMetadata) {
-          const { decimals, fieldType } = extractDecimalsAndFieldTypeFromMetadata(fetchedMetadata.metadata);
-          const result: TokenMetadata = {
-            decimals,
-            fieldType,
-            name: fetchedMetadata.name,
-            symbol: fetchedMetadata.symbol,
-            ticker: fetchedMetadata.ticker,
-            metadata: fetchedMetadata.metadata
-          };
-          
-          metadataCache.set(tokenAddress, result);
-          setMetadata(result);
-          return;
-        }
-      }
-
-      // Fallback: try to get from account state if available
-      if ('getAccountState' in userClient && typeof userClient.getAccountState === 'function') {
+      // Handle base token by resolving its address first, then fetching state
+      let targetAddress = tokenAddress;
+      if (tokenAddress === 'base') {
         try {
-          const accountState = await userClient.getAccountState(tokenAddress);
-          if (accountState?.info?.metadata) {
-            const { decimals, fieldType } = extractDecimalsAndFieldTypeFromMetadata(accountState.info.metadata);
-            const result: TokenMetadata = {
-              decimals,
-              fieldType,
-              name: accountState.info.name,
-              symbol: accountState.info.symbol,
-              ticker: accountState.info.ticker,
-              metadata: accountState.info.metadata
-            };
-            
-            metadataCache.set(tokenAddress, result);
-            setMetadata(result);
-            return;
+          const base = await provider.getBaseToken?.();
+          const baseAddr = base && typeof base === 'object' && base.address ? String(base.address) : null;
+          if (baseAddr) {
+            targetAddress = baseAddr;
           }
-        } catch (accountError) {
-          console.warn('[useTokenMetadata] Account state fetch failed:', accountError);
-        }
+        } catch {}
       }
 
-      // If all methods fail, throw error
-      throw new Error('Unable to fetch token metadata from blockchain');
+      // Always fetch account state via provider (authoritative)
+      // Prefer direct method if exposed, else use request() fallback
+      let rawState: unknown = null;
+      if (typeof provider.getAccountState === 'function') {
+        rawState = await provider.getAccountState(targetAddress);
+      } else if (typeof provider.request === 'function') {
+        rawState = await provider.request({ method: 'keeta_getAccountState', params: [targetAddress] });
+      }
+
+      const parsed = AccountStateSchema.safeParse(rawState);
+      if (!parsed.success) {
+        setMetadata(null);
+        setError('Invalid token state response');
+        return;
+      }
+
+      const info = (parsed.data as AccountState).info ?? undefined;
+      const meta = info?.metadata ?? undefined;
+      if (!meta) {
+        setMetadata(null);
+        setError('Token metadata not found');
+        return;
+      }
+
+      const { decimals, fieldType } = extractDecimalsAndFieldTypeFromMetadata(meta);
+      const result: TokenMetadata = {
+        decimals,
+        fieldType,
+        name: info?.name ?? undefined,
+        symbol: info?.symbol ?? undefined,
+        ticker: info?.ticker ?? undefined,
+        metadata: meta ?? undefined,
+      };
+
+      metadataCache.set(tokenAddress, result);
+      setMetadata(result);
+      setError(null);
+      return;
 
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to fetch token metadata';
-      console.error('[useTokenMetadata] Error fetching metadata:', errorMessage);
+      console.warn('[useTokenMetadata] Error fetching metadata:', errorMessage);
       setError(errorMessage);
       setMetadata(null);
     } finally {
       setLoading(false);
       loadingStates.set(tokenAddress, false);
     }
-  }, [tokenAddress, userClient, publicKey]);
+  }, [tokenAddress]);
 
   useEffect(() => {
     fetchMetadata();

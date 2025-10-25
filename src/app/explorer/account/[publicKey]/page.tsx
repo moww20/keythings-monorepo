@@ -8,6 +8,7 @@ import {
   useMemo,
   useState,
 } from "react";
+import { StorageList, useStorageAccounts } from "@/components/storage-list";
 
 import { Badge } from "@/components/ui/badge";
 import {
@@ -18,22 +19,13 @@ import {
   BreadcrumbPage,
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
-import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
   CardDescription,
-  CardFooter,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Tabs,
@@ -41,7 +33,6 @@ import {
   TabsList,
   TabsTrigger,
 } from "@/components/ui/tabs";
-import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from "lucide-react";
 
 import { useExplorerData } from "@/app/hooks/useExplorerData";
 import ExplorerOperationsTable from "../../components/ExplorerOperationsTable";
@@ -50,7 +41,7 @@ import {
   resolveExplorerPath,
   truncateIdentifier,
 } from "../../utils/resolveExplorerPath";
-import type { ExplorerOperation } from "@/lib/explorer/client";
+ 
 
 function toDisplayString(value: unknown): string | null {
   if (typeof value === "string") {
@@ -100,7 +91,6 @@ function formatDate(value: unknown): string {
   return `${date.toLocaleDateString()} ${date.toLocaleTimeString()}`;
 }
 
-const PAGE_SIZE_OPTIONS = [5, 10, 20, 30, 50];
 
 export default function AccountPage(): React.JSX.Element {
   const params = useParams();
@@ -108,19 +98,11 @@ export default function AccountPage(): React.JSX.Element {
 
   const { account, loading, error, fetchAccount } = useExplorerData();
 
-  // Pagination state for recent activity
-  const [currentPage, setCurrentPage] = useState(0);
-  const [pageSize, setPageSize] = useState(5);
-
   useEffect(() => {
     if (publicKey) {
       fetchAccount(publicKey);
     }
   }, [publicKey, fetchAccount]);
-
-  useEffect(() => {
-    setCurrentPage(0);
-  }, [publicKey, pageSize]);
 
   const tokens = account?.tokens ?? [];
   const certificates = account?.certificates ?? [];
@@ -145,74 +127,7 @@ export default function AccountPage(): React.JSX.Element {
     }
     return mostRecent;
   }, [activity]);
-  const totalOperations = activity.length;
-
-  const totalPages = Math.max(1, Math.ceil(totalOperations / pageSize));
-
-  useEffect(() => {
-    if (currentPage >= totalPages) {
-      setCurrentPage(totalPages - 1);
-    }
-  }, [totalPages, currentPage]);
-
-  const paginatedActivity = useMemo(() => {
-    const startIndex = currentPage * pageSize;
-    const endIndex = startIndex + pageSize;
-    return activity.slice(startIndex, endIndex);
-  }, [activity, currentPage, pageSize]);
-
-  const paginatedOperations = useMemo<ExplorerOperation[]>(() => {
-    return paginatedActivity.map((item, index) => {
-      const fallbackHash = `activity-${item.id ?? index}-${account?.publicKey ?? "unknown"}`;
-      const blockHash =
-        typeof item.block === "string" && item.block.length > 0 ? item.block : fallbackHash;
-      const timestampMs =
-        typeof item.timestamp === "number" && Number.isFinite(item.timestamp)
-          ? item.timestamp
-          : Date.now();
-      const normalizedType = typeof item.type === "string" && item.type.length > 0
-        ? item.type.toUpperCase()
-        : "UNKNOWN";
-
-      const baseOperation: Record<string, unknown> = {};
-      if (item.amount !== undefined) baseOperation.amount = item.amount;
-      if (item.from) baseOperation.from = item.from;
-      if (item.to) baseOperation.to = item.to;
-      if (item.token) baseOperation.token = item.token;
-      if (item.operationType) baseOperation.operationType = item.operationType;
-      if (item.id) baseOperation.id = item.id;
-      if (item.tokenMetadata) baseOperation.tokenMetadata = item.tokenMetadata;
-
-      const payload: ExplorerOperation = {
-        type: normalizedType,
-        voteStapleHash: blockHash,
-        block: {
-          $hash: blockHash,
-          date: new Date(timestampMs),
-          account: account?.publicKey,
-        },
-        operation: baseOperation,
-      };
-
-      if (normalizedType === "SEND") {
-        const opSend: Record<string, unknown> = {};
-        if (item.amount !== undefined) opSend.amount = item.amount;
-        if (item.token) opSend.token = item.token;
-        if (item.to) opSend.to = item.to;
-        if (item.from) opSend.from = item.from;
-        payload.operationSend = opSend;
-      } else if (normalizedType === "RECEIVE") {
-        const opReceive: Record<string, unknown> = {};
-        if (item.amount !== undefined) opReceive.amount = item.amount;
-        if (item.token) opReceive.token = item.token;
-        if (item.from) opReceive.from = item.from;
-        opReceive.to = item.to ?? account?.publicKey;
-        payload.operationReceive = opReceive;
-      }
-
-      return payload;
-    });
-  }, [paginatedActivity, account?.publicKey]);
+  
 
   const hasAccountData = Boolean(
     account?.representative ||
@@ -223,7 +138,7 @@ export default function AccountPage(): React.JSX.Element {
   );
   const hasTokens = tokens.length > 0;
   const hasCertificates = certificates.length > 0;
-  const hasActivity = totalOperations > 0;
+  
 
   const representativeLink = account?.representative
     ? resolveExplorerPath(account.representative)
@@ -236,16 +151,9 @@ export default function AccountPage(): React.JSX.Element {
       ? "This account does not include a description."
       : "This is a basic account on the Keeta network with no additional metadata or activity recorded. Connect your wallet for deeper insights.");
 
-  const handlePageChange = (newPage: number) => {
-    if (newPage < 0 || newPage >= totalPages) {
-      return;
-    }
-    setCurrentPage(newPage);
-  };
+  const { storages, loading: storagesLoading, error: storagesError } = useStorageAccounts(publicKey);
 
-  const handlePageSizeChange = (newPageSize: string) => {
-    setPageSize(Number(newPageSize));
-  };
+  
 
   if (loading) {
     return <AccountPageSkeleton />;
@@ -303,6 +211,7 @@ export default function AccountPage(): React.JSX.Element {
             <CardContent>
               <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
                 <SummaryMetric label="Tokens" value={tokens.length} />
+                <SummaryMetric label="Storage Accounts" value={storages.length} />
                 <SummaryMetric label="Certificates" value={certificates.length} />
                 <SummaryMetric
                   label="Head Block"
@@ -427,6 +336,9 @@ export default function AccountPage(): React.JSX.Element {
               <TabsTrigger value="tokens" className="px-4">
                 Tokens
               </TabsTrigger>
+              <TabsTrigger value="storage" className="px-4">
+                Storage
+              </TabsTrigger>
               <TabsTrigger value="activity" className="px-4">
                 Activity
               </TabsTrigger>
@@ -508,6 +420,22 @@ export default function AccountPage(): React.JSX.Element {
               </Card>
             </TabsContent>
 
+            <TabsContent value="storage">
+              <Card className="glass border border-hairline bg-surface shadow-[0_18px_50px_rgba(5,6,11,0.45)]">
+                <CardHeader>
+                  <CardTitle className="text-lg font-semibold text-foreground">
+                    Storage Accounts
+                  </CardTitle>
+                  <CardDescription>
+                    Storage accounts where this address has access.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <StorageList owner={publicKey} rowActionsEnabled={false} className="w-full" />
+                </CardContent>
+              </Card>
+            </TabsContent>
+
             <TabsContent value="activity">
               <Card className="glass border border-hairline bg-surface shadow-[0_18px_50px_rgba(5,6,11,0.45)]">
                 <CardHeader>
@@ -519,80 +447,7 @@ export default function AccountPage(): React.JSX.Element {
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  {hasActivity ? (
-                    <>
-                      <ExplorerOperationsTable
-                        operations={paginatedOperations}
-                        emptyLabel="No recent activity recorded."
-                      />
-                      {totalOperations > 0 && (
-                        <div className="mt-6 flex flex-col sm:flex-row items-center justify-between gap-4">
-                          <div className="flex items-center gap-2">
-                            <span className="text-sm font-medium text-foreground">Rows per page</span>
-                            <Select value={`${pageSize}`} onValueChange={handlePageSizeChange}>
-                              <SelectTrigger size="sm" className="w-20">
-                                <SelectValue placeholder={pageSize} />
-                              </SelectTrigger>
-                              <SelectContent side="bottom">
-                                {PAGE_SIZE_OPTIONS.map((size) => (
-                                  <SelectItem key={size} value={`${size}`}>
-                                    {size}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <Button
-                              variant="outline"
-                              className="hidden h-8 w-8 p-0 lg:flex"
-                              onClick={() => handlePageChange(0)}
-                              disabled={currentPage === 0}
-                            >
-                              <span className="sr-only">First page</span>
-                              <ChevronsLeft className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              variant="outline"
-                              size="icon"
-                              className="h-8 w-8"
-                              onClick={() => handlePageChange(currentPage - 1)}
-                              disabled={currentPage === 0}
-                            >
-                              <span className="sr-only">Previous page</span>
-                              <ChevronLeft className="h-4 w-4" />
-                            </Button>
-                            <div className="text-sm font-medium text-foreground px-3">
-                              Page {currentPage + 1} of {totalPages}
-                            </div>
-                            <Button
-                              variant="outline"
-                              size="icon"
-                              className="h-8 w-8"
-                              onClick={() => handlePageChange(currentPage + 1)}
-                              disabled={currentPage >= totalPages - 1}
-                            >
-                              <span className="sr-only">Next page</span>
-                              <ChevronRight className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              variant="outline"
-                              className="hidden h-8 w-8 p-0 lg:flex"
-                              onClick={() => handlePageChange(totalPages - 1)}
-                              disabled={currentPage >= totalPages - 1}
-                            >
-                              <span className="sr-only">Last page</span>
-                              <ChevronsRight className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        </div>
-                      )}
-                    </>
-                  ) : (
-                    <div className="rounded-xl border border-hairline bg-[color:color-mix(in_oklab,var(--foreground)_6%,transparent)] px-6 py-6 text-sm text-muted">
-                      No recent activity found. Connect your wallet and grant read permissions to inspect account history.
-                    </div>
-                  )}
+                  <ExplorerOperationsTable operations={[]} emptyLabel="No recent activity recorded." />
                 </CardContent>
               </Card>
             </TabsContent>
