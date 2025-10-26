@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { fetchAccount } from "@/lib/explorer/client";
+import { fetchAccount } from "@/lib/explorer/client-reads-ssr";
 
 interface RouteContext {
   params: Promise<{

@@ -1,5 +1,20 @@
 import { z } from "zod";
 
+/**
+ * Explorer Client (SSR-safe, wallet-only)
+ *
+ * IMPORTANT:
+ * - This module must remain SSR-safe. Do NOT import any SDKs that ship native/N-API bindings here.
+ * - Reads should use the wallet provider when available (window.keeta). On the server it will gracefully
+ *   return empty/fallback data. This keeps build output clean and avoids SSR bundling issues.
+ * - For client components that need SDK-first reads, prefer importing from:
+ *     '@/lib/explorer/client-reads-browser'
+ *   which can utilize dynamic SDK imports safely in the browser.
+ * - For server components (or Next API routes), prefer importing from:
+ *     '@/lib/explorer/client-reads-ssr'
+ *   to guarantee no SDK is pulled into SSR bundles.
+ */
+
 // Real Keeta Network integration
 // This client fetches real data from the Keeta network via the wallet extension
 
@@ -216,7 +231,7 @@ export async function fetchNetworkStats() {
 
 export async function fetchVoteStaple(blockhash: string) {
   try {
-    // If wallet is available, try to reconstruct staple and operations using SDK/client
+    // If wallet is available, try to reconstruct staple and operations using wallet history
     if (typeof window !== 'undefined' && window.keeta) {
       // 1) Try provider history which may include voteStaple inlined
       try {
@@ -329,17 +344,14 @@ export interface ExplorerTransactionsQuery {
 
 export async function fetchTransactions(query?: ExplorerTransactionsQuery): Promise<ExplorerTransactionsResponse> {
   try {
-    // Use wallet extension directly instead of backend
+    // Wallet-only path
     if (typeof window !== 'undefined' && window.keeta && query?.publicKey) {
       console.log('[CLIENT] Using wallet extension for transaction data');
       return await fetchTransactionsFromWallet(query);
     }
-    
+
     console.log('[CLIENT] Wallet extension not available or no public key provided');
-    return {
-      nextCursor: null,
-      stapleOperations: [],
-    };
+    return { nextCursor: null, stapleOperations: [] };
   } catch (error) {
     console.error('Error fetching transactions:', error);
     return {

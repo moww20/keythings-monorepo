@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { coerceString as sx, coerceAmount, resolveDate } from "@/lib/explorer/mappers";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import ExplorerOperationsTable from "@/app/explorer/components/ExplorerOperationsTable";
 import { Badge } from "@/components/ui/badge";
@@ -24,31 +25,7 @@ const historyCache = new Map<string, HistoryCacheEntry>();
 // Fallback text when wallet history is unavailable
 const FALLBACK_MESSAGE = "Connect your Keeta wallet to pull on-chain activity.";
 
-// Lightweight helpers (mirroring ExplorerRecentActivityCard)
-function sx(v: unknown): string | undefined {
-  if (typeof v === "string") {
-    const t = v.trim();
-    return t.length ? t : undefined;
-  }
-  if (typeof v === "number" && Number.isFinite(v)) return String(Math.trunc(v));
-  if (typeof v === "bigint") return String(v);
-  return undefined;
-}
-
-function resolveDate(...cands: unknown[]): string {
-  for (const c of cands) {
-    if (c instanceof Date && !Number.isNaN(c.getTime())) return c.toISOString();
-    if (typeof c === "number" && Number.isFinite(c)) {
-      const d = new Date(c);
-      if (!Number.isNaN(d.getTime())) return d.toISOString();
-    }
-    if (typeof c === "string") {
-      const d = new Date(c);
-      if (!Number.isNaN(d.getTime())) return d.toISOString();
-    }
-  }
-  return new Date().toISOString();
-}
+// Using shared coercion and date helpers from mappers
 
 export default function HistoryPage(): React.JSX.Element {
   const { publicKey } = useWallet();

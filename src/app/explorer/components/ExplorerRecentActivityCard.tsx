@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import ExplorerOperationsTable from "./ExplorerOperationsTable";
+import { coerceString, coerceAmount, resolveDate } from "@/lib/explorer/mappers";
 import {
   parseExplorerOperation,
   type ExplorerOperation,
@@ -49,61 +50,6 @@ type WalletHistoryRecord = {
 
 const FALLBACK_MESSAGE =
   "Connect your Keeta wallet to pull recent on-chain activity in real time.";
-
-function coerceString(value: unknown): string | undefined {
-  if (typeof value === "string") {
-    const trimmed = value.trim();
-    return trimmed.length > 0 ? trimmed : undefined;
-  }
-  if (typeof value === "number" && Number.isFinite(value)) {
-    return value.toString();
-  }
-  if (typeof value === "bigint") {
-    return value.toString();
-  }
-  return undefined;
-}
-
-function coerceAmount(value: unknown): string | undefined {
-  if (value === null || value === undefined) {
-    return undefined;
-  }
-  if (typeof value === "string") {
-    const trimmed = value.trim();
-    return trimmed.length > 0 ? trimmed : undefined;
-  }
-  if (typeof value === "number" && Number.isFinite(value)) {
-    return Math.trunc(value).toString();
-  }
-  if (typeof value === "bigint") {
-    return value.toString();
-  }
-  return coerceString(value);
-}
-
-function resolveDateValue(...candidates: unknown[]): string {
-  for (const candidate of candidates) {
-    if (!candidate && candidate !== 0) {
-      continue;
-    }
-    if (candidate instanceof Date && !Number.isNaN(candidate.getTime())) {
-      return candidate.toISOString();
-    }
-    if (typeof candidate === "number" && Number.isFinite(candidate)) {
-      const normalized = new Date(candidate);
-      if (!Number.isNaN(normalized.getTime())) {
-        return normalized.toISOString();
-      }
-    }
-    if (typeof candidate === "string") {
-      const parsed = new Date(candidate);
-      if (!Number.isNaN(parsed.getTime())) {
-        return parsed.toISOString();
-      }
-    }
-  }
-  return new Date().toISOString();
-}
 
 function normalizeMetadata(value: unknown): unknown {
   if (value === null || value === undefined) {
@@ -205,7 +151,7 @@ export default function ExplorerRecentActivityCard(): React.JSX.Element {
           const block = {
             $hash: blockHash,
             date:
-              resolveDateValue(
+              resolveDate(
                 op.date,
                 record.date,
                 record.createdAt,

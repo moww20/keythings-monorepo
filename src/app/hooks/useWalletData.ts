@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { getNormalizedBalancesForAccount } from '@/lib/explorer/sdk-read-client';
+import { normalizeBalances } from '@/app/lib/balances/normalize';
 
 // Import the existing KeetaProvider type to avoid conflicts
 import type { KeetaProvider, KeetaNetworkInfo, KeetaBalanceEntry, KeetaBaseTokenInfo } from '../../types/keeta';
@@ -263,20 +265,32 @@ export function useWalletData() {
     await fetchWalletState(true);
   }, [fetchWalletState]);
 
+  // Rate limiting for refresh operations
+  const lastRefreshRef = useRef(0);
+  const REFRESH_THROTTLE_MS = 1000; // 1 second
+
+  const throttledRefresh = useCallback(async () => {
+    const now = Date.now();
+    if (now - lastRefreshRef.current > REFRESH_THROTTLE_MS) {
+      lastRefreshRef.current = now;
+      await refreshWallet();
+    }
+  }, [refreshWallet]);
+
   // Set up wallet event listeners
   useEffect(() => {
     const provider = getWalletProvider();
     if (!provider) return;
 
     const handleAccountsChanged = (accounts: unknown) => {
-      fetchWalletState(true);
+      void throttledRefresh();
     };
 
     const handleLockChanged = (isLocked: unknown) => {
       updateWalletData({ isLocked: Boolean(isLocked) });
       if (!isLocked) {
-        // If wallet was unlocked, refresh the full state with capabilities
-        fetchWalletState(true);
+        // If wallet was unlocked, refresh the state (throttled)
+        void throttledRefresh();
       }
     };
 
@@ -305,19 +319,7 @@ export function useWalletData() {
       provider.removeListener?.('lockChanged', handleLockChanged);
       provider.removeListener?.('disconnect', handleDisconnect);
     };
-  }, [fetchWalletState, updateWalletData]);
-
-  // Rate limiting for refresh operations
-  const lastRefreshRef = useRef(0);
-  const REFRESH_THROTTLE_MS = 1000; // 1 second
-
-  const throttledRefresh = useCallback(async () => {
-    const now = Date.now();
-    if (now - lastRefreshRef.current > REFRESH_THROTTLE_MS) {
-      lastRefreshRef.current = now;
-      await refreshWallet();
-    }
-  }, [refreshWallet]);
+  }, [fetchWalletState, updateWalletData, throttledRefresh]);
 
   return {
     wallet: walletData,
@@ -391,13 +393,24 @@ export function useTokenBalances(shouldFetch: boolean = false) {
         }
       }
       
+      // SDK fallback if wallet path failed or returned empty
+      if (!Array.isArray(result) || result.length === 0) {
+        try {
+          const accounts = typeof provider.getAccounts === 'function' ? await provider.getAccounts() : [];
+          const current = Array.isArray(accounts) && accounts.length > 0 ? accounts[0] : null;
+          if (current) {
+            const sdkBalances = await getNormalizedBalancesForAccount(current);
+            if (Array.isArray(sdkBalances) && sdkBalances.length > 0) {
+              result = sdkBalances;
+            }
+          }
+        } catch {}
+      }
+      
       if (!isMountedRef.current) return;
       
-      if (Array.isArray(result)) {
-        setBalances(result);
-      } else {
-        setBalances([]);
-      }
+      const normalized = normalizeBalances(result);
+      setBalances(normalized);
     } catch (error) {
       if (!isMountedRef.current) return;
       setError(`Failed to fetch balances: ${error instanceof Error ? error.message : 'Unknown error'}`);
