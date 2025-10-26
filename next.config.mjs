@@ -1,10 +1,28 @@
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // Turbopack is now the default bundler in Next.js 16
-  // browserDebugInfoInTerminal is now stable and enabled by default
-  
+  // Turbopack-specific alias to stub Node N-API module (applies to all targets including client SSR)
+  turbopack: {
+    resolveAlias: {
+      // Use relative specifiers to avoid Windows absolute path issue in Turbopack
+      '@keetanetwork/asn1-napi-rs': './src/lib/explorer/stubs/asn1-napi-rs.js',
+      '@keetanetwork/asn1-napi-rs/index.js': './src/lib/explorer/stubs/asn1-napi-rs.js',
+    },
+  },
   // Webpack optimization to handle empty chunks
   webpack: (config, { isServer }) => {
+    // Alias the native module to our browser stub for webpack, too
+    config.resolve = config.resolve || {};
+    config.resolve.alias = {
+      ...(config.resolve.alias || {}),
+      '@keetanetwork/asn1-napi-rs': path.resolve(__dirname, './src/lib/explorer/stubs/asn1-napi-rs.js'),
+      '@keetanetwork/asn1-napi-rs/index.js': path.resolve(__dirname, './src/lib/explorer/stubs/asn1-napi-rs.js'),
+    };
+
     if (!isServer) {
       // Prevent empty polyfills chunk by optimizing splitChunks
       config.optimization = {

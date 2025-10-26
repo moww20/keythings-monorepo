@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { getAccountState, getHistory } from '@/lib/explorer/sdk-read-client';
+import { getAccountState, getHistoryForAccount, getAggregatedBalancesForOwner } from '@/lib/explorer/sdk-read-client';
 import { processBalancesEntries, mapHistoryRecords } from '@/lib/explorer/mappers';
 
 interface ExplorerAccount {
@@ -64,106 +64,74 @@ export function useExplorerData() {
 
   const fetchAccountInfo = useCallback(async (publicKey: string): Promise<ExplorerAccount | null> => {
     if (process.env.NODE_ENV === "development") {
-      console.log("[useExplorerData] SIMPLIFIED: fetchAccountInfo called with publicKey:", publicKey);
+      console.debug("[useExplorerData] fetchAccountInfo:start", { publicKey });
     }
-    const keeta = typeof window !== 'undefined' ? (window as any).keeta : null;
+    // SDK-only path: do not use wallet provider endpoints
 
     try {
-      // Resolve base token address for consistent KTA handling
-      let baseTokenAddress: string | null = null;
-      try {
-        const baseToken = await (keeta as any)?.getBaseToken?.();
-        if (baseToken && typeof baseToken === 'object' && baseToken !== null && 'address' in baseToken) {
-          baseTokenAddress = String((baseToken as any).address);
-        }
-      } catch {
-        baseTokenAddress = null;
+      // Base token not required for SDK-only enrichment
+      const baseTokenAddress: string | null = null;
+      
+      // Fetch account state directly from SDK (may be null for accounts with no on-chain state yet)
+      const accountState: unknown = await getAccountState(publicKey);
+      if (process.env.NODE_ENV === "development") {
+        const hasState = !!(accountState && typeof accountState === 'object');
+        const balancesLen = hasState && Array.isArray((accountState as any)?.balances) ? (accountState as any).balances.length : 0;
+        const tokensLen = hasState && Array.isArray((accountState as any)?.tokens) ? (accountState as any).tokens.length : 0;
+        console.debug("[useExplorerData] accountState", { hasState, balancesLen, tokensLen });
       }
       
-      // Best-effort: fetch account info via SDK first, fallback to wallet
-      let accountInfo: unknown = await getAccountState(publicKey);
-      if (!accountInfo && keeta?.getAccountInfo) {
-        try {
-          const maybe = await keeta.getAccountInfo(publicKey);
-          accountInfo = maybe ?? null;
-        } catch {}
-      }
-      
-      if (!accountInfo) {
-        return null;
-      }
+      // Build a minimal account object even if no state exists, so the page still renders for arbitrary keys
+      const account = (accountState && typeof accountState === 'object') ? (accountState as any) : {};
 
-      // Transform the wallet extension response to our ExplorerAccount format
-      const account = accountInfo as any; // Type assertion since we don't know the exact structure
-
-      // Try to enrich with balances - attempt for both current account and queried account
+      // Enrich with balances via SDK
       let tokens: ExplorerAccount["tokens"] = [];
-      let isCurrent = false; // Declare isCurrent outside the try block
-      
       try {
-        const connectedAccounts = await keeta?.getAccounts?.();
-        
-        isCurrent = Array.isArray(connectedAccounts) && connectedAccounts.includes(publicKey);
-        
-        // Only try to get balances if this is the currently connected account (wallet path)
-        if (isCurrent && keeta?.getAllBalances) {
-          try {
-            let balances: any = [];
-            try {
-              if (typeof (keeta as any).getNormalizedBalances === 'function') {
-                balances = await (keeta as any).getNormalizedBalances();
-              } else if (typeof keeta.request === 'function') {
-                balances = await keeta.request({ method: 'keeta_getNormalizedBalances' });
-              } else {
-                balances = await keeta.getAllBalances();
-              }
-            } catch {
-              balances = await keeta.getAllBalances();
-            }
-
-            if (Array.isArray(balances)) {
-              tokens = await processBalancesEntries(balances, baseTokenAddress);
-            }
-          } catch {
+        // Primary: aggregate balances across owner + storage accounts using SDK
+        if (process.env.NODE_ENV === "development") {
+          console.debug("[useExplorerData] aggregatedBalances:request", { publicKey });
+        }
+        const agg = await getAggregatedBalancesForOwner(publicKey, { maxStorages: 25, includeTokenMetadata: true });
+        if (Array.isArray(agg) && agg.length) {
+          tokens = await processBalancesEntries(agg, baseTokenAddress);
+          if (process.env.NODE_ENV === "development") {
+            console.debug("[useExplorerData] aggregatedBalances:success", { count: agg.length });
           }
         }
-
+        // Fallback: use raw SDK state balances
         if (tokens.length === 0) {
-          // SDK fallback: attempt to extract balances from account state if available
-          try {
-            const raw = await getAccountState(publicKey);
-            const obj = (raw && typeof raw === 'object') ? (raw as any) : {};
-            const candidate = Array.isArray(obj?.tokens) ? obj.tokens : Array.isArray(obj?.balances) ? obj.balances : [];
-            if (Array.isArray(candidate)) {
-              tokens = await processBalancesEntries(candidate, baseTokenAddress);
+          const raw = await getAccountState(publicKey);
+          const obj = (raw && typeof raw === 'object') ? (raw as any) : {};
+          const candidate = Array.isArray(obj?.tokens) ? obj.tokens : Array.isArray(obj?.balances) ? obj.balances : [];
+          if (Array.isArray(candidate)) {
+            tokens = await processBalancesEntries(candidate, baseTokenAddress);
+            if (process.env.NODE_ENV === "development") {
+              console.debug("[useExplorerData] fallbackBalances:success", { count: candidate.length });
             }
-          } catch {}
+          }
         }
       } catch {
         // best-effort enrichment only
       }
 
-      // Get transaction history via SDK first, fallback to wallet extension
+      // Get transaction history filtered for the queried account
       let activity: any[] = [];
       try {
-        const sdkHistory: any = await getHistory({ depth: 25, cursor: null });
-        const sdkRecords = (sdkHistory && Array.isArray(sdkHistory)) ? sdkHistory : (sdkHistory?.records ?? []);
-        if (Array.isArray(sdkRecords) && sdkRecords.length) {
-          activity = mapHistoryRecords(sdkRecords);
-        } else if (keeta?.history && typeof keeta.history === 'function') {
-          const historyResult = await keeta.history({ depth: 25, includeTokenMetadata: true } as any);
-          const records = historyResult?.records || historyResult;
-          if (Array.isArray(records)) {
-            activity = mapHistoryRecords(records);
+        if (process.env.NODE_ENV === "development") {
+          console.debug("[useExplorerData] history:request", { publicKey });
+        }
+        const perAccount = await getHistoryForAccount(publicKey, { depth: 25, includeTokenMetadata: true });
+        if (Array.isArray(perAccount) && perAccount.length) {
+          activity = mapHistoryRecords(perAccount as any[]);
+          if (process.env.NODE_ENV === "development") {
+            console.debug("[useExplorerData] history:success", { count: perAccount.length });
           }
         }
-      } catch {
-        // Continue without activity data
-      }
+      } catch {}
 
       // Return the simplified account data
-      return {
-        publicKey: account.publicKey || publicKey,
+      const result = {
+        publicKey,
         type: account.type || 'account',
         representative: account.representative || null,
         owner: account.owner || null,
@@ -174,6 +142,10 @@ export function useExplorerData() {
         certificates: account.certificates || [],
         activity,
       };
+      if (process.env.NODE_ENV === "development") {
+        console.debug("[useExplorerData] fetchAccountInfo:done", { publicKey, tokens: result.tokens.length, activity: result.activity.length });
+      }
+      return result;
     } catch (error) {
       console.error('[useExplorerData] Error fetching account info:', error);
       throw error;
@@ -181,14 +153,23 @@ export function useExplorerData() {
   }, []);
 
   const fetchAccount = useCallback(async (publicKey: string) => {
+    if (process.env.NODE_ENV === "development") {
+      console.debug("[useExplorerData] fetchAccount:start", { publicKey });
+    }
     setState(prev => ({ ...prev, loading: true, error: null }));
     
     try {
       const account = await fetchAccountInfo(publicKey);
       setState(prev => ({ ...prev, account, loading: false, error: null }));
+      if (process.env.NODE_ENV === "development") {
+        console.debug("[useExplorerData] fetchAccount:success", { hasAccount: !!account });
+      }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to fetch account';
       setState(prev => ({ ...prev, account: null, loading: false, error: errorMessage }));
+      if (process.env.NODE_ENV === "development") {
+        console.error("[useExplorerData] fetchAccount:error", errorMessage);
+      }
     }
   }, [fetchAccountInfo]);
 

@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { getNormalizedBalancesForAccount } from '@/lib/explorer/sdk-read-client';
 import { normalizeBalances } from '@/app/lib/balances/normalize';
 
 // Import the existing KeetaProvider type to avoid conflicts
@@ -112,12 +111,12 @@ export function useWalletData() {
       // If wallet is locked, don't try to fetch balance/network
       if (isLockedResult) {
         updateWalletData({
-    connected: true,
-    accounts,
+          connected: true,
+          accounts,
           balance: '0',
           network: null,
           isLocked: true,
-    isInitializing: false,
+          isInitializing: false,
         });
         return;
       }
@@ -393,19 +392,7 @@ export function useTokenBalances(shouldFetch: boolean = false) {
         }
       }
       
-      // SDK fallback if wallet path failed or returned empty
-      if (!Array.isArray(result) || result.length === 0) {
-        try {
-          const accounts = typeof provider.getAccounts === 'function' ? await provider.getAccounts() : [];
-          const current = Array.isArray(accounts) && accounts.length > 0 ? accounts[0] : null;
-          if (current) {
-            const sdkBalances = await getNormalizedBalancesForAccount(current);
-            if (Array.isArray(sdkBalances) && sdkBalances.length > 0) {
-              result = sdkBalances;
-            }
-          }
-        } catch {}
-      }
+      // If wallet path returned empty, keep result as-is (no SDK fallback in browser build)
       
       if (!isMountedRef.current) return;
       

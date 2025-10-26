@@ -2,9 +2,12 @@
   "name": "keythings-website",
   "version": "0.1.0",
   "private": true,
+  "browser": {
+    "@keetanetwork/asn1-napi-rs": "./src/lib/explorer/stubs/asn1-napi-rs.js"
+  },
   "scripts": {
-    "dev": "next dev --turbo -p 3000",
-    "build": "next build --turbo",
+    "dev": "next dev -p 3000",
+    "build": "next build",
     "start": "next start",
     "lint": "eslint ."
   },

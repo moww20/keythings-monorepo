@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Eye, KeyRound, ArrowUpRight } from "lucide-react";
 import { storageApi } from "@/lib/api/client";
+import { listStorageAccountsByOwner, getAccountState } from "@/lib/explorer/sdk-read-client";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useWallet } from "@/app/contexts/WalletContext";
 import StorageAccountManager from "@/app/lib/storage-account-manager";
@@ -54,26 +55,10 @@ export function useStorageAccounts(owner: string | null | undefined) {
       setStorages([]);
       return;
     }
-    if (typeof window === "undefined" || !(window as any).keeta) {
-      setStorages([]);
-      return;
-    }
     setLoading(true);
     setError(null);
     try {
-      const keeta: any = (window as any).keeta;
-      try {
-        if (typeof keeta.requestCapabilities === "function") {
-          await keeta.requestCapabilities(["read"]);
-        }
-      } catch {}
-
-      let raw: unknown = [];
-      if (typeof keeta.listStorageAccountsByOwner === "function") {
-        raw = await keeta.listStorageAccountsByOwner(owner);
-      } else if (typeof keeta.request === "function") {
-        raw = await keeta.request({ method: "keeta_listStorageAccountsByOwner", params: [owner] });
-      }
+      const raw: unknown = await listStorageAccountsByOwner(owner);
 
       const parsed = StorageAclListSchema.safeParse(raw);
       if (!parsed.success) {
@@ -267,8 +252,7 @@ export function StorageList({ owner, showActions = false, className, rowActionsE
   React.useEffect(() => {
     let cancelled = false;
     async function loadDetails() {
-      if (typeof window === "undefined" || !(window as any).keeta) return;
-      const keeta: any = (window as any).keeta;
+      // Fetch storage info details via SDK state reads
       const pending: Array<Promise<void>> = [];
       const next: Record<string, { name?: string | null; description?: string | null }> = {};
       for (const entry of storages) {
@@ -277,15 +261,12 @@ export function StorageList({ owner, showActions = false, className, rowActionsE
         pending.push(
           (async () => {
             try {
-              const info = await keeta.getAccountInfo?.(addr) ?? (await keeta.request?.({ method: 'keeta_getAccountInfo', params: [addr] }));
-              if (info && typeof info === 'object') {
-                const rec = info as Record<string, unknown>;
-                const name = typeof rec.name === 'string' && rec.name.trim().length > 0 ? rec.name : null;
-                const description = typeof rec.description === 'string' && rec.description.trim().length > 0 ? rec.description : null;
-                next[addr] = { name, description };
-              } else {
-                next[addr] = {};
-              }
+              const state = await getAccountState(addr);
+              const rec = state && typeof state === 'object' ? (state as any) : null;
+              const infoObj = rec && typeof rec.info === 'object' ? (rec.info as Record<string, unknown>) : {};
+              const name = typeof infoObj.name === 'string' && infoObj.name.trim().length > 0 ? infoObj.name : null;
+              const description = typeof infoObj.description === 'string' && infoObj.description.trim().length > 0 ? infoObj.description : null;
+              next[addr] = { name, description };
             } catch {
               next[addr] = {};
             }

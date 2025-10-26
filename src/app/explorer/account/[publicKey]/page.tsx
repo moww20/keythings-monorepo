@@ -9,6 +9,7 @@ import {
   useState,
 } from "react";
 import { StorageList, useStorageAccounts } from "@/components/storage-list";
+import { parseExplorerOperation } from "@/lib/explorer/client";
 
 import { Badge } from "@/components/ui/badge";
 import {
@@ -107,6 +108,39 @@ export default function AccountPage(): React.JSX.Element {
   const tokens = account?.tokens ?? [];
   const certificates = account?.certificates ?? [];
   const activity = useMemo(() => account?.activity ?? [], [account?.activity]);
+  const activityOps = useMemo(() => {
+    try {
+      const ops: any[] = [];
+      for (const r of activity) {
+        const type = String(r?.type ?? r?.operationType ?? 'UNKNOWN').toUpperCase();
+        const blockHash = typeof r?.block === 'string' ? r.block : r?.id;
+        const ts = typeof r?.timestamp === 'number' && Number.isFinite(r.timestamp)
+          ? new Date(r.timestamp).toISOString()
+          : new Date().toISOString();
+        const base: any = {
+          type,
+          block: { $hash: blockHash ?? '', date: ts, account: r?.from ?? '' },
+          operation: { type, from: r?.from, to: r?.to, amount: r?.amount, token: r?.token, tokenMetadata: r?.tokenMetadata },
+          amount: r?.amount,
+          rawAmount: r?.rawAmount ?? r?.amount,
+          formattedAmount: r?.formattedAmount,
+          token: r?.token,
+          tokenAddress: r?.token,
+          tokenTicker: r?.tokenTicker,
+          tokenDecimals: typeof r?.tokenDecimals === 'number' ? r.tokenDecimals : undefined,
+          tokenMetadata: r?.tokenMetadata ?? null,
+          from: r?.from,
+          to: r?.to,
+          operationType: r?.operationType ?? type,
+        };
+        const parsed = parseExplorerOperation(base);
+        if (parsed) ops.push(parsed);
+      }
+      return ops;
+    } catch {
+      return [];
+    }
+  }, [activity]);
   const lastActivityTimestamp = useMemo(() => {
     if (!activity.length) {
       return null;
@@ -447,7 +481,7 @@ export default function AccountPage(): React.JSX.Element {
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <ExplorerOperationsTable operations={[]} emptyLabel="No recent activity recorded." />
+                  <ExplorerOperationsTable operations={activityOps} emptyLabel="No recent activity recorded." />
                 </CardContent>
               </Card>
             </TabsContent>
