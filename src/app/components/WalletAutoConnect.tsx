@@ -2,14 +2,14 @@
 
 import { useEffect, useRef } from "react";
 
-import { useWalletData } from "../hooks/useWalletData";
+import { useWallet } from "../contexts/WalletContext";
 
 /**
  * WalletAutoConnect - Automatically attempts to connect to the wallet on page load
  * if the user has previously granted permission.
  */
 export default function WalletAutoConnect() {
-  const { wallet, connectWallet } = useWalletData();
+  const { isConnected, isLocked, wallet, connectWallet } = useWallet();
   const hasAttemptedAutoConnect = useRef(false);
 
   useEffect(() => {
@@ -19,7 +19,7 @@ export default function WalletAutoConnect() {
     }
 
     // Don't auto-connect if already connected
-    if (wallet.connected) {
+    if (wallet.connected || isConnected) {
       return;
     }
 
@@ -80,7 +80,7 @@ export default function WalletAutoConnect() {
     }, 500);
 
     return () => clearTimeout(timeout);
-  }, [wallet.connected, wallet.isLocked, wallet.isInitializing, wallet.accounts?.length, connectWallet]);
+  }, [wallet.connected, isConnected, wallet.isLocked, isLocked, wallet.isInitializing, wallet.accounts?.length, connectWallet]);
 
   return null;
 }

@@ -85,8 +85,8 @@ export default function AppProviders({ children }: AppProvidersProps) {
         }}
       >
         <WalletEventsManager />
-        <WalletAutoConnect />
         <WalletProvider>
+          <WalletAutoConnect />
           <ToastBridge />
           {children}
         </WalletProvider>

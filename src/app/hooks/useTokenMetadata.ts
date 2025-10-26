@@ -5,6 +5,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
+import { getAccountState as sdkGetAccountState } from '@/lib/explorer/sdk-read-client';
 import { z } from 'zod';
 
 export interface TokenMetadata {
@@ -58,11 +59,6 @@ export function useTokenMetadata(tokenAddress: string): UseTokenMetadataResult {
     }
 
     const provider: any = typeof window !== 'undefined' ? (window as any).keeta : null;
-    if (!provider) {
-      setMetadata(null);
-      setError('Keeta provider not available');
-      return;
-    }
 
     // Check cache first
     const cached = metadataCache.get(tokenAddress);
@@ -86,7 +82,7 @@ export function useTokenMetadata(tokenAddress: string): UseTokenMetadataResult {
       let targetAddress = tokenAddress;
       if (tokenAddress === 'base') {
         try {
-          const base = await provider.getBaseToken?.();
+          const base = await provider?.getBaseToken?.();
           const baseAddr = base && typeof base === 'object' && base.address ? String(base.address) : null;
           if (baseAddr) {
             targetAddress = baseAddr;
@@ -94,13 +90,17 @@ export function useTokenMetadata(tokenAddress: string): UseTokenMetadataResult {
         } catch {}
       }
 
-      // Always fetch account state via provider (authoritative)
-      // Prefer direct method if exposed, else use request() fallback
+      // Read-first strategy: use SDK state, fallback to wallet provider
       let rawState: unknown = null;
-      if (typeof provider.getAccountState === 'function') {
-        rawState = await provider.getAccountState(targetAddress);
-      } else if (typeof provider.request === 'function') {
-        rawState = await provider.request({ method: 'keeta_getAccountState', params: [targetAddress] });
+      try {
+        rawState = await sdkGetAccountState(targetAddress);
+      } catch {}
+      if (!rawState) {
+        if (typeof provider?.getAccountState === 'function') {
+          rawState = await provider.getAccountState(targetAddress);
+        } else if (typeof provider?.request === 'function') {
+          rawState = await provider.request({ method: 'keeta_getAccountState', params: [targetAddress] });
+        }
       }
 
       const parsed = AccountStateSchema.safeParse(rawState);

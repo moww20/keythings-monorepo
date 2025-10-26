@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
-import { processTokenForDisplay } from '@/app/lib/token-utils';
+import { getAccountState, getHistory } from '@/lib/explorer/sdk-read-client';
+import { processBalancesEntries, mapHistoryRecords } from '@/lib/explorer/mappers';
 
 interface ExplorerAccount {
   publicKey: string;
@@ -65,21 +66,13 @@ export function useExplorerData() {
     if (process.env.NODE_ENV === "development") {
       console.log("[useExplorerData] SIMPLIFIED: fetchAccountInfo called with publicKey:", publicKey);
     }
-    if (typeof window === 'undefined' || !window.keeta) {
-      throw new Error('Keeta wallet not available');
-    }
-
-    const keeta = window.keeta;
-    
-    if (!keeta || !keeta.getAccountInfo) {
-      throw new Error('Keeta wallet not available or getAccountInfo method not supported');
-    }
+    const keeta = typeof window !== 'undefined' ? (window as any).keeta : null;
 
     try {
       // Resolve base token address for consistent KTA handling
       let baseTokenAddress: string | null = null;
       try {
-        const baseToken = await (keeta as any).getBaseToken?.();
+        const baseToken = await (keeta as any)?.getBaseToken?.();
         if (baseToken && typeof baseToken === 'object' && baseToken !== null && 'address' in baseToken) {
           baseTokenAddress = String((baseToken as any).address);
         }
@@ -87,13 +80,14 @@ export function useExplorerData() {
         baseTokenAddress = null;
       }
       
-      // Request read and transact capabilities first
-      if (keeta.requestCapabilities) {
-        await keeta.requestCapabilities(['read', 'transact']);
+      // Best-effort: fetch account info via SDK first, fallback to wallet
+      let accountInfo: unknown = await getAccountState(publicKey);
+      if (!accountInfo && keeta?.getAccountInfo) {
+        try {
+          const maybe = await keeta.getAccountInfo(publicKey);
+          accountInfo = maybe ?? null;
+        } catch {}
       }
-      
-      // Use the wallet extension to get account info
-      const accountInfo = await keeta.getAccountInfo(publicKey);
       
       if (!accountInfo) {
         return null;
@@ -107,18 +101,13 @@ export function useExplorerData() {
       let isCurrent = false; // Declare isCurrent outside the try block
       
       try {
-        const connectedAccounts = await keeta.getAccounts?.();
+        const connectedAccounts = await keeta?.getAccounts?.();
         
         isCurrent = Array.isArray(connectedAccounts) && connectedAccounts.includes(publicKey);
         
-        // Only try to get balances if this is the currently connected account
-        if (isCurrent && keeta.getAllBalances) {
+        // Only try to get balances if this is the currently connected account (wallet path)
+        if (isCurrent && keeta?.getAllBalances) {
           try {
-            // Request read and transact capabilities first
-            if (keeta.requestCapabilities) {
-              await keeta.requestCapabilities(['read', 'transact']);
-            }
-            
             let balances: any = [];
             try {
               if (typeof (keeta as any).getNormalizedBalances === 'function') {
@@ -133,176 +122,39 @@ export function useExplorerData() {
             }
 
             if (Array.isArray(balances)) {
-              const processed = await Promise.all(
-                balances.map(async (entry: any) => {
-                  const tokenAddress = String(entry?.token ?? '');
-                  const rawBalance = entry?.balance ?? '0';
-                  const metadata = typeof entry?.metadata === 'string' ? entry.metadata : undefined;
-                  if (entry && typeof entry === 'object' && 'formattedAmount' in entry) {
-                    return {
-                      publicKey: tokenAddress,
-                      name: typeof entry.name === 'string' && entry.name.trim().length > 0 ? entry.name : null,
-                      ticker: typeof entry.ticker === 'string' && entry.ticker.trim().length > 0 ? entry.ticker : null,
-                      decimals: entry.decimals ?? null,
-                      fieldType: entry.fieldType,
-                      formattedAmount: entry.formattedAmount,
-                      icon: entry.icon ?? null,
-                      totalSupply: null,
-                      balance: String(rawBalance),
-                    };
-                  }
-                  try {
-                    const p = await processTokenForDisplay(
-                      tokenAddress,
-                      rawBalance,
-                      metadata,
-                      baseTokenAddress ?? undefined,
-                      undefined,
-                    );
-                    return {
-                      publicKey: tokenAddress,
-                      name: p.name?.trim().length > 0 ? p.name : null,
-                      ticker: p.ticker?.trim().length > 0 ? p.ticker : null,
-                      decimals: p.decimals,
-                      fieldType: p.fieldType,
-                      formattedAmount: p.formattedAmount,
-                      icon: p.icon || null,
-                      totalSupply: null,
-                      balance: String(rawBalance),
-                    };
-                  } catch {
-                    return {
-                      publicKey: tokenAddress,
-                      name: null,
-                      ticker: null,
-                      decimals: null,
-                      totalSupply: null,
-                      balance: String(rawBalance),
-                    };
-                  }
-                })
-              );
-              tokens = processed;
+              tokens = await processBalancesEntries(balances, baseTokenAddress);
             }
           } catch {
-            // Continue without balance data - this is expected for non-connected accounts
           }
         }
-        
+
         if (tokens.length === 0) {
+          // SDK fallback: attempt to extract balances from account state if available
           try {
-            if (keeta.requestCapabilities) {
-              await keeta.requestCapabilities(['read']);
+            const raw = await getAccountState(publicKey);
+            const obj = (raw && typeof raw === 'object') ? (raw as any) : {};
+            const candidate = Array.isArray(obj?.tokens) ? obj.tokens : Array.isArray(obj?.balances) ? obj.balances : [];
+            if (Array.isArray(candidate)) {
+              tokens = await processBalancesEntries(candidate, baseTokenAddress);
             }
-            if (typeof keeta.request === 'function') {
-              const balances = await keeta.request({ method: 'keeta_getBalancesForAccount', params: [publicKey] });
-              if (Array.isArray(balances)) {
-                const processed = await Promise.all(
-                  balances.map(async (entry: any) => {
-                    const tokenAddress = String(entry?.token ?? '');
-                    const rawBalance = entry?.balance ?? '0';
-                    const metadata = typeof entry?.metadata === 'string' ? entry.metadata : undefined;
-                    if (entry && typeof entry === 'object' && 'formattedAmount' in entry) {
-                      return {
-                        publicKey: tokenAddress,
-                        name: typeof entry.name === 'string' && entry.name.trim().length > 0 ? entry.name : null,
-                        ticker: typeof entry.ticker === 'string' && entry.ticker.trim().length > 0 ? entry.ticker : null,
-                        decimals: entry.decimals ?? null,
-                        fieldType: entry.fieldType,
-                        formattedAmount: entry.formattedAmount,
-                        icon: entry.icon ?? null,
-                        totalSupply: null,
-                        balance: String(rawBalance),
-                      };
-                    }
-                    try {
-                      const p = await processTokenForDisplay(
-                        tokenAddress,
-                        rawBalance,
-                        metadata,
-                        baseTokenAddress ?? undefined,
-                        undefined,
-                      );
-                      return {
-                        publicKey: tokenAddress,
-                        name: p.name || null,
-                        ticker: p.ticker || null,
-                        decimals: p.decimals,
-                        fieldType: p.fieldType,
-                        formattedAmount: p.formattedAmount,
-                        icon: p.icon || null,
-                        totalSupply: null,
-                        balance: String(rawBalance),
-                      };
-                    } catch {
-                      return {
-                        publicKey: tokenAddress,
-                        name: null,
-                        ticker: null,
-                        decimals: null,
-                        totalSupply: null,
-                        balance: String(rawBalance),
-                      };
-                    }
-                  })
-                );
-                tokens = processed;
-              }
-            }
-          } catch {
-            // Continue without balance data - this is expected for non-connected accounts
-          }
+          } catch {}
         }
       } catch {
         // best-effort enrichment only
       }
 
-      // SIMPLIFIED: Get transaction history directly from wallet extension
+      // Get transaction history via SDK first, fallback to wallet extension
       let activity: any[] = [];
       try {
-        if (process.env.NODE_ENV === "development") {
-          console.log("[useExplorerData] SIMPLIFIED: Getting history directly from wallet extension");
-        }
-        
-        // Use wallet extension history directly - no complex processing
-        if (keeta.history && typeof keeta.history === 'function') {
+        const sdkHistory: any = await getHistory({ depth: 25, cursor: null });
+        const sdkRecords = (sdkHistory && Array.isArray(sdkHistory)) ? sdkHistory : (sdkHistory?.records ?? []);
+        if (Array.isArray(sdkRecords) && sdkRecords.length) {
+          activity = mapHistoryRecords(sdkRecords);
+        } else if (keeta?.history && typeof keeta.history === 'function') {
           const historyResult = await keeta.history({ depth: 25, includeTokenMetadata: true } as any);
-          
-          if (process.env.NODE_ENV === "development") {
-            console.log("[useExplorerData] SIMPLIFIED: Raw wallet extension data:", {
-              historyResult,
-              firstRecord: historyResult?.records?.[0],
-              firstRecordKeys: historyResult?.records?.[0] ? Object.keys(historyResult.records[0]) : [],
-            });
-          }
-          
-          // SIMPLIFIED: Use raw data directly without complex processing
           const records = historyResult?.records || historyResult;
           if (Array.isArray(records)) {
-            activity = records.map((record: any, index: number) => ({
-              id: record.id || record.block || `activity-${index}`,
-              block: record.block || record.id || '',
-              timestamp: record.timestamp || Date.now(),
-              type: record.type || 'UNKNOWN',
-              amount: record.amount || '0',
-              from: record.from || '',
-              to: record.to || '',
-              token: record.token || '',
-              operationType: record.type || 'UNKNOWN',
-              formattedAmount: record.amount || '0',
-              rawAmount: record.amount || '0',
-              tokenTicker: record.tokenTicker || 'UNKNOWN',
-              tokenDecimals: record.tokenDecimals || null,
-              tokenMetadata: record.tokenMetadata || null,
-            }));
-            
-            if (process.env.NODE_ENV === "development") {
-              console.log("[useExplorerData] SIMPLIFIED: Processed activity:", {
-                activityLength: activity.length,
-                firstActivity: activity[0],
-                firstActivityKeys: activity[0] ? Object.keys(activity[0]) : [],
-              });
-            }
+            activity = mapHistoryRecords(records);
           }
         }
       } catch {
