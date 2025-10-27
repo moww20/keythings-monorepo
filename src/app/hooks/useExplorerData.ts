@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { z } from 'zod';
 import { getAccountState, getHistoryForAccount, getAggregatedBalancesForOwner } from '@/lib/explorer/sdk-read-client';
 import { processBalancesEntries, mapHistoryRecords } from '@/lib/explorer/mappers';
 
@@ -63,23 +64,34 @@ export function useExplorerData() {
   });
 
   const fetchAccountInfo = useCallback(async (publicKey: string): Promise<ExplorerAccount | null> => {
-    if (process.env.NODE_ENV === "development") {
-      console.debug("[useExplorerData] fetchAccountInfo:start", { publicKey });
-    }
+    try { console.debug('[useExplorerData] fetchAccountInfo:start', { publicKey }); } catch {}
     // SDK-only path: do not use wallet provider endpoints
 
     try {
-      // Base token not required for SDK-only enrichment
-      const baseTokenAddress: string | null = null;
+      // Detect base token from environment
+      const EnvSchema = z.object({ NEXT_PUBLIC_KTA_TOKEN_PUBKEY: z.string().optional() });
+      const env = EnvSchema.safeParse(process.env);
+      let baseTokenAddress: string | null = env.success && env.data.NEXT_PUBLIC_KTA_TOKEN_PUBKEY && env.data.NEXT_PUBLIC_KTA_TOKEN_PUBKEY.trim().length
+        ? env.data.NEXT_PUBLIC_KTA_TOKEN_PUBKEY.trim()
+        : null;
+      if (!baseTokenAddress && typeof window !== 'undefined' && (window as any)?.keeta?.getBaseToken) {
+        try {
+          const base = await (window as any).keeta.getBaseToken();
+          const addr = base && typeof base === 'object' && base !== null && 'address' in base ? (base as any).address : undefined;
+          baseTokenAddress = typeof addr === 'string' && addr.trim().length ? addr.trim() : baseTokenAddress;
+          try { console.debug('[useExplorerData] baseTokenAddress(provider)', { baseTokenAddress }); } catch {}
+        } catch {}
+      }
+      try { console.debug('[useExplorerData] baseTokenAddress', { baseTokenAddress }); } catch {}
       
       // Fetch account state directly from SDK (may be null for accounts with no on-chain state yet)
       const accountState: unknown = await getAccountState(publicKey);
-      if (process.env.NODE_ENV === "development") {
+      try {
         const hasState = !!(accountState && typeof accountState === 'object');
         const balancesLen = hasState && Array.isArray((accountState as any)?.balances) ? (accountState as any).balances.length : 0;
         const tokensLen = hasState && Array.isArray((accountState as any)?.tokens) ? (accountState as any).tokens.length : 0;
-        console.debug("[useExplorerData] accountState", { hasState, balancesLen, tokensLen });
-      }
+        console.debug('[useExplorerData] accountState:summary', { hasState, balancesLen, tokensLen });
+      } catch {}
       
       // Build a minimal account object even if no state exists, so the page still renders for arbitrary keys
       const account = (accountState && typeof accountState === 'object') ? (accountState as any) : {};
@@ -88,15 +100,11 @@ export function useExplorerData() {
       let tokens: ExplorerAccount["tokens"] = [];
       try {
         // Primary: aggregate balances across owner + storage accounts using SDK
-        if (process.env.NODE_ENV === "development") {
-          console.debug("[useExplorerData] aggregatedBalances:request", { publicKey });
-        }
         const agg = await getAggregatedBalancesForOwner(publicKey, { maxStorages: 25, includeTokenMetadata: true });
+        try { console.debug('[useExplorerData] aggregatedBalances:raw', agg); } catch {}
         if (Array.isArray(agg) && agg.length) {
           tokens = await processBalancesEntries(agg, baseTokenAddress);
-          if (process.env.NODE_ENV === "development") {
-            console.debug("[useExplorerData] aggregatedBalances:success", { count: agg.length });
-          }
+          try { console.debug('[useExplorerData] aggregatedBalances:processed', tokens); } catch {}
         }
         // Fallback: use raw SDK state balances
         if (tokens.length === 0) {
@@ -105,9 +113,7 @@ export function useExplorerData() {
           const candidate = Array.isArray(obj?.tokens) ? obj.tokens : Array.isArray(obj?.balances) ? obj.balances : [];
           if (Array.isArray(candidate)) {
             tokens = await processBalancesEntries(candidate, baseTokenAddress);
-            if (process.env.NODE_ENV === "development") {
-              console.debug("[useExplorerData] fallbackBalances:success", { count: candidate.length });
-            }
+            try { console.debug('[useExplorerData] fallbackBalances:processed', tokens); } catch {}
           }
         }
       } catch {
@@ -117,15 +123,9 @@ export function useExplorerData() {
       // Get transaction history filtered for the queried account
       let activity: any[] = [];
       try {
-        if (process.env.NODE_ENV === "development") {
-          console.debug("[useExplorerData] history:request", { publicKey });
-        }
         const perAccount = await getHistoryForAccount(publicKey, { depth: 25, includeTokenMetadata: true });
         if (Array.isArray(perAccount) && perAccount.length) {
           activity = mapHistoryRecords(perAccount as any[]);
-          if (process.env.NODE_ENV === "development") {
-            console.debug("[useExplorerData] history:success", { count: perAccount.length });
-          }
         }
       } catch {}
 
@@ -142,34 +142,26 @@ export function useExplorerData() {
         certificates: account.certificates || [],
         activity,
       };
-      if (process.env.NODE_ENV === "development") {
-        console.debug("[useExplorerData] fetchAccountInfo:done", { publicKey, tokens: result.tokens.length, activity: result.activity.length });
-      }
+      try { console.debug('[useExplorerData] fetchAccountInfo:done', { publicKey, tokens: result.tokens.length, activity: result.activity.length }); } catch {}
       return result;
     } catch (error) {
-      console.error('[useExplorerData] Error fetching account info:', error);
+      try { console.error('[useExplorerData] fetchAccountInfo:error', error); } catch {}
       throw error;
     }
   }, []);
 
   const fetchAccount = useCallback(async (publicKey: string) => {
-    if (process.env.NODE_ENV === "development") {
-      console.debug("[useExplorerData] fetchAccount:start", { publicKey });
-    }
     setState(prev => ({ ...prev, loading: true, error: null }));
+    try { console.debug('[useExplorerData] fetchAccount:start', { publicKey }); } catch {}
     
     try {
       const account = await fetchAccountInfo(publicKey);
       setState(prev => ({ ...prev, account, loading: false, error: null }));
-      if (process.env.NODE_ENV === "development") {
-        console.debug("[useExplorerData] fetchAccount:success", { hasAccount: !!account });
-      }
+      try { console.debug('[useExplorerData] fetchAccount:success', { hasAccount: !!account }); } catch {}
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to fetch account';
       setState(prev => ({ ...prev, account: null, loading: false, error: errorMessage }));
-      if (process.env.NODE_ENV === "development") {
-        console.error("[useExplorerData] fetchAccount:error", errorMessage);
-      }
+      try { console.error('[useExplorerData] fetchAccount:error', errorMessage); } catch {}
     }
   }, [fetchAccountInfo]);
 

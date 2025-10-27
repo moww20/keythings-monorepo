@@ -1,4 +1,4 @@
-import { processTokenForDisplay } from '@/app/lib/token-utils';
+import { processTokenForDisplay, formatTokenAmount, formatAmountWithCommas, extractDecimalsAndFieldType } from '@/app/lib/token-utils';
 
 export function coerceString(value: unknown): string | undefined {
   if (typeof value === 'string') {
@@ -83,13 +83,55 @@ export async function processBalancesEntries(
         baseTokenAddress ?? undefined,
         undefined,
       );
+      // Base token override: trust centralized parser for KTA and do NOT override ticker from entry
+      const isBaseToken = Boolean(baseTokenAddress && tokenAddress === baseTokenAddress);
+      const resolvedName = isBaseToken
+        ? p.name
+        : ((typeof entry.name === 'string' && entry.name.trim().length > 0) ? entry.name : p.name);
+      const resolvedTicker = isBaseToken
+        ? 'KTA'
+        : ((typeof entry.ticker === 'string' && entry.ticker.trim().length > 0) ? entry.ticker : p.ticker);
+      const resolvedDecimals = isBaseToken
+        ? (p.decimals ?? 9)
+        : ((typeof entry.decimals === 'number' && Number.isFinite(entry.decimals)) ? entry.decimals : p.decimals);
+      const resolvedFieldType: 'decimalPlaces' | 'decimals' = isBaseToken
+        ? 'decimalPlaces'
+        : ((entry.fieldType === 'decimalPlaces' || entry.fieldType === 'decimals') ? entry.fieldType : p.fieldType);
+      const displayHints = extractDecimalsAndFieldType(metadata);
+      const recomputed = formatAmountWithCommas(
+        formatTokenAmount(
+          String(rawBalance),
+          resolvedDecimals ?? 0,
+          resolvedFieldType ?? 'decimals',
+          displayHints.displayDecimals
+        )
+      );
+
+      try {
+        console.debug('[TOKENS_TAB] mappers.processBalancesEntries', {
+          tokenAddress,
+          isBaseToken,
+          entryName: entry?.name,
+          entryTicker: entry?.ticker,
+          entryDecimals: entry?.decimals,
+          pName: p.name,
+          pTicker: p.ticker,
+          pDecimals: p.decimals,
+          resolvedName,
+          resolvedTicker,
+          resolvedDecimals,
+          resolvedFieldType,
+          formattedAmount: recomputed ?? p.formattedAmount,
+        });
+      } catch {}
+
       return {
         publicKey: tokenAddress,
-        name: p.name?.trim().length > 0 ? p.name : null,
-        ticker: p.ticker?.trim().length > 0 ? p.ticker : null,
-        decimals: p.decimals ?? null,
-        fieldType: p.fieldType,
-        formattedAmount: p.formattedAmount,
+        name: resolvedName?.trim().length ? resolvedName : null,
+        ticker: resolvedTicker?.trim().length ? resolvedTicker : null,
+        decimals: resolvedDecimals ?? null,
+        fieldType: resolvedFieldType,
+        formattedAmount: recomputed ?? p.formattedAmount,
         icon: p.icon || null,
         totalSupply: null,
         balance: String(rawBalance),

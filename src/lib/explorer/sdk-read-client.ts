@@ -1,6 +1,6 @@
 "use client";
 import { z } from 'zod';
-import { extractDecimalsAndFieldType, formatAmountWithCommas, formatTokenAmount } from '@/app/lib/token-utils';
+import { extractDecimalsAndFieldType, formatAmountWithCommas, formatTokenAmount, getTokenTicker } from '@/app/lib/token-utils';
 
 // Best-effort normalization of an account-like object into a string public key
 function normalizeAccountAddress(candidate: unknown): string | undefined {
@@ -333,35 +333,93 @@ const toBigInt = (value: unknown): bigint => {
 export async function getAggregatedBalancesForOwner(
   ownerPublicKey: string,
   opts?: { maxStorages?: number; includeTokenMetadata?: boolean },
-): Promise<Array<{ token: string; balance: string; metadata?: string; decimals?: number }>> {
+): Promise<Array<{ token: string; balance: string; metadata?: string; decimals?: number; name?: string; ticker?: string }>> {
   try {
     const KeetaNet = await loadKeeta();
     const client = await getReadClient();
     const includeTokenMetadata = opts?.includeTokenMetadata ?? true;
     const maxStorages = Math.max(0, Math.min(opts?.maxStorages ?? 25, 200));
 
-    const totals = new Map<string, { balance: bigint; metadata?: string; decimals?: number }>();
-    const upsert = (token: string, amount: bigint, metadata?: string, decimals?: number) => {
+    const totals = new Map<string, { balance: bigint; metadata?: string; decimals?: number; name?: string; ticker?: string }>();
+    const upsert = (token: string, amount: bigint, metadata?: string, decimals?: number, name?: string, ticker?: string) => {
       const previous = totals.get(token);
       const balance = (previous?.balance ?? BIG_INT_ZERO) + amount;
       const meta = previous?.metadata ?? metadata;
       const dec = typeof previous?.decimals === 'number' ? previous!.decimals : decimals;
-      totals.set(token, { balance, metadata: meta, decimals: dec });
+      const nm = (previous?.name && previous.name.trim().length > 0) ? previous.name : name;
+      const tk = (previous?.ticker && previous.ticker.trim().length > 0) ? previous.ticker : ticker;
+      totals.set(token, { balance, metadata: meta, decimals: dec, name: nm, ticker: tk });
     };
+
+    // Shared metadata cache across owner and storage lookups
+    const tokenMetaCache = new Map<string, { metadata?: string; decimals?: number; name?: string; ticker?: string }>();
 
     console.debug('[sdk-read-client] getAggregatedBalancesForOwner start', { ownerPublicKey, maxStorages, includeTokenMetadata });
     try {
       const ownerAccount = KeetaNet.lib.Account.fromPublicKeyString(ownerPublicKey);
       const ownerState = await client.state({ account: ownerAccount });
       const balances: any[] = Array.isArray(ownerState?.balances) ? ownerState.balances : [];
-      console.debug('[sdk-read-client] owner balances', { count: balances.length });
       for (const entry of balances) {
         const tokenAddr = normalizeAccountAddress((entry as any)?.token ?? (entry as any)?.publicKey) ?? '';
         if (!tokenAddr) continue;
+
         const amount = toBigInt((entry as any)?.balance ?? (entry as any)?.amount);
-        const decimals = typeof (entry as any)?.decimals === 'number' ? (entry as any).decimals : undefined;
-        const metadata = typeof (entry as any)?.metadata === 'string' ? (entry as any).metadata : undefined;
-        upsert(tokenAddr, amount, metadata, decimals);
+        let decimals = typeof (entry as any)?.decimals === 'number' ? (entry as any).decimals : undefined;
+        let metadata = typeof (entry as any)?.metadata === 'string' ? (entry as any).metadata : undefined;
+
+        // Enrich owner balances with token metadata & decimals if missing
+        let name: string | undefined;
+        let ticker: string | undefined;
+        if (includeTokenMetadata && (!decimals || !metadata)) {
+          if (tokenMetaCache.has(tokenAddr)) {
+            const cached = tokenMetaCache.get(tokenAddr)!;
+            decimals = decimals ?? cached.decimals;
+            metadata = metadata ?? cached.metadata;
+            name = cached.name ?? name;
+            ticker = cached.ticker ?? ticker;
+          } else {
+            try {
+              const tokenAccount = KeetaNet.lib.Account.fromPublicKeyString(tokenAddr);
+              const tokenState = await client.state({ account: tokenAccount });
+              const info = tokenState?.info ?? {};
+              const md = typeof info?.metadata === 'string' ? info.metadata : undefined;
+              let decValid: number | undefined;
+              if (md) {
+                try {
+                  const decInfo = extractDecimalsAndFieldType(md);
+                  decValid = decInfo.decimals;
+                } catch {}
+              }
+              const nm = typeof (info as any)?.name === 'string' ? (info as any).name : undefined;
+              const tkSym = typeof (info as any)?.symbol === 'string' ? (info as any).symbol : undefined;
+              const tkTicker = typeof (info as any)?.ticker === 'string' ? (info as any).ticker : undefined;
+              const tkCode = typeof (info as any)?.currencyCode === 'string' ? (info as any).currencyCode : undefined;
+              const tkMeta = md ? getTokenTicker(md) : undefined;
+              const tk = (tkSym || tkTicker || tkCode || tkMeta)?.toString().trim().toUpperCase();
+              try {
+                console.debug('[sdk-read-client] owner token info fields', {
+                  token: tokenAddr,
+                  name: nm,
+                  symbol: tkSym,
+                  ticker: tkTicker,
+                  currencyCode: tkCode,
+                  metaTicker: tkMeta,
+                  derivedTicker: tk,
+                });
+              } catch {}
+              tokenMetaCache.set(tokenAddr, { metadata: md, decimals: decValid, name: nm, ticker: tk });
+              metadata = metadata ?? md;
+              decimals = decimals ?? decValid;
+              name = name ?? nm;
+              ticker = ticker ?? tk;
+              try { console.debug('[sdk-read-client] owner token metadata fetched', { token: tokenAddr, hasMetadata: Boolean(md), decimals: decValid }); } catch {}
+            } catch {
+              tokenMetaCache.set(tokenAddr, { metadata: undefined, decimals: undefined });
+            }
+          }
+        }
+
+        upsert(tokenAddr, amount, metadata, decimals, name, ticker);
       }
     } catch (e) {
       console.warn('[sdk-read-client] owner balances read failed', e);
@@ -377,7 +435,7 @@ export async function getAggregatedBalancesForOwner(
       storages = [];
     }
 
-    const tokenMetaCache = new Map<string, { metadata?: string; decimals?: number }>();
+    // tokenMetaCache declared above; reused here as well
 
     const fetchStorage = async (address: string) => {
       try {
@@ -392,47 +450,58 @@ export async function getAggregatedBalancesForOwner(
           const amount = toBigInt((entry as any)?.balance ?? (entry as any)?.amount);
           let decimals = typeof (entry as any)?.decimals === 'number' ? (entry as any).decimals : undefined;
           let metadata = typeof (entry as any)?.metadata === 'string' ? (entry as any).metadata : undefined;
+          let name: string | undefined;
+          let ticker: string | undefined;
 
           if (includeTokenMetadata && (!decimals || !metadata)) {
             if (tokenMetaCache.has(tokenAddr)) {
               const cached = tokenMetaCache.get(tokenAddr)!;
               decimals = decimals ?? cached.decimals;
               metadata = metadata ?? cached.metadata;
+              name = cached.name ?? name;
+              ticker = cached.ticker ?? ticker;
             } else {
               try {
                 const tokenAccount = KeetaNet.lib.Account.fromPublicKeyString(tokenAddr);
                 const tokenState = await client.state({ account: tokenAccount });
                 const info = tokenState?.info ?? {};
                 const md = typeof info?.metadata === 'string' ? info.metadata : undefined;
-                const TokenMetadataSchema = z.object({
-                  name: z.string().optional(),
-                  ticker: z.string().optional(),
-                  symbol: z.string().optional(),
-                  decimals: z.number().optional(),
-                });
-                let mdValid: string | undefined;
                 let decValid: number | undefined;
                 if (md) {
                   try {
-                    const parsed = TokenMetadataSchema.safeParse(JSON.parse(md));
-                    if (parsed.success) {
-                      mdValid = md;
-                      decValid = parsed.data.decimals;
-                    }
-                  } catch {
-                    // ignore JSON errors
-                  }
+                    const decInfo = extractDecimalsAndFieldType(md);
+                    decValid = decInfo.decimals;
+                  } catch {}
                 }
-                tokenMetaCache.set(tokenAddr, { metadata: mdValid, decimals: decValid });
-                metadata = metadata ?? mdValid;
+                const nm = typeof (info as any)?.name === 'string' ? (info as any).name : undefined;
+                const tkSym = typeof (info as any)?.symbol === 'string' ? (info as any).symbol : undefined;
+                const tkTicker = typeof (info as any)?.ticker === 'string' ? (info as any).ticker : undefined;
+                const tkCode = typeof (info as any)?.currencyCode === 'string' ? (info as any).currencyCode : undefined;
+                const tkMeta = md ? getTokenTicker(md) : undefined;
+                const tk = (tkSym || tkTicker || tkCode || tkMeta)?.toString().trim().toUpperCase();
+                try {
+                  console.debug('[sdk-read-client] storage token info fields', {
+                    token: tokenAddr,
+                    name: nm,
+                    symbol: tkSym,
+                    ticker: tkTicker,
+                    currencyCode: tkCode,
+                    metaTicker: tkMeta,
+                    derivedTicker: tk,
+                  });
+                } catch {}
+                tokenMetaCache.set(tokenAddr, { metadata: md, decimals: decValid, name: nm, ticker: tk });
+                metadata = metadata ?? md;
                 decimals = decimals ?? decValid;
+                name = name ?? nm;
+                ticker = ticker ?? tk;
               } catch {
                 tokenMetaCache.set(tokenAddr, { metadata: undefined, decimals: undefined });
               }
             }
           }
 
-          upsert(tokenAddr, amount, metadata, decimals);
+          upsert(tokenAddr, amount, metadata, decimals, name, ticker);
         }
       } catch (e) {
         console.warn('[sdk-read-client] fetchStorage failed', { address }, e);
@@ -441,10 +510,14 @@ export async function getAggregatedBalancesForOwner(
 
     await Promise.allSettled(storages.map((s) => (s.entity ? fetchStorage(s.entity) : Promise.resolve())));
 
-    const result: Array<{ token: string; balance: string; metadata?: string; decimals?: number }> = [];
+    const result: Array<{ token: string; balance: string; metadata?: string; decimals?: number; name?: string; ticker?: string }> = [];
     for (const [token, info] of totals.entries()) {
-      result.push({ token, balance: info.balance.toString(), metadata: info.metadata, decimals: info.decimals });
+      result.push({ token, balance: info.balance.toString(), metadata: info.metadata, decimals: info.decimals, name: info.name, ticker: info.ticker });
     }
+    try {
+      const summary = result.map(r => ({ token: r.token, name: r.name ?? null, ticker: r.ticker ?? null, decimals: r.decimals ?? null, hasMeta: Boolean(r.metadata) }));
+      console.debug('[sdk-read-client] aggregated totals summary', summary);
+    } catch {}
     console.debug('[sdk-read-client] getAggregatedBalancesForOwner done', { tokens: result.length, distinctTokens: result.map(r => r.token) });
     return result;
   } catch (e) {

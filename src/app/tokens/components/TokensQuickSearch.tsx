@@ -20,14 +20,11 @@ export default function TokensQuickSearch(): React.JSX.Element {
     }
 
     const trimmed = inputValue.trim();
-    console.log('[TOKEN_SEARCH] Starting search for:', trimmed);
     
     const target = resolveTokenTarget(trimmed);
-    console.log('[TOKEN_SEARCH] Resolved target:', target);
 
     if (!target) {
       const message = "Enter a valid token address, symbol, or metadata identifier.";
-      console.log('[TOKEN_SEARCH] Invalid target, showing error:', message);
       setError(message);
       Toast.error(message);
       return;
@@ -37,49 +34,37 @@ export default function TokensQuickSearch(): React.JSX.Element {
 
     try {
       let destination = target.path;
-      console.log('[TOKEN_SEARCH] Initial destination:', destination);
 
       if (target.type === "token") {
-        console.log('[TOKEN_SEARCH] Token type detected, checking wallet availability...');
         
         // Prefer client-side wallet lookup via Keeta provider to avoid server 404s
         const keeta = typeof window !== 'undefined' ? (window as typeof window & { keeta?: { getAccountInfo?: (addr: string) => Promise<unknown> } }).keeta : undefined;
-        console.log('[TOKEN_SEARCH] Keeta wallet available:', !!keeta);
-        console.log('[TOKEN_SEARCH] getAccountInfo method available:', !!keeta?.getAccountInfo);
         
         if (keeta?.getAccountInfo) {
           try {
-            console.log('[TOKEN_SEARCH] Attempting wallet lookup for:', trimmed);
             const info = await keeta.getAccountInfo(trimmed);
-            console.log('[TOKEN_SEARCH] Wallet lookup result:', info);
             
             const token: any = info ?? {};
             const tokenType = String(token?.type ?? '').toUpperCase();
-            console.log('[TOKEN_SEARCH] Token type from wallet:', tokenType);
 
             if (tokenType === 'TOKEN') {
               destination = `/tokens/token/${trimmed}`;
             } else {
               destination = `/tokens/token/${trimmed}`;
             }
-            console.log('[TOKEN_SEARCH] Final destination after wallet lookup:', destination);
           } catch (e) {
-            console.log('[TOKEN_SEARCH] Wallet lookup failed, using fallback:', e);
             // If lookup fails, still navigate to the token view
             destination = `/tokens/token/${trimmed}`;
           }
         } else {
-          console.log('[TOKEN_SEARCH] No wallet available, using fallback navigation');
           // Fallback: navigate directly; the page will handle fetching/empty states
           destination = `/tokens/token/${trimmed}`;
         }
       }
 
-      console.log('[TOKEN_SEARCH] Navigating to:', destination);
       setError(null);
       router.push(destination);
     } catch (lookupError) {
-      console.error("[TOKEN_SEARCH] Failed to resolve token resource", lookupError);
       const message = "Unable to resolve token resource. Please try again.";
       setError(message);
       Toast.error(message);

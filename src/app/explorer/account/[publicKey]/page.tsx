@@ -427,7 +427,7 @@ export default function AccountPage(): React.JSX.Element {
                                 )}
                                 <div className="flex flex-col">
                                   <span className="font-medium">
-                                    {token.name ?? "Unnamed Token"}
+                                    {token.name && token.name.trim().length > 0 ? token.name : " - "}
                                   </span>
                                   <Link
                                     href={resolveExplorerPath(token.publicKey) ?? "#"}
@@ -438,7 +438,7 @@ export default function AccountPage(): React.JSX.Element {
                                 </div>
                               </div>
                               <div className="text-sm text-subtle">
-                                {token.ticker ?? "—"}
+                                {token.ticker && token.ticker.trim().length > 0 ? token.ticker : " - "}
                               </div>
                               <div className="text-sm text-foreground">
                                 {token.formattedAmount ??

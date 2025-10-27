@@ -388,13 +388,18 @@ export function getTokenChipPresentation(token: ProcessedToken): TokenChipPresen
  */
 function parseMetadata(metadata?: string | null): TokenMetadata | null {
   if (!metadata) return null;
+  // Try base64 -> JSON first
   try {
-    const metadataJson = atob(metadata);
-    const parsed = JSON.parse(metadataJson);
-    return typeof parsed === "object" && parsed !== null ? (parsed as TokenMetadata) : null;
-  } catch {
-    return null;
-  }
+    const decoded = atob(metadata);
+    const parsed = JSON.parse(decoded);
+    return parsed && typeof parsed === 'object' ? (parsed as TokenMetadata) : null;
+  } catch {}
+  // Fallback: try plain JSON directly
+  try {
+    const parsed = JSON.parse(metadata);
+    return parsed && typeof parsed === 'object' ? (parsed as TokenMetadata) : null;
+  } catch {}
+  return null;
 }
 
 /**
@@ -613,7 +618,7 @@ export function getTokenIconDataUrl(icon: TokenIcon | null | undefined): string 
  * Create a fallback badge icon
  */
 export function createFallbackTokenIcon(symbol: string): TokenIcon {
-  const letter = symbol.charAt(0).toUpperCase();
+  const letter = (symbol && symbol.length > 0 ? symbol.charAt(0) : '?').toUpperCase();
 
   // Color palette for badges
   const colors = [
@@ -626,7 +631,7 @@ export function createFallbackTokenIcon(symbol: string): TokenIcon {
   ] as const;
 
   // Select color based on first character
-  const charCode = letter.charCodeAt(0);
+  const charCode = letter.charCodeAt(0) || 0;
   const colorIndex = charCode % colors.length;
   const color = colors[colorIndex];
 
@@ -671,16 +676,22 @@ export async function processTokenForDisplay(
     }
   }
 
-  const fallbackName = `Token ${tokenAddress.slice(-8)}`;
-  const fallbackTicker = tokenAddress.slice(-4).toUpperCase();
+  let name = metadataName || (isBaseToken ? "Keeta Token" : "");
+  let ticker = metadataTicker ? metadataTicker.trim().toUpperCase() : (isBaseToken ? "KTA" : "");
 
-  let name = metadataName || fallbackName;
-  let ticker = metadataTicker ? metadataTicker.trim().toUpperCase() : fallbackTicker;
-
-  if (isBaseToken) {
-    name = metadataName || "Keeta Token";
-    ticker = metadataTicker ? metadataTicker.trim().toUpperCase() : "KTA";
-  }
+  try {
+    console.debug('[TOKENS] processTokenForDisplay:input', {
+      tokenAddress,
+      hasMetadata: Boolean(metadata),
+      metadataName,
+      metadataTicker,
+      decimalsFromMetadata: decimalInfo.decimals,
+      fieldTypeFromMetadata: decimalInfo.fieldType,
+      displayDecimalsFromMetadata: decimalInfo.displayDecimals,
+      isBaseToken,
+      rawBalance: typeof balance === 'bigint' ? balance.toString() : String(balance),
+    });
+  } catch {}
 
   const formattedAmount = formatTokenAmount(balance, decimals, fieldType, displayDecimals);
   const displayAmount = formatAmountWithCommas(formattedAmount);
@@ -704,10 +715,24 @@ export async function processTokenForDisplay(
   if (!iconDataUrl && !fallbackIcon) {
     if (isBaseToken) {
       iconDataUrl = "/icons/TLEOfKos_400x400.jpg";
-    } else {
+    } else if (ticker) {
       fallbackIcon = createFallbackTokenIcon(ticker);
     }
   }
+
+  try {
+    console.debug('[TOKENS] processTokenForDisplay:output', {
+      tokenAddress,
+      name,
+      ticker,
+      decimals,
+      fieldType,
+      displayDecimals,
+      formattedAmount: displayAmount,
+      hasIcon: Boolean(iconDataUrl),
+      hasFallbackIcon: Boolean(fallbackIcon),
+    });
+  } catch {}
 
   return {
     address: tokenAddress,
