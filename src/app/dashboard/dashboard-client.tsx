@@ -7,7 +7,7 @@ import EstimatedBalance, { type KtaPriceData } from "@/app/components/EstimatedB
 import { useWallet } from "@/app/contexts/WalletContext";
 import { SectionCards } from "@/components/section-cards";
 import { TokensDataTable, schema } from "@/components/tokens-data-table";
-import { formatAmountWithCommas } from "@/app/lib/token-utils";
+import { formatAmountWithCommas, fromBaseUnits } from "@/app/lib/token-utils";
 import type { z } from "zod";
 
 function resolveNetworkName(network: unknown): string {
@@ -36,11 +36,18 @@ function mapTokensToTable(
   const networkName = resolveNetworkName(network);
 
   return tokens.map((token, index) => {
-    const numericBalance = Number(token.formattedAmount.replace(/,/g, ""));
+    let numericBalance: number | null = null;
+    try {
+      numericBalance = fromBaseUnits(BigInt(token.balance), token.decimals);
+    } catch {
+      numericBalance = null;
+    }
     const isBase = token.isBaseToken || token.ticker.toUpperCase() === "KTA";
-    const usdFromProp = token.formattedUsdValue ? Number(token.formattedUsdValue.replace(/[$,]/g, "")) : null;
-    const derivedUsd = isBase && Number.isFinite(numericBalance) && ktaPriceData
-      ? numericBalance * ktaPriceData.usd
+    const usdFromProp = token.formattedUsdValue
+      ? Number.parseFloat(token.formattedUsdValue.replace(/[$,]/g, ""))
+      : null;
+    const derivedUsd = isBase && Number.isFinite(numericBalance ?? NaN) && ktaPriceData
+      ? (numericBalance as number) * ktaPriceData.usd
       : usdFromProp;
 
     return {
