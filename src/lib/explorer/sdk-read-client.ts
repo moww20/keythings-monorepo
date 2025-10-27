@@ -260,8 +260,27 @@ export async function listStorageAccountsByOwner(ownerPublicKey: string): Promis
       return [];
     }
 
-    console.debug('[sdk-read-client] listStorageAccountsByOwner start', { owner: ownerPublicKey });
-    const entries = await client.listACLsByPrincipal([owner]);
+    console.log('[sdk-read-client] listStorageAccountsByOwner start', { owner: ownerPublicKey });
+    let entries = await client.listACLsByPrincipal([owner]);
+    let calledShape: 'array' | 'object' = 'array';
+    if (!entries || (Array.isArray(entries) && entries.length === 0)) {
+      try {
+        // Some client versions expect an object shape: { account }
+        entries = await client.listACLsByPrincipal({ account: owner });
+        calledShape = 'object';
+      } catch (e) {
+        try { console.debug('[sdk-read-client] listACLsByPrincipal object-shape call failed', e); } catch {}
+      }
+    }
+    try {
+      console.log('[sdk-read-client] listACLsByPrincipal returned', {
+        type: typeof entries,
+        isArray: Array.isArray(entries),
+        count: Array.isArray(entries) ? entries.length : undefined,
+        sample: Array.isArray(entries) && entries.length > 0 ? Object.keys(entries[0] ?? {}).slice(0, 6) : null,
+        calledShape,
+      });
+    } catch {}
     const results: Array<{ principal?: string; entity?: string; target?: string; permissions?: string[] }> = [];
 
     const toAccountString = (value: unknown): string | undefined => {
@@ -289,25 +308,33 @@ export async function listStorageAccountsByOwner(ownerPublicKey: string): Promis
       for (const acl of entries) {
         try {
           const entity = (acl as any).entity;
-          const isStorage = typeof entity?.isStorage === 'function' ? Boolean(entity.isStorage()) : false;
-          if (!isStorage) continue;
+          const rawPerms = (acl as any).permissions;
+          const permissions: string[] = Array.isArray(rawPerms)
+            ? rawPerms.map((p: unknown) => (typeof p === 'string' ? p : String(p)))
+            : Array.isArray(rawPerms?.base?.flags)
+              ? (rawPerms.base.flags as unknown[]).map((p: unknown) => (typeof p === 'string' ? p : String(p)))
+              : [];
+          const isStorage =
+            (typeof entity?.isStorage === 'function' ? Boolean(entity.isStorage()) : false) ||
+            permissions.some((p) => typeof p === 'string' && p.toUpperCase().startsWith('STORAGE_'));
+          if (!isStorage) {
+            try { console.log('[sdk-read-client] ACL skipped (not storage)', { entityType: typeof entity, hasIsStorage: typeof entity?.isStorage === 'function', permissions }); } catch {}
+            continue;
+          }
 
-          const permissions: string[] = Array.isArray((acl as any).permissions)
-            ? (acl as any).permissions.map((p: unknown) => (typeof p === 'string' ? p : String(p)))
-            : [];
-
-          results.push({
-            principal: toAccountString((acl as any).principal),
-            entity: toAccountString((acl as any).entity),
-            target: toAccountString((acl as any).target),
-            permissions,
-          });
-        } catch {
+          const principalS = toAccountString((acl as any).principal);
+          const entityS = toAccountString((acl as any).entity);
+          const targetS = toAccountString((acl as any).target);
+          results.push({ principal: principalS, entity: entityS, target: targetS, permissions });
+          try { console.log('[sdk-read-client] ACL accepted', { principal: principalS, entity: entityS, target: targetS, permissionsCount: permissions.length }); } catch {}
+        } catch (e) {
+          try { console.warn('[sdk-read-client] ACL parse error', e); } catch {}
           // skip malformed entry
         }
       }
     }
 
+    try { console.log('[sdk-read-client] listStorageAccountsByOwner done', { count: results.length }); } catch {}
     return results;
   } catch {
     return [];

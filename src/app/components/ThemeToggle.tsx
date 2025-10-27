@@ -23,15 +23,21 @@ function applyTheme(theme: ThemeMode): void {
 }
 
 export default function ThemeToggle(): React.JSX.Element {
-  const [theme, setTheme] = useState<ThemeMode>(() => {
-    if (typeof window === "undefined") {
-      return "dark";
+  // Important: Use a deterministic initial value for SSR to avoid hydration mismatch.
+  // We then update to the actual user/system preference after the component mounts.
+  const [theme, setTheme] = useState<ThemeMode>("dark");
+
+  // On mount (client-only), resolve the real theme and apply it.
+  useEffect(() => {
+    try {
+      const saved = typeof window !== "undefined" ? localStorage.getItem("theme") : null;
+      const next = saved === "light" || saved === "dark" ? (saved as ThemeMode) : (getSystemPrefersDark() ? "dark" : "light");
+      setTheme(next);
+      applyTheme(next);
+    } catch {
+      // no-op
     }
-    const saved = localStorage.getItem("theme");
-    const initial = saved === "light" || saved === "dark" ? saved : (getSystemPrefersDark() ? "dark" : "light");
-    applyTheme(initial);
-    return initial;
-  });
+  }, []);
 
   useEffect(() => {
     applyTheme(theme);

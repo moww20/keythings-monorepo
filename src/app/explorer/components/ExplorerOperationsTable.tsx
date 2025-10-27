@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useMemo, useState } from "react";
 
 import {
   Table,
@@ -12,6 +13,7 @@ import {
 } from "@/components/ui/table";
 import type { ExplorerOperation } from "@/lib/explorer/client";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from "@/components/ui/button";
 
 import {
   formatRelativeTime,
@@ -141,6 +143,16 @@ function resolveLink(
 export default function ExplorerOperationsTable(
   { operations, emptyLabel = "No operations available.", participantsMode = 'both', loading = false }: ExplorerOperationsTableProps,
 ): React.JSX.Element {
+  const [pageIndex, setPageIndex] = useState(0);
+  const pageSize = 5;
+  const pageCount = Math.max(1, Math.ceil(operations.length / pageSize));
+  useEffect(() => {
+    setPageIndex((prev) => Math.min(prev, pageCount - 1));
+  }, [operations.length, pageCount]);
+  const pageRows = useMemo(() => {
+    const start = pageIndex * pageSize;
+    return operations.slice(start, start + pageSize);
+  }, [operations, pageIndex]);
   if (loading && !operations.length) {
     // Render table shell with skeleton rows
     return (
@@ -157,7 +169,7 @@ export default function ExplorerOperationsTable(
               </TableRow>
             </TableHeader>
             <TableBody>
-              {Array.from({ length: 10 }).map((_, i) => (
+              {Array.from({ length: 5 }).map((_, i) => (
                 <TableRow key={`sk-${i}`} className="border-hairline">
                   <TableCell className="px-6 py-4 w-[220px]">
                     <div className="flex flex-col gap-2">
@@ -217,9 +229,10 @@ export default function ExplorerOperationsTable(
   }
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-hairline bg-[color:color-mix(in_oklab,var(--foreground)_3%,transparent)]">
-      <div className="min-w-[720px]">
-        <Table className="w-full table-fixed">
+    <>
+      <div className="overflow-hidden rounded-2xl border border-hairline bg-[color:color-mix(in_oklab,var(--foreground)_3%,transparent)]">
+        <div className="min-w-[720px]">
+          <Table className="w-full table-fixed">
           <TableHeader className="bg-[color:color-mix(in_oklab,var(--foreground)_6%,transparent)] text-xs uppercase tracking-[0.3em] text-muted">
             <TableRow className="border-hairline text-muted">
               <TableHead className="px-6 py-3 w-[220px] whitespace-nowrap">Block</TableHead>
@@ -230,7 +243,7 @@ export default function ExplorerOperationsTable(
             </TableRow>
           </TableHeader>
           <TableBody>
-            {operations.map((operation, idx) => {
+            {pageRows.map((operation, idx) => {
               const summary = summarizeOperation(operation);
               if (process.env.NODE_ENV === "development") {
                 console.log("[ExplorerOperationsTable] Rendering operation", {
@@ -458,6 +471,55 @@ export default function ExplorerOperationsTable(
           </TableBody>
         </Table>
       </div>
-    </div>
+      </div>
+      <div className="flex items-center px-4 pt-3">
+        <div className="text-muted-foreground hidden flex-1 text-sm lg:flex">&nbsp;</div>
+        <div className="ml-auto flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 min-w-[2.5rem] px-2"
+            onClick={() => setPageIndex(0)}
+            disabled={pageIndex === 0}
+            aria-label="Go to first page"
+          >
+            {"<<"}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 min-w-[2.5rem] px-2"
+            onClick={() => setPageIndex((p) => Math.max(0, p - 1))}
+            disabled={pageIndex === 0}
+            aria-label="Go to previous page"
+          >
+            {"<"}
+          </Button>
+          <span className="px-1 text-sm font-medium">
+            Page {pageIndex + 1} of {pageCount}
+          </span>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 min-w-[2.5rem] px-2"
+            onClick={() => setPageIndex((p) => Math.min(pageCount - 1, p + 1))}
+            disabled={pageIndex >= pageCount - 1}
+            aria-label="Go to next page"
+          >
+            {">"}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 min-w-[2.5rem] px-2"
+            onClick={() => setPageIndex(pageCount - 1)}
+            disabled={pageIndex >= pageCount - 1}
+            aria-label="Go to last page"
+          >
+            {">>"}
+          </Button>
+        </div>
+      </div>
+    </>
   );
 }

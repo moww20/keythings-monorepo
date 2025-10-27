@@ -49,30 +49,201 @@ export function useStorageAccounts(owner: string | null | undefined) {
   const [storages, setStorages] = React.useState<z.infer<typeof StorageAclEntrySchema>[]>([]);
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  const { userClient } = useWallet();
 
   const fetchStorages = React.useCallback(async () => {
-    if (!owner) {
-      setStorages([]);
-      return;
-    }
-    setLoading(true);
-    setError(null);
     try {
-      const raw: unknown = await listStorageAccountsByOwner(owner);
+      console.log('[StorageList] fetchStorages called', { owner });
+      if (!owner) {
+        console.log('[StorageList] No owner provided - skipping fetch');
+        setStorages([]);
+        return;
+      }
+      setLoading(true);
+      setError(null);
 
-      const parsed = StorageAclListSchema.safeParse(raw);
+      // Prefer extension provider RPC (matches how the extension surfaces data to dApps)
+      let entriesRaw: unknown = null;
+      let trustedFiltered = false;
+      try {
+        const provider = typeof window !== 'undefined' ? (window as any).keeta : null;
+        if (provider && typeof provider.listStorageAccountsByOwner === 'function') {
+          console.log('[StorageList] using provider.listStorageAccountsByOwner(owner)');
+          entriesRaw = await provider.listStorageAccountsByOwner(owner);
+          trustedFiltered = true; // extension already filters to storage entities
+        } else if (provider && typeof provider.request === 'function') {
+          console.log('[StorageList] using provider.request(keeta_listStorageAccountsByOwner)');
+          entriesRaw = await provider.request({ method: 'keeta_listStorageAccountsByOwner', params: [owner] });
+          trustedFiltered = true; // extension already filters to storage entities
+        }
+      } catch (e) {
+        console.warn('[StorageList] provider listStorageAccountsByOwner path failed, will try userClient', e);
+      }
+
+      // Next, try direct SDK call on the authenticated user client (like the extension internal UI)
+      if (userClient && typeof (userClient as any).listACLsByPrincipal === 'function' && !entriesRaw) {
+        try {
+          console.log('[StorageList] using userClient.listACLsByPrincipal()');
+          entriesRaw = await (userClient as any).listACLsByPrincipal();
+        } catch (e) {
+          console.warn('[StorageList] userClient.listACLsByPrincipal failed, will fallback', e);
+        }
+      }
+
+      // Try nested client shape (some providers expose underlying client at userClient.client)
+      if (!entriesRaw && userClient && typeof (userClient as any).client?.listACLsByPrincipal === 'function') {
+        try {
+          console.log('[StorageList] using userClient.client.listACLsByPrincipal()');
+          entriesRaw = await (userClient as any).client.listACLsByPrincipal();
+        } catch (e) {
+          console.warn('[StorageList] userClient.client.listACLsByPrincipal failed, will fallback', e);
+        }
+      }
+
+      // If no builder-capable userClient, try provider directly for read-only
+      if (!entriesRaw) {
+        try {
+          const provider = typeof window !== 'undefined' ? (window as any).keeta : null;
+          if (provider && typeof provider.listACLsByPrincipal === 'function') {
+            console.log('[StorageList] using provider.listACLsByPrincipal()');
+            entriesRaw = await provider.listACLsByPrincipal();
+          }
+        } catch (e) {
+          console.warn('[StorageList] provider.listACLsByPrincipal failed, will fallback', e);
+        }
+      }
+
+      // As last resort, request a fresh user client and call directly
+      if (!entriesRaw) {
+        try {
+          const provider = typeof window !== 'undefined' ? (window as any).keeta : null;
+          if (provider && typeof provider.getUserClient === 'function') {
+            const fresh = await provider.getUserClient();
+            if (fresh?.listACLsByPrincipal) {
+              console.log('[StorageList] using freshClient.listACLsByPrincipal()');
+              entriesRaw = await fresh.listACLsByPrincipal();
+            } else if (fresh?.client?.listACLsByPrincipal) {
+              console.log('[StorageList] using freshClient.client.listACLsByPrincipal()');
+              entriesRaw = await fresh.client.listACLsByPrincipal();
+            }
+          }
+        } catch (e) {
+          console.warn('[StorageList] provider.getUserClient path failed, will fallback', e);
+        }
+      }
+
+      // Fallback to read client helper if needed
+      if (!entriesRaw) {
+        const raw: unknown = await listStorageAccountsByOwner(owner);
+        entriesRaw = raw;
+      }
+
+      try {
+        console.log('[StorageList] raw ACL response', {
+          type: typeof entriesRaw,
+          isArray: Array.isArray(entriesRaw),
+          count: Array.isArray(entriesRaw) ? (entriesRaw as unknown[]).length : undefined,
+        });
+        if (Array.isArray(entriesRaw) && (entriesRaw as unknown[]).length > 0) {
+          const first = (entriesRaw as any[])[0];
+          console.log('[StorageList] sample entry keys', Object.keys(first ?? {}));
+        }
+      } catch {}
+
+      // If extension already filtered and serialized, try direct Zod parse first
+      if (Array.isArray(entriesRaw) && trustedFiltered) {
+        const directParsed = StorageAclListSchema.safeParse(entriesRaw);
+        if (directParsed.success) {
+          try { console.log('[StorageList] provider parsed entries (direct)', { count: directParsed.data.length }); } catch {}
+          setStorages(directParsed.data);
+          return;
+        } else {
+          try { console.warn('[StorageList] direct parse failed; will normalize', directParsed.error?.issues?.slice?.(0, 5)); } catch {}
+        }
+      }
+
+      // Normalize to our schema: principal/entity/target as strings, permissions as string[]
+      const normalized: Array<{ principal?: string; entity?: string; target?: string; permissions?: string[] }> = [];
+      if (Array.isArray(entriesRaw) && entriesRaw.every((e) => typeof e === 'string')) {
+        try { console.log('[StorageList] normalizing string[] entries'); } catch {}
+        for (const addr of entriesRaw as string[]) {
+          const entityS = typeof addr === 'string' ? addr : String(addr ?? '');
+          if (entityS && entityS.trim().length > 0) {
+            normalized.push({ principal: owner ?? '', entity: entityS, target: undefined, permissions: [] });
+          }
+        }
+      } else if (Array.isArray(entriesRaw)) {
+        for (const acl of entriesRaw as any[]) {
+          try {
+            const toAccountString = (value: unknown): string | undefined => {
+              if (typeof value === 'string') return value;
+              try {
+                if (value && typeof (value as { publicKeyString?: string }).publicKeyString === 'string') {
+                  return (value as { publicKeyString: string }).publicKeyString;
+                }
+                const maybePK = (value as { publicKeyString?: { toString?: () => string } }).publicKeyString;
+                if (maybePK && typeof maybePK.toString === 'function') {
+                  const coerced = String(maybePK.toString());
+                  if (coerced && coerced !== '[object Object]') return coerced;
+                }
+                if (value && typeof (value as { toString?: () => string }).toString === 'function') {
+                  const coerced = String((value as { toString: () => string }).toString());
+                  if (coerced && coerced !== '[object Object]') return coerced;
+                }
+              } catch {}
+              return undefined;
+            };
+
+            const entity = (acl as any).entity ?? (acl as any).address ?? (acl as any).account ?? (acl as any).storage ?? (acl as any).entityAddress;
+            const rawPerms = (acl as any).permissions ?? (acl as any).flags ?? (acl as any).permissionFlags;
+            const permissions: string[] = Array.isArray(rawPerms)
+              ? rawPerms.map((p: unknown) => (typeof p === 'string' ? p : String(p)))
+              : Array.isArray(rawPerms?.base?.flags)
+                ? (rawPerms.base.flags as unknown[]).map((p: unknown) => (typeof p === 'string' ? p : String(p)))
+                : [];
+            const isStorage = trustedFiltered
+              || (typeof entity?.isStorage === 'function' ? Boolean(entity.isStorage()) : false)
+              || permissions.some((p) => typeof p === 'string' && p.toUpperCase().startsWith('STORAGE_'))
+              || typeof entity === 'string'; // heuristically accept string entity when provider pre-serializes
+            if (!isStorage) continue;
+
+            const principalRaw = (acl as any).principal ?? (acl as any).owner ?? owner;
+            const principalS = toAccountString(principalRaw) || owner;
+            const entityRaw = (acl as any).entity ?? (acl as any).address ?? (acl as any).account ?? (acl as any).storage ?? (acl as any).entityAddress;
+            const entityS = toAccountString(entityRaw);
+            const targetRawAny = (acl as any).target ?? (acl as any).token ?? (acl as any).targetAccount;
+            const targetRaw = toAccountString(targetRawAny);
+            const targetS = targetRaw && targetRaw.trim && targetRaw.trim().length > 0 ? targetRaw : undefined;
+            if (!entityS || entityS.trim().length === 0) {
+              continue;
+            }
+            normalized.push({
+              principal: principalS,
+              entity: entityS,
+              target: targetS,
+              permissions,
+            });
+          } catch {}
+        }
+      }
+
+      const parsed = StorageAclListSchema.safeParse(normalized);
       if (!parsed.success) {
+        try { console.warn('[StorageList] Zod parse failed for normalized ACL list', parsed.error?.issues); } catch {}
         setStorages([]);
       } else {
+        try { console.log('[StorageList] parsed storage entries', { count: parsed.data.length }); } catch {}
         setStorages(parsed.data);
       }
     } catch (e) {
+      console.error('[StorageList] fetchStorages error', e);
       setError(e instanceof Error ? e.message : "Failed to fetch storages");
       setStorages([]);
     } finally {
       setLoading(false);
+      try { console.log('[StorageList] fetchStorages done', { loading: false }); } catch {}
     }
-  }, [owner]);
+  }, [owner, userClient]);
 
   React.useEffect(() => {
     void fetchStorages();
@@ -242,6 +413,13 @@ export function StorageList({ owner, showActions = false, className, rowActionsE
   const start = pageIndex * pageSize;
   const end = start + pageSize;
   const displayedStorages = storages.slice(start, end);
+
+  React.useEffect(() => {
+    try {
+      console.log('[StorageList] owner prop changed', { owner });
+      console.log('[StorageList] storages state updated', { total: storages.length, showing: displayedStorages.length, pageIndex, pageCount });
+    } catch {}
+  }, [owner, storages, displayedStorages.length, pageIndex, pageCount]);
 
   React.useEffect(() => {
     // Clamp page index when data changes
