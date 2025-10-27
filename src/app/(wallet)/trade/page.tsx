@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useMemo, useState, useEffect } from 'react';
+import { useCallback, useMemo, useState, useEffect, type CSSProperties } from 'react';
 
 import { TokenSwapSelector } from '@/app/components/TradingPairSelector';
 import { TradingViewChart, type TradingViewTimeframe } from '@/app/components/TradingViewChart';
@@ -12,6 +12,8 @@ import { RFQDepthChart } from '@/app/components/rfq/RFQDepthChart';
 import { RFQOrderBook } from '@/app/components/rfq/RFQOrderBook';
 import { RFQUnifiedPanel } from '@/app/components/rfq/RFQUnifiedPanel';
 import { fetchRfqAvailablePairs } from '@/app/lib/rfq-api';
+import { AppSidebar } from '@/components/app-sidebar';
+import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar';
 
 const TIMEFRAMES: TradingViewTimeframe[] = ['1s', '15m', '1H', '4H', '1D', '1W'];
 const MODES = [
@@ -415,130 +417,148 @@ export default function TradePage(): React.JSX.Element {
   ]);
 
   return (
-    <div className="min-h-screen bg-[color:var(--background)] px-6 py-8">
-      <div className="mx-auto flex w-full max-w-[1440px] flex-col gap-6">
-        <section className="relative z-30 rounded-lg border border-hairline bg-surface/70 p-4 shadow-sm backdrop-blur">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-            <div className="flex w-full flex-col gap-2">
-              <TokenSwapSelector
-                tokenA={tokenA}
-                tokenB={tokenB}
-                catalog={catalogTokens}
-                walletBalances={walletBalances}
-                onChange={handleTokenSelection}
-                onRefreshCatalog={handleRefreshCatalog}
-              />
-              {pairsError ? (
-                <div className="rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs text-red-300">
-                  {pairsError}
-                </div>
-              ) : null}
-            </div>
-
-            {marketDetails ? (
-              <div className="grid w-full max-w-sm grid-cols-2 gap-4 text-sm text-muted sm:grid-cols-3">
-                <div>
-                  <p className="text-xs uppercase tracking-wide">Last Price</p>
-                  <p className="text-sm font-semibold text-foreground">
-                    {isLoadingPrice ? (
-                      <span className="text-muted">Loading...</span>
-                    ) : (
-                      `$${marketDetails.price.toLocaleString('en-US', { minimumFractionDigits: 4, maximumFractionDigits: 4 })}`
-                    )}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-xs uppercase tracking-wide">24h Change</p>
-                  <p
-                    className={`text-sm font-semibold ${
-                      marketDetails.changePercent24h >= 0 ? 'text-green-400' : 'text-red-400'
-                    }`}
+    <div className="h-screen bg-background">
+      <SidebarProvider
+        style={
+          {
+            "--sidebar-width": "calc(var(--spacing) * 72)",
+            "--header-height": "calc(var(--spacing) * 12)",
+          } as CSSProperties
+        }
+      >
+        <AppSidebar variant="inset" />
+        <SidebarInset>
+          <div className="flex flex-1 flex-col h-full">
+            <div className="@container/main flex flex-1 flex-col gap-2 overflow-auto">
+              <div className="flex flex-col gap-4 py-4 md:gap-6 md:py-6">
+                <div className="mx-auto w-full max-w-[1440px]">
+                  <section className="relative z-30 rounded-lg border border-hairline bg-surface/70 p-4 shadow-sm backdrop-blur">
+                    <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                      <div className="flex w-full flex-col gap-2">
+                        <TokenSwapSelector
+                          tokenA={tokenA}
+                          tokenB={tokenB}
+                          catalog={catalogTokens}
+                          walletBalances={walletBalances}
+                          onChange={handleTokenSelection}
+                          onRefreshCatalog={handleRefreshCatalog}
+                        />
+                        {pairsError ? (
+                          <div className="rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs text-red-300">
+                            {pairsError}
+                          </div>
+                        ) : null}
+                      </div>
+ 
+                      {marketDetails ? (
+                        <div className="grid w-full max-w-sm grid-cols-2 gap-4 text-sm text-muted sm:grid-cols-3">
+                          <div>
+                            <p className="text-xs uppercase tracking-wide">Last Price</p>
+                            <p className="text-sm font-semibold text-foreground">
+                              {isLoadingPrice ? (
+                                <span className="text-muted">Loading...</span>
+                              ) : (
+                                `$${marketDetails.price.toLocaleString('en-US', { minimumFractionDigits: 4, maximumFractionDigits: 4 })}`
+                              )}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-xs uppercase tracking-wide">24h Change</p>
+                            <p
+                              className={`text-sm font-semibold ${
+                                marketDetails.changePercent24h >= 0 ? 'text-green-400' : 'text-red-400'
+                              }`}
+                            >
+                              {isLoadingPrice ? (
+                                <span className="text-muted">Loading...</span>
+                              ) : (
+                                <>
+                                  {marketDetails.changePercent24h >= 0 ? '+' : ''}
+                                  {marketDetails.changePercent24h.toFixed(2)}%
+                                </>
+                              )}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-xs uppercase tracking-wide">24h Volume</p>
+                            <p className="text-sm font-semibold text-foreground">
+                              {isLoadingPrice ? (
+                                <span className="text-muted">Loading...</span>
+                              ) : (
+                                marketDetails.volume24h.toLocaleString('en-US', { maximumFractionDigits: 0 })
+                              )}
+                            </p>
+                          </div>
+                        </div>
+                      ) : null}
+                    </div>
+                  </section>
+ 
+                  <RFQProvider
+                    tokenA={tokenA ? { symbol: tokenA.symbol, address: tokenA.address, decimals: tokenA.decimals, isListed: tokenA.isListed } : null}
+                    tokenB={tokenB ? { symbol: tokenB.symbol, address: tokenB.address, decimals: tokenB.decimals, isListed: tokenB.isListed } : null}
                   >
-                    {isLoadingPrice ? (
-                      <span className="text-muted">Loading...</span>
-                    ) : (
-                      <>
-                        {marketDetails.changePercent24h >= 0 ? '+' : ''}
-                        {marketDetails.changePercent24h.toFixed(2)}%
-                      </>
-                    )}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-xs uppercase tracking-wide">24h Volume</p>
-                  <p className="text-sm font-semibold text-foreground">
-                    {isLoadingPrice ? (
-                      <span className="text-muted">Loading...</span>
-                    ) : (
-                      marketDetails.volume24h.toLocaleString('en-US', { maximumFractionDigits: 0 })
-                    )}
-                  </p>
+                    <div className="grid grid-cols-12 gap-6">
+                      <section className="col-span-12 lg:col-span-8">
+                        <div className="grid grid-cols-1 gap-4">
+                          <div className="glass rounded-lg border border-hairline p-4">
+                            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                              <div>
+                                <h2 className="text-lg font-semibold text-foreground">
+                                  {selectedPairSymbol ? `${selectedPairSymbol} RFQ Chart` : 'RFQ Chart'}
+                                </h2>
+                                <p className="text-xs text-muted">Streaming prices to benchmark maker quotes.</p>
+                              </div>
+                              <div className="flex items-center gap-1">
+                                {TIMEFRAMES.map((value) => (
+                                  <button
+                                    key={value}
+                                    type="button"
+                                    onClick={() => setTimeframe(value)}
+                                    className={`rounded px-3 py-1 text-xs font-medium transition-colors ${
+                                      timeframe === value
+                                        ? 'bg-accent text-white'
+                                        : 'text-muted hover:bg-surface hover:text-foreground'
+                                    }`}
+                                    disabled={!selectedPairSymbol}
+                                  >
+                                    {value}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                            <div className="h-[360px] flex items-center justify-center">
+                              {selectedPairSymbol ? (
+                                <TradingViewChart pair={selectedPairSymbol} timeframe={timeframe} className="h-full w-full" />
+                              ) : (
+                                <span className="text-sm text-muted">Select a market to load the RFQ chart.</span>
+                              )}
+                            </div>
+                          </div>
+                          <RFQDepthChart />
+                          <div className="glass rounded-lg border border-hairline p-4">
+                            {selectedPairSymbol ? (
+                              <RFQOrderBook onPairChange={handlePairRecommendation} />
+                            ) : (
+                              <div className="text-sm text-muted text-center">
+                                Select a market to view the RFQ order book.
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </section>
+ 
+                      <aside className="col-span-12 lg:col-span-4 flex flex-col gap-4">
+                        <RFQUnifiedPanel mode={mode} onModeChange={handleModeChange} onPairChange={handlePairRecommendation} />
+                      </aside>
+                    </div>
+                  </RFQProvider>
                 </div>
               </div>
-            ) : null}
+            </div>
           </div>
-        </section>
-
-        <RFQProvider
-          tokenA={tokenA ? { symbol: tokenA.symbol, address: tokenA.address, decimals: tokenA.decimals, isListed: tokenA.isListed } : null}
-          tokenB={tokenB ? { symbol: tokenB.symbol, address: tokenB.address, decimals: tokenB.decimals, isListed: tokenB.isListed } : null}
-        >
-          <div className="grid grid-cols-12 gap-6">
-            <section className="col-span-12 lg:col-span-8">
-              <div className="grid grid-cols-1 gap-4">
-                <div className="glass rounded-lg border border-hairline p-4">
-                  <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                    <div>
-                      <h2 className="text-lg font-semibold text-foreground">
-                        {selectedPairSymbol ? `${selectedPairSymbol} RFQ Chart` : 'RFQ Chart'}
-                      </h2>
-                      <p className="text-xs text-muted">Streaming prices to benchmark maker quotes.</p>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      {TIMEFRAMES.map((value) => (
-                        <button
-                          key={value}
-                          type="button"
-                          onClick={() => setTimeframe(value)}
-                          className={`rounded px-3 py-1 text-xs font-medium transition-colors ${
-                            timeframe === value
-                              ? 'bg-accent text-white'
-                              : 'text-muted hover:bg-surface hover:text-foreground'
-                          }`}
-                          disabled={!selectedPairSymbol}
-                        >
-                          {value}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="h-[360px] flex items-center justify-center">
-                    {selectedPairSymbol ? (
-                      <TradingViewChart pair={selectedPairSymbol} timeframe={timeframe} className="h-full w-full" />
-                    ) : (
-                      <span className="text-sm text-muted">Select a market to load the RFQ chart.</span>
-                    )}
-                  </div>
-                </div>
-                <RFQDepthChart />
-                <div className="glass rounded-lg border border-hairline p-4">
-                  {selectedPairSymbol ? (
-                    <RFQOrderBook onPairChange={handlePairRecommendation} />
-                  ) : (
-                    <div className="text-sm text-muted text-center">
-                      Select a market to view the RFQ order book.
-                    </div>
-                  )}
-                </div>
-              </div>
-            </section>
-
-            <aside className="col-span-12 lg:col-span-4 flex flex-col gap-4">
-              <RFQUnifiedPanel mode={mode} onModeChange={handleModeChange} onPairChange={handlePairRecommendation} />
-            </aside>
-          </div>
-        </RFQProvider>
-      </div>
+        </SidebarInset>
+      </SidebarProvider>
     </div>
   );
 }

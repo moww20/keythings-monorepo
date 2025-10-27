@@ -72,10 +72,9 @@ const data = {
       disabled: true,
     },
     {
-      name: "OTC Swap",
+      name: "Request for Quote",
       icon: ArrowLeftRight,
-      url: "/otc-swap",
-      disabled: true,
+      url: "/trade",
     },
   ],
   navSecondary: [
@@ -203,7 +202,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
 
       <SidebarContent>
         <div className="px-2 py-1">
-          <h2 className="mb-2 text-xs font-semibold text-muted tracking-wider">Portfolio</h2>
+          <h2 className="mb-2 text-xs font-semibold text-muted tracking-wider">My Wallet</h2>
           <NavMain items={data.navPortfolio} />
         </div>
         <div className="px-2 py-1">

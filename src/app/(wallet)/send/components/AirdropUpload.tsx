@@ -36,8 +36,16 @@ type ParsedRecipient = {
   amount: string;
 };
 
+const RecipientRowSchema = z.object({
+  address: z.string().min(1, "Recipient address required"),
+  amount: z
+    .string()
+    .regex(/^\d+(?:\.\d+)?$/, "Invalid amount format (use digits with optional decimal)")
+    .min(1, "Amount required"),
+});
+
 const parseCsvContent = (content: string): ParsedRecipient[] => {
-  return content
+  const rows = content
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter(Boolean)
@@ -47,8 +55,13 @@ const parseCsvContent = (content: string): ParsedRecipient[] => {
         address: address?.trim() ?? "",
         amount: amount?.trim() ?? "",
       } satisfies ParsedRecipient;
-    })
-    .filter((entry) => entry.address && entry.amount);
+    });
+
+  const validated = z.array(RecipientRowSchema).safeParse(rows);
+  if (!validated.success) {
+    return [];
+  }
+  return validated.data;
 };
 
 const AirdropUpload = () => {
@@ -56,7 +69,6 @@ const AirdropUpload = () => {
     userClient,
     requestTransactionPermissions,
     hasTransactionPermissions,
-    publicKey,
     isConnected,
     isUnlocked,
     isDisconnected,
@@ -220,31 +232,37 @@ const AirdropUpload = () => {
     setIsSubmitting(true);
 
     try {
-      for (const entry of recipients) {
+      const tokenRef = JSON.parse(JSON.stringify({ publicKeyString: token }));
+      const MAX_OPS = 500;
+
+      for (let i = 0; i < recipients.length; i += MAX_OPS) {
+        const batch = recipients.slice(i, i + MAX_OPS);
+
         const builder = userClient.initBuilder();
         if (!builder) {
           throw new Error("Failed to initialize transaction builder. Please update your Keeta Wallet.");
         }
 
-        if (typeof builder.send !== "function") {
+        if (typeof (builder as { send?: (...args: unknown[]) => unknown }).send !== "function") {
           throw new Error("Wallet does not support send operations. Please update your Keeta Wallet.");
         }
 
-        const toAccount = JSON.parse(JSON.stringify({ publicKeyString: entry.address }));
-        const tokenRef = JSON.parse(JSON.stringify({ publicKeyString: token }));
+        for (const entry of batch) {
+          const toAccount = JSON.parse(JSON.stringify({ publicKeyString: entry.address }));
+          const amountInBaseUnits = toBaseUnits(entry.amount, tokenMetadata.decimals).toString();
+          (builder as any).send(toAccount, amountInBaseUnits, tokenRef);
+        }
 
-        const amountInBaseUnits = toBaseUnits(entry.amount, tokenMetadata.decimals).toString();
-
-        builder.send(toAccount, amountInBaseUnits, tokenRef);
-
-        if (typeof (builder as any).computeBlocks === "function") {
+        if (typeof (builder as { computeBuilderBlocks?: () => Promise<unknown> }).computeBuilderBlocks === "function") {
+          await (builder as any).computeBuilderBlocks();
+        } else if (typeof (builder as { computeBlocks?: () => Promise<unknown> }).computeBlocks === "function") {
           await (builder as any).computeBlocks();
         }
 
         await userClient.publishBuilder(builder);
-        Toast.success(`Sent ${entry.amount} ${tokenMetadata.label} to ${entry.address}`);
       }
 
+      Toast.success(`Airdrop executed: ${recipients.length} transfer(s) of ${tokenMetadata.label}`);
       clearUpload();
     } catch (error) {
       console.error("[AirdropUpload] Transaction failed", error);
