@@ -202,9 +202,6 @@ export function WalletProvider({ children }: WalletProviderProps) {
   useEffect(() => {
     if (!walletData.wallet.connected || walletData.wallet.isLocked) {
       setHasTransactionPermissions(false);
-    } else {
-      // Since we now request transaction permissions by default, set to true when connected and unlocked
-      setHasTransactionPermissions(true);
     }
   }, [walletData.wallet.connected, walletData.wallet.isLocked]);
 
@@ -504,16 +501,82 @@ export function WalletProvider({ children }: WalletProviderProps) {
   }, [isTradingEnabling, walletData.wallet.accounts]);
 
   const requestTransactionPermissions = useCallback(async (): Promise<boolean> => {
-    try {
-      // If wallet is already connected, just refresh state
-      if (walletData.wallet.connected) {
-        await walletData.fetchWalletState(true);
-        setHasTransactionPermissions(true);
+    const ensureTransactCapability = async (): Promise<boolean> => {
+      if (typeof window === 'undefined') {
+        return false;
+      }
+
+      const provider = window.keeta;
+      if (!provider) {
+        return false;
+      }
+
+      if (typeof provider.requestCapabilities !== 'function') {
+        // Older providers may grant capabilities implicitly once connected
         return true;
       }
-      
-      // If wallet is not connected, connect with transaction permissions
-      await walletData.connectWallet(true);
+
+      try {
+        const tokens = await provider.requestCapabilities(['read', 'transact']);
+        if (!Array.isArray(tokens)) {
+          return false;
+        }
+
+        for (const entry of tokens) {
+          if (!entry) {
+            continue;
+          }
+
+          if (typeof entry === 'string') {
+            if (entry.toLowerCase() === 'transact') {
+              return true;
+            }
+            continue;
+          }
+
+          if (typeof entry === 'object') {
+            const record = entry as Record<string, unknown>;
+            const capability = typeof record.capability === 'string'
+              ? record.capability.toLowerCase()
+              : undefined;
+            if (capability === 'transact') {
+              const tokenValue = record.token;
+              if (typeof tokenValue === 'string' ? tokenValue.length > 0 : true) {
+                return true;
+              }
+            }
+
+            const capabilities = Array.isArray(record.capabilities)
+              ? record.capabilities
+              : [];
+            if (capabilities.some((cap) => typeof cap === 'string' && cap.toLowerCase() === 'transact')) {
+              return true;
+            }
+
+            if (capability === 'transact' && record.granted === true) {
+              return true;
+            }
+          }
+        }
+
+        return false;
+      } catch {
+        return false;
+      }
+    };
+
+    try {
+      if (!walletData.wallet.connected) {
+        await walletData.connectWallet(true);
+      }
+
+      const granted = await ensureTransactCapability();
+      if (!granted) {
+        setHasTransactionPermissions(false);
+        return false;
+      }
+
+      await walletData.fetchWalletState(true);
       setHasTransactionPermissions(true);
       return true;
     } catch (error) {
