@@ -205,16 +205,45 @@ export function WalletProvider({ children }: WalletProviderProps) {
     }
   }, [walletData.wallet.connected, walletData.wallet.isLocked]);
 
-  // Initialize userClient when wallet unlocks and permissions granted
+  useEffect(() => {
+    const syncPermissions = async (): Promise<void> => {
+      if (!walletData.wallet.connected || walletData.wallet.isLocked) {
+        return;
+      }
+      if (typeof window === 'undefined' || !window.keeta) {
+        return;
+      }
+
+      const provider = window.keeta as any;
+      try {
+        let tokens: unknown = null;
+        if (typeof provider.refreshCapabilities === 'function') {
+          tokens = await provider.refreshCapabilities(['transact']);
+        } else if (typeof provider.requestCapabilities === 'function') {
+          tokens = await provider.requestCapabilities(['transact']);
+        }
+
+        if (Array.isArray(tokens)) {
+          const granted = tokens.some((t: any) => {
+            const cap = typeof t?.capability === 'string' ? t.capability.toLowerCase() : '';
+            return cap === 'transact';
+          });
+          if (granted) {
+            setHasTransactionPermissions(true);
+          }
+        }
+      } catch {
+      }
+    };
+
+    void syncPermissions();
+  }, [walletData.wallet.connected, walletData.wallet.isLocked]);
+
+  // Initialize userClient when wallet unlocks
   useEffect(() => {
     const initUserClient = async () => {
       // Clear client if wallet disconnected or locked
       if (!walletData.wallet.connected || walletData.wallet.isLocked) {
-        setUserClient(null);
-        return;
-      }
-
-      if (!hasTransactionPermissions) {
         setUserClient(null);
         return;
       }
@@ -231,6 +260,7 @@ export function WalletProvider({ children }: WalletProviderProps) {
           const client = await provider.getUserClient();
           if (client && typeof client.initBuilder === 'function') {
             setUserClient(client as KeetaUserClient);
+            setHasTransactionPermissions(true);
             return;
           }
         }
@@ -240,6 +270,7 @@ export function WalletProvider({ children }: WalletProviderProps) {
           const client = await provider.createUserClient();
           if (client && typeof client.initBuilder === 'function') {
             setUserClient(client as KeetaUserClient);
+            setHasTransactionPermissions(true);
             return;
           }
         }
@@ -249,6 +280,7 @@ export function WalletProvider({ children }: WalletProviderProps) {
         if (typeof providerAny.initBuilder === 'function' &&
             typeof providerAny.publishBuilder === 'function') {
           setUserClient(providerAny as KeetaUserClient);
+          setHasTransactionPermissions(true);
           return;
         }
 
@@ -259,7 +291,7 @@ export function WalletProvider({ children }: WalletProviderProps) {
     };
     
     initUserClient();
-  }, [walletData.wallet.connected, walletData.wallet.isLocked, hasTransactionPermissions]);
+  }, [walletData.wallet.connected, walletData.wallet.isLocked]);
   
   useEffect(() => {
     async function processBalances() {
