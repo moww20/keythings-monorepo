@@ -1,5 +1,6 @@
 "use client"
 
+import Link from "next/link"
 import { usePathname } from "next/navigation"
 import type { LucideIcon } from "lucide-react"
 import {
@@ -53,13 +54,14 @@ export function NavMain({
                     )}
                   </div>
                 ) : (
-                  <a
+                  <Link
                     href={item.url}
+                    prefetch
                     aria-current={isActivePath(item.url) ? "page" : undefined}
                   >
                     {item.icon && <item.icon />}
                     <span>{item.title}</span>
-                  </a>
+                  </Link>
                 )}
               </SidebarMenuButton>
             </SidebarMenuItem>
