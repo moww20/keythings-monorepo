@@ -78,20 +78,54 @@ export default function ExplorerQuickSearch(): React.JSX.Element {
   );
 
   const handleNavigate = useCallback(
-    async (path: string, historyEntry?: string) => {
+    (path: string, historyEntry?: string) => {
       if (!path) return;
       setError(null);
-      setIsSubmitting(true);
-      try {
-        if (historyEntry) {
-          pushHistory(historyEntry);
-        }
-        router.push(path);
-      } finally {
-        setIsSubmitting(false);
+      if (historyEntry) {
+        pushHistory(historyEntry);
       }
+      try {
+        void router.prefetch(path);
+      } catch {
+        // ignore prefetch failures – navigation will still proceed
+      }
+      router.push(path);
     },
     [router, pushHistory],
+  );
+
+  const refineAccountDestination = useCallback(
+    async (publicKey: string) => {
+      const keeta =
+        typeof window !== "undefined"
+          ? (window as typeof window & {
+              keeta?: { getAccountInfo?: (addr: string) => Promise<unknown> };
+            }).keeta
+          : undefined;
+
+      if (!keeta?.getAccountInfo) {
+        return null;
+      }
+
+      try {
+        const info = await keeta.getAccountInfo(publicKey);
+        const account: any = info ?? {};
+        const accountType = String(account?.type ?? "").toUpperCase();
+        if (accountType === "STORAGE") {
+          return `/explorer/storage/${publicKey}`;
+        }
+        if (accountType === "TOKEN") {
+          return `/explorer/token/${publicKey}`;
+        }
+      } catch (walletError) {
+        console.warn(
+          "[EXPLORER_SEARCH] Wallet lookup failed, keeping default account view",
+          walletError,
+        );
+      }
+      return null;
+    },
+    [],
   );
 
   const handleSubmit = useCallback(
@@ -117,41 +151,17 @@ export default function ExplorerQuickSearch(): React.JSX.Element {
 
       try {
         setIsSubmitting(true);
-        let destination = target.path;
+        const destination = target.path;
+
+        handleNavigate(destination, trimmed);
 
         if (target.type === "account") {
-          const keeta =
-            typeof window !== "undefined"
-              ? (window as typeof window & {
-                  keeta?: { getAccountInfo?: (addr: string) => Promise<unknown> };
-                }).keeta
-              : undefined;
-
-          if (keeta?.getAccountInfo) {
-            try {
-              const info = await keeta.getAccountInfo(trimmed);
-              const account: any = info ?? {};
-              const accountType = String(account?.type ?? "").toUpperCase();
-              if (accountType === "STORAGE") {
-                destination = `/explorer/storage/${trimmed}`;
-              } else if (accountType === "TOKEN") {
-                destination = `/explorer/token/${trimmed}`;
-              } else {
-                destination = `/explorer/account/${trimmed}`;
-              }
-            } catch (walletError) {
-              console.warn(
-                "[EXPLORER_SEARCH] Wallet lookup failed, defaulting to account view",
-                walletError,
-              );
-              destination = `/explorer/account/${trimmed}`;
+          void refineAccountDestination(trimmed).then((refined) => {
+            if (refined && refined !== destination) {
+              router.replace(refined);
             }
-          } else {
-            destination = `/explorer/account/${trimmed}`;
-          }
+          });
         }
-
-        await handleNavigate(destination, trimmed);
       } catch (lookupError) {
         console.error(
           "[EXPLORER_SEARCH] Failed to resolve explorer resource",
@@ -165,7 +175,7 @@ export default function ExplorerQuickSearch(): React.JSX.Element {
         setIsSubmitting(false);
       }
     },
-    [handleNavigate, inputValue, isSubmitting],
+    [handleNavigate, inputValue, isSubmitting, refineAccountDestination, router],
   );
 
   useEffect(() => {

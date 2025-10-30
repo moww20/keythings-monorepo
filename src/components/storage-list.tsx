@@ -45,13 +45,17 @@ const StorageInfoSchema = z.object({
   description: z.string().trim().max(512, "Description is too long").optional(),
 });
 
-export function useStorageAccounts(owner: string | null | undefined) {
+export function useStorageAccounts(owner: string | null | undefined, options?: { enabled?: boolean }) {
   const [storages, setStorages] = React.useState<z.infer<typeof StorageAclEntrySchema>[]>([]);
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const { userClient } = useWallet();
+  const enabled = options?.enabled ?? true;
 
   const fetchStorages = React.useCallback(async () => {
+    if (!enabled) {
+      return;
+    }
     try {
       console.log('[StorageList] fetchStorages called', { owner });
       if (!owner) {
@@ -243,20 +247,44 @@ export function useStorageAccounts(owner: string | null | undefined) {
       setLoading(false);
       try { console.log('[StorageList] fetchStorages done', { loading: false }); } catch {}
     }
-  }, [owner, userClient]);
+  }, [enabled, owner, userClient]);
 
   React.useEffect(() => {
+    if (!enabled) {
+      return;
+    }
     void fetchStorages();
-  }, [fetchStorages]);
+  }, [enabled, fetchStorages]);
 
   return { storages, loading, error, refresh: fetchStorages };
 }
 
-export function StorageList({ owner, showActions = false, className, rowActionsEnabled = true }: { owner: string | null | undefined; showActions?: boolean; className?: string; rowActionsEnabled?: boolean; }) {
-  const { storages, error, refresh } = useStorageAccounts(owner);
+export function StorageList({
+  owner,
+  showActions = false,
+  className,
+  rowActionsEnabled = true,
+  enabled = true,
+  onLoaded,
+}: {
+  owner: string | null | undefined;
+  showActions?: boolean;
+  className?: string;
+  rowActionsEnabled?: boolean;
+  enabled?: boolean;
+  onLoaded?: (count: number) => void;
+}) {
+  const { storages, error, refresh, loading } = useStorageAccounts(owner, { enabled });
   const { userClient, requestTransactionPermissions, isConnected, isUnlocked } = useWallet();
 
   const canTransact = isConnected && isUnlocked && !!userClient;
+
+  React.useEffect(() => {
+    if (!onLoaded) return;
+    if (!enabled) return;
+    if (loading) return;
+    onLoaded(storages.length);
+  }, [enabled, loading, onLoaded, storages.length]);
 
   const [details, setDetails] = React.useState<Record<string, { name?: string | null; description?: string | null }>>({});
   const [modal, setModal] = React.useState<{ type: 'view' | 'grant' | 'withdraw'; entry: z.infer<typeof StorageAclEntrySchema> | null } | null>(null);

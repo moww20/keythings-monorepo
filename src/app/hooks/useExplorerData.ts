@@ -68,7 +68,14 @@ export function useExplorerData() {
     // SDK-only path: do not use wallet provider endpoints
 
     try {
-      // Detect base token from environment
+      const aggregatedBalancesPromise = getAggregatedBalancesForOwner(publicKey, {
+        maxStorages: 25,
+        includeTokenMetadata: true,
+      });
+      const historyPromise = getHistoryForAccount(publicKey, { depth: 25, includeTokenMetadata: true });
+      const accountStatePromise = getAccountState(publicKey);
+
+      // Detect base token from environment while other requests are in-flight
       const EnvSchema = z.object({ NEXT_PUBLIC_KTA_TOKEN_PUBKEY: z.string().optional() });
       const env = EnvSchema.safeParse(process.env);
       let baseTokenAddress: string | null = env.success && env.data.NEXT_PUBLIC_KTA_TOKEN_PUBKEY && env.data.NEXT_PUBLIC_KTA_TOKEN_PUBKEY.trim().length
@@ -83,53 +90,57 @@ export function useExplorerData() {
         } catch {}
       }
       try { console.debug('[useExplorerData] baseTokenAddress', { baseTokenAddress }); } catch {}
-      
-      // Fetch account state directly from SDK (may be null for accounts with no on-chain state yet)
-      const accountState: unknown = await getAccountState(publicKey);
+
+      const accountState: unknown = await accountStatePromise;
       try {
         const hasState = !!(accountState && typeof accountState === 'object');
         const balancesLen = hasState && Array.isArray((accountState as any)?.balances) ? (accountState as any).balances.length : 0;
         const tokensLen = hasState && Array.isArray((accountState as any)?.tokens) ? (accountState as any).tokens.length : 0;
         console.debug('[useExplorerData] accountState:summary', { hasState, balancesLen, tokensLen });
       } catch {}
-      
-      // Build a minimal account object even if no state exists, so the page still renders for arbitrary keys
+
       const account = (accountState && typeof accountState === 'object') ? (accountState as any) : {};
 
-      // Enrich with balances via SDK
+      const [aggregatedResult, historyResult] = await Promise.allSettled([
+        aggregatedBalancesPromise,
+        historyPromise,
+      ]);
+
       let tokens: ExplorerAccount["tokens"] = [];
-      try {
-        // Primary: aggregate balances across owner + storage accounts using SDK
-        const agg = await getAggregatedBalancesForOwner(publicKey, { maxStorages: 25, includeTokenMetadata: true });
-        try { console.debug('[useExplorerData] aggregatedBalances:raw', agg); } catch {}
-        if (Array.isArray(agg) && agg.length) {
-          tokens = await processBalancesEntries(agg, baseTokenAddress);
+      if (aggregatedResult.status === 'fulfilled' && Array.isArray(aggregatedResult.value) && aggregatedResult.value.length) {
+        try {
+          tokens = await processBalancesEntries(aggregatedResult.value, baseTokenAddress);
           try { console.debug('[useExplorerData] aggregatedBalances:processed', tokens); } catch {}
+        } catch (processError) {
+          try { console.warn('[useExplorerData] aggregatedBalances:processError', processError); } catch {}
         }
-        // Fallback: use raw SDK state balances
-        if (tokens.length === 0) {
-          const raw = await getAccountState(publicKey);
-          const obj = (raw && typeof raw === 'object') ? (raw as any) : {};
-          const candidate = Array.isArray(obj?.tokens) ? obj.tokens : Array.isArray(obj?.balances) ? obj.balances : [];
-          if (Array.isArray(candidate)) {
-            tokens = await processBalancesEntries(candidate, baseTokenAddress);
-            try { console.debug('[useExplorerData] fallbackBalances:processed', tokens); } catch {}
-          }
-        }
-      } catch {
-        // best-effort enrichment only
       }
 
-      // Get transaction history filtered for the queried account
-      let activity: any[] = [];
-      try {
-        const perAccount = await getHistoryForAccount(publicKey, { depth: 25, includeTokenMetadata: true });
-        if (Array.isArray(perAccount) && perAccount.length) {
-          activity = mapHistoryRecords(perAccount as any[]);
+      if (tokens.length === 0) {
+        const candidate = Array.isArray((account as any)?.tokens)
+          ? (account as any).tokens
+          : Array.isArray((account as any)?.balances)
+            ? (account as any).balances
+            : [];
+        if (Array.isArray(candidate) && candidate.length) {
+          try {
+            tokens = await processBalancesEntries(candidate, baseTokenAddress);
+            try { console.debug('[useExplorerData] fallbackBalances:processed', tokens); } catch {}
+          } catch (fallbackError) {
+            try { console.warn('[useExplorerData] fallbackBalances:processError', fallbackError); } catch {}
+          }
         }
-      } catch {}
+      }
 
-      // Return the simplified account data
+      let activity: any[] = [];
+      if (historyResult.status === 'fulfilled' && Array.isArray(historyResult.value) && historyResult.value.length) {
+        try {
+          activity = mapHistoryRecords(historyResult.value as any[]);
+        } catch (mapError) {
+          try { console.warn('[useExplorerData] history:mapError', mapError); } catch {}
+        }
+      }
+
       const result = {
         publicKey,
         type: account.type || 'account',

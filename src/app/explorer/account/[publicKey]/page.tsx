@@ -8,7 +8,7 @@ import {
   useMemo,
   useState,
 } from "react";
-import { StorageList, useStorageAccounts } from "@/components/storage-list";
+import { StorageList } from "@/components/storage-list";
 import { parseExplorerOperation } from "@/lib/explorer/client";
 
 import { Badge } from "@/components/ui/badge";
@@ -185,11 +185,17 @@ export default function AccountPage(): React.JSX.Element {
       ? "This account does not include a description."
       : "This is a basic account on the Keeta network with no additional metadata or activity recorded. Connect your wallet for deeper insights.");
 
-  const { storages, loading: storagesLoading, error: storagesError } = useStorageAccounts(publicKey);
+  const [activeTab, setActiveTab] = useState<string>("tokens");
+  const [storageCount, setStorageCount] = useState<number | null>(null);
+
+  useEffect(() => {
+    setActiveTab("tokens");
+    setStorageCount(null);
+  }, [publicKey]);
 
   
 
-  if (loading) {
+  if (loading && !account) {
     return <AccountPageSkeleton />;
   }
 
@@ -245,7 +251,7 @@ export default function AccountPage(): React.JSX.Element {
             <CardContent>
               <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
                 <SummaryMetric label="Tokens" value={tokens.length} />
-                <SummaryMetric label="Storage Accounts" value={storages.length} />
+                <SummaryMetric label="Storage Accounts" value={storageCount ?? "—"} />
                 <SummaryMetric label="Certificates" value={certificates.length} />
                 <SummaryMetric
                   label="Head Block"
@@ -365,7 +371,7 @@ export default function AccountPage(): React.JSX.Element {
             </Card>
           </div>
 
-          <Tabs defaultValue="tokens" className="flex flex-col gap-6">
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-col gap-6">
             <TabsList className="bg-[color:color-mix(in_oklab,var(--foreground)_5%,transparent)]">
               <TabsTrigger value="tokens" className="px-4">
                 Tokens
@@ -465,7 +471,13 @@ export default function AccountPage(): React.JSX.Element {
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <StorageList owner={publicKey} rowActionsEnabled={false} className="w-full" />
+                  <StorageList
+                    owner={publicKey}
+                    rowActionsEnabled={false}
+                    className="w-full"
+                    enabled={activeTab === "storage"}
+                    onLoaded={setStorageCount}
+                  />
                 </CardContent>
               </Card>
             </TabsContent>
