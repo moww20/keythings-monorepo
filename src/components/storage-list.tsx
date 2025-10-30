@@ -28,6 +28,19 @@ export const StorageAclEntrySchema = z
 
 export const StorageAclListSchema = z.array(StorageAclEntrySchema);
 
+type StorageAclEntry = z.infer<typeof StorageAclEntrySchema>;
+
+const STORAGE_CACHE_TTL_MS = 30_000;
+const storageCache = new Map<string, { data: StorageAclEntry[]; fetchedAt: number }>();
+
+function buildStorageExplorerHref(publicKey: string): string {
+  return `/explorer/storage/${encodeURIComponent(publicKey)}`;
+}
+
+function buildAccountExplorerHref(publicKey: string): string {
+  return `/explorer/account/${encodeURIComponent(publicKey)}`;
+}
+
 const StorageTokenSchema = z.object({
   tokenId: z.string(),
   name: z.string().optional(),
@@ -46,23 +59,40 @@ const StorageInfoSchema = z.object({
 });
 
 export function useStorageAccounts(owner: string | null | undefined, options?: { enabled?: boolean }) {
-  const [storages, setStorages] = React.useState<z.infer<typeof StorageAclEntrySchema>[]>([]);
+  const [storages, setStorages] = React.useState<StorageAclEntry[]>([]);
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const { userClient } = useWallet();
   const enabled = options?.enabled ?? true;
 
-  const fetchStorages = React.useCallback(async () => {
+  const fetchStorages = React.useCallback(async (opts?: { force?: boolean }) => {
     if (!enabled) {
       return;
     }
+
+    const normalizedOwner = owner?.trim();
+    if (!normalizedOwner) {
+      console.log('[StorageList] No owner provided - skipping fetch');
+      setStorages([]);
+      setError(null);
+      setLoading(false);
+      return;
+    }
+
+    const cacheKey = normalizedOwner.toLowerCase();
+
     try {
-      console.log('[StorageList] fetchStorages called', { owner });
-      if (!owner) {
-        console.log('[StorageList] No owner provided - skipping fetch');
-        setStorages([]);
-        return;
+      console.log('[StorageList] fetchStorages called', { owner: normalizedOwner });
+      if (!opts?.force) {
+        const cached = storageCache.get(cacheKey);
+        if (cached && Date.now() - cached.fetchedAt < STORAGE_CACHE_TTL_MS) {
+          console.log('[StorageList] using cached storage entries', { count: cached.data.length });
+          setStorages(cached.data);
+          setError(null);
+          return;
+        }
       }
+
       setLoading(true);
       setError(null);
 
@@ -73,11 +103,11 @@ export function useStorageAccounts(owner: string | null | undefined, options?: {
         const provider = typeof window !== 'undefined' ? (window as any).keeta : null;
         if (provider && typeof provider.listStorageAccountsByOwner === 'function') {
           console.log('[StorageList] using provider.listStorageAccountsByOwner(owner)');
-          entriesRaw = await provider.listStorageAccountsByOwner(owner);
+          entriesRaw = await provider.listStorageAccountsByOwner(normalizedOwner);
           trustedFiltered = true; // extension already filters to storage entities
         } else if (provider && typeof provider.request === 'function') {
           console.log('[StorageList] using provider.request(keeta_listStorageAccountsByOwner)');
-          entriesRaw = await provider.request({ method: 'keeta_listStorageAccountsByOwner', params: [owner] });
+          entriesRaw = await provider.request({ method: 'keeta_listStorageAccountsByOwner', params: [normalizedOwner] });
           trustedFiltered = true; // extension already filters to storage entities
         }
       } catch (e) {
@@ -138,7 +168,7 @@ export function useStorageAccounts(owner: string | null | undefined, options?: {
 
       // Fallback to read client helper if needed
       if (!entriesRaw) {
-        const raw: unknown = await listStorageAccountsByOwner(owner);
+        const raw: unknown = await listStorageAccountsByOwner(normalizedOwner);
         entriesRaw = raw;
       }
 
@@ -160,6 +190,7 @@ export function useStorageAccounts(owner: string | null | undefined, options?: {
         if (directParsed.success) {
           try { console.log('[StorageList] provider parsed entries (direct)', { count: directParsed.data.length }); } catch {}
           setStorages(directParsed.data);
+          storageCache.set(cacheKey, { data: directParsed.data, fetchedAt: Date.now() });
           return;
         } else {
           try { console.warn('[StorageList] direct parse failed; will normalize', directParsed.error?.issues?.slice?.(0, 5)); } catch {}
@@ -173,7 +204,7 @@ export function useStorageAccounts(owner: string | null | undefined, options?: {
         for (const addr of entriesRaw as string[]) {
           const entityS = typeof addr === 'string' ? addr : String(addr ?? '');
           if (entityS && entityS.trim().length > 0) {
-            normalized.push({ principal: owner ?? '', entity: entityS, target: undefined, permissions: [] });
+            normalized.push({ principal: normalizedOwner, entity: entityS, target: undefined, permissions: [] });
           }
         }
       } else if (Array.isArray(entriesRaw)) {
@@ -211,8 +242,8 @@ export function useStorageAccounts(owner: string | null | undefined, options?: {
               || typeof entity === 'string'; // heuristically accept string entity when provider pre-serializes
             if (!isStorage) continue;
 
-            const principalRaw = (acl as any).principal ?? (acl as any).owner ?? owner;
-            const principalS = toAccountString(principalRaw) || owner;
+            const principalRaw = (acl as any).principal ?? (acl as any).owner ?? normalizedOwner;
+            const principalS = toAccountString(principalRaw) || normalizedOwner;
             const entityRaw = (acl as any).entity ?? (acl as any).address ?? (acl as any).account ?? (acl as any).storage ?? (acl as any).entityAddress;
             const entityS = toAccountString(entityRaw);
             const targetRawAny = (acl as any).target ?? (acl as any).token ?? (acl as any).targetAccount;
@@ -235,14 +266,17 @@ export function useStorageAccounts(owner: string | null | undefined, options?: {
       if (!parsed.success) {
         try { console.warn('[StorageList] Zod parse failed for normalized ACL list', parsed.error?.issues); } catch {}
         setStorages([]);
+        storageCache.delete(cacheKey);
       } else {
         try { console.log('[StorageList] parsed storage entries', { count: parsed.data.length }); } catch {}
         setStorages(parsed.data);
+        storageCache.set(cacheKey, { data: parsed.data, fetchedAt: Date.now() });
       }
     } catch (e) {
       console.error('[StorageList] fetchStorages error', e);
       setError(e instanceof Error ? e.message : "Failed to fetch storages");
       setStorages([]);
+      storageCache.delete(cacheKey);
     } finally {
       setLoading(false);
       try { console.log('[StorageList] fetchStorages done', { loading: false }); } catch {}
@@ -256,9 +290,13 @@ export function useStorageAccounts(owner: string | null | undefined, options?: {
     void fetchStorages();
   }, [enabled, fetchStorages]);
 
-  return { storages, loading, error, refresh: fetchStorages };
-}
+  const refresh = React.useCallback(
+    (opts?: { force?: boolean }) => fetchStorages(opts),
+    [fetchStorages],
+  );
 
+  return { storages, loading, error, refresh };
+}
 export function StorageList({
   owner,
   showActions = false,
@@ -287,7 +325,7 @@ export function StorageList({
   }, [enabled, loading, onLoaded, storages.length]);
 
   const [details, setDetails] = React.useState<Record<string, { name?: string | null; description?: string | null }>>({});
-  const [modal, setModal] = React.useState<{ type: 'view' | 'grant' | 'withdraw'; entry: z.infer<typeof StorageAclEntrySchema> | null } | null>(null);
+  const [modal, setModal] = React.useState<{ type: 'view' | 'grant' | 'withdraw'; entry: StorageAclEntry | null } | null>(null);
   const [grantForm, setGrantForm] = React.useState({ operator: "", token: "" });
   const [withdrawForm, setWithdrawForm] = React.useState({ destination: "", token: "", amountBase: "" });
   const [viewForm, setViewForm] = React.useState({ name: "", description: "" });
@@ -397,7 +435,7 @@ export function StorageList({
 
       toast.success("Storage details updated");
       setModal(null);
-      await refresh();
+      await refresh({ force: true });
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Failed to update storage");
     } finally {
@@ -503,7 +541,7 @@ export function StorageList({
 
       const addr = await manager.createStorageAccount(operator, tokens);
       toast.success(`Storage created: ${addr}`);
-      await refresh();
+      await refresh({ force: true });
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Failed to create storage");
     }
@@ -532,7 +570,7 @@ export function StorageList({
       toast.success("Permission granted");
       setModal(null);
       setGrantForm({ operator: "", token: "" });
-      await refresh();
+      await refresh({ force: true });
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Failed to grant permission");
     }
@@ -562,7 +600,7 @@ export function StorageList({
       toast.success(`Withdrawal published: ${hash}`);
       setModal(null);
       setWithdrawForm({ destination: "", token: "", amountBase: "" });
-      await refresh();
+      await refresh({ force: true });
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Failed to withdraw");
     }
@@ -594,7 +632,7 @@ export function StorageList({
 
       await manager.grantTokenPermission(parsed.data.storage, parsed.data.operator, parsed.data.token);
       toast.success("Permission granted");
-      await refresh();
+      await refresh({ force: true });
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Failed to grant permission");
     }
@@ -628,7 +666,7 @@ export function StorageList({
 
       const hash = await manager.selfWithdraw(parsed.data.storage, parsed.data.destination, parsed.data.token, BigInt(parsed.data.amountBase));
       toast.success(`Withdrawal published: ${hash}`);
-      await refresh();
+      await refresh({ force: true });
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Failed to withdraw");
     }
@@ -698,7 +736,13 @@ export function StorageList({
               </div>
             </div>
             <DialogFooter className="flex items-center justify-between gap-3">
-              <Link href={`/explorer/storage/${modal.entry.entity}`} className="text-accent hover:text-foreground text-sm">Open in Explorer</Link>
+              <Link
+                prefetch={false}
+                href={buildStorageExplorerHref(modal.entry.entity)}
+                className="text-accent hover:text-foreground text-sm"
+              >
+                Open in Explorer
+              </Link>
               <div className="flex items-center gap-2">
                 <Button variant="outline" onClick={() => setModal(null)} disabled={savingInfo}>Cancel</Button>
                 <Button
@@ -842,7 +886,8 @@ export function StorageList({
                         <div className="min-w-0 truncate text-xs text-subtle">({description})</div>
                       ) : null}
                       <Link
-                        href={`/explorer/storage/${entry.entity}`}
+                        prefetch={false}
+                        href={buildStorageExplorerHref(entry.entity)}
                         className="min-w-0 truncate text-xs text-accent hover:text-foreground"
                       >
                         {truncateId(entry.entity, 12, 10)}
@@ -850,7 +895,8 @@ export function StorageList({
                     </div>
                     <div className="flex min-w-0 flex-col">
                       <Link
-                        href={`/explorer/account/${entry.principal}`}
+                        prefetch={false}
+                        href={buildAccountExplorerHref(entry.principal)}
                         className="min-w-0 truncate text-sm font-medium text-accent hover:text-foreground"
                       >
                         {truncateId(entry.principal, 12, 10)}
