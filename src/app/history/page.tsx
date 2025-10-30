@@ -2,7 +2,7 @@
 
 import React from "react";
 import { coerceString as sx, resolveDate } from "@/lib/explorer/mappers";
-import { useInfiniteQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, type InfiniteData } from "@tanstack/react-query";
 import ExplorerOperationsTable from "@/app/explorer/components/ExplorerOperationsTable";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -16,6 +16,8 @@ import { useWallet } from "@/app/contexts/WalletContext";
 
 const BASE_TOKEN_TICKER = "KTA";
 const FALLBACK_MESSAGE = "Connect your Keeta wallet to pull on-chain activity.";
+const INITIAL_PAGE_DEPTH = 20;
+const SUBSEQUENT_PAGE_DEPTH = 40;
 
 type CachedTokenMeta = {
   name?: string | null;
@@ -25,10 +27,20 @@ type CachedTokenMeta = {
   metadataBase64?: string | null;
 };
 
-interface NormalizedHistoryResult {
-  operations: ExplorerOperation[];
-  tokensToFetch: string[];
+interface BaseNormalizedOperation {
+  operation: ExplorerOperation;
+  metadataFromRecord?: CachedTokenMeta;
+  tokenLookupId?: string;
 }
+
+interface NormalizedHistoryResult {
+  operations: BaseNormalizedOperation[];
+}
+
+type HistoryQueryPageParam = {
+  cursor: string | null;
+  depth: number;
+};
 
 function shouldSkipTokenLookup(tokenId?: string | null, ticker?: string | null): boolean {
   if (!tokenId) return true;
@@ -175,17 +187,12 @@ function gatherRecordOperations(record: any): unknown[] {
   return [...inline, ...voteStapleOps, ...blockOps];
 }
 
-function normalizeHistoryRecords(
-  records: any[],
-  account: string,
-  tokenMetadata: Record<string, CachedTokenMeta>,
-): NormalizedHistoryResult {
+function normalizeHistoryRecords(records: any[], account: string): NormalizedHistoryResult {
   if (!records.length) {
-    return { operations: [], tokensToFetch: [] };
+    return { operations: [] };
   }
 
-  const operations: ExplorerOperation[] = [];
-  const tokensToFetch = new Set<string>();
+  const operations: BaseNormalizedOperation[] = [];
   const seenKeys = new Set<string>();
   const accountKey = typeof account === "string" ? account : "";
 
@@ -335,8 +342,7 @@ function normalizeHistoryRecords(
     seenKeys.add(dedupeKey);
 
     const enriched: ExplorerOperation = { ...parsed, type: finalType };
-    const cachedMeta = tokenLookupId ? tokenMetadata[tokenLookupId] : undefined;
-    const mergedMeta = mergeTokenMetadata(enriched.tokenMetadata, [metadataFromRecord, cachedMeta]);
+    const mergedMeta = mergeTokenMetadata(enriched.tokenMetadata, [metadataFromRecord]);
     if (mergedMeta) {
       enriched.tokenMetadata = mergedMeta;
       if (!enriched.tokenTicker && mergedMeta.ticker) {
@@ -361,18 +367,11 @@ function normalizeHistoryRecords(
       } catch {}
     }
 
-    const shouldFetch =
-      tokenLookupId &&
-      !shouldSkipTokenLookup(tokenLookupId, enriched.tokenTicker) &&
-      !tokenMetadata[tokenLookupId];
-    const hasTicker = Boolean(enriched.tokenTicker || mergedMeta?.ticker);
-    const hasDecimals = typeof (enriched.tokenDecimals ?? mergedMeta?.decimals) === "number";
-
-    if (shouldFetch && (!hasTicker || !hasDecimals)) {
-      tokensToFetch.add(tokenLookupId);
-    }
-
-    operations.push(enriched);
+    operations.push({
+      operation: enriched,
+      metadataFromRecord,
+      tokenLookupId: tokenLookupId || undefined,
+    });
   };
 
   for (const record of records) {
@@ -384,6 +383,68 @@ function normalizeHistoryRecords(
     } else {
       processCandidate(record, record);
     }
+  }
+
+  return { operations };
+}
+
+function hydrateNormalizedOperations(
+  baseOperations: BaseNormalizedOperation[],
+  tokenMetadata: Record<string, CachedTokenMeta>,
+): { operations: ExplorerOperation[]; tokensToFetch: string[] } {
+  if (!baseOperations.length) {
+    return { operations: [], tokensToFetch: [] };
+  }
+
+  const tokensToFetch = new Set<string>();
+  const operations: ExplorerOperation[] = [];
+
+  for (const entry of baseOperations) {
+    const base = { ...entry.operation } as ExplorerOperation;
+    const lookupId = entry.tokenLookupId;
+    const cachedMeta = lookupId ? tokenMetadata[lookupId] : undefined;
+    const metadataCandidates: Array<CachedTokenMeta | undefined> = [entry.metadataFromRecord];
+    if (cachedMeta) {
+      metadataCandidates.push(cachedMeta);
+    }
+
+    const mergedMeta = mergeTokenMetadata(base.tokenMetadata, metadataCandidates);
+    if (mergedMeta) {
+      base.tokenMetadata = mergedMeta;
+      if (!base.tokenTicker && mergedMeta.ticker) {
+        base.tokenTicker = mergedMeta.ticker;
+      }
+      if (base.tokenDecimals === undefined && typeof mergedMeta.decimals === "number") {
+        base.tokenDecimals = mergedMeta.decimals;
+      }
+    }
+
+    const rawAmountValue =
+      sx((base as any).rawAmount ?? (base as any).amount) ??
+      sx(((base as any).operation as any)?.amount) ??
+      "";
+
+    if (!base.formattedAmount && rawAmountValue) {
+      const decimalsToUse = base.tokenDecimals ?? mergedMeta?.decimals;
+      if (typeof decimalsToUse === "number") {
+        try {
+          const amt = BigInt(rawAmountValue);
+          const ticker = base.tokenTicker || mergedMeta?.ticker || "UNKNOWN";
+          const fieldType = mergedMeta?.fieldType === "decimalPlaces" ? "decimalPlaces" : "decimals";
+          base.formattedAmount = formatTokenAmount(amt, decimalsToUse, fieldType, ticker || "UNKNOWN");
+        } catch {}
+      }
+    }
+
+    const shouldFetch = Boolean(lookupId) && !shouldSkipTokenLookup(lookupId, base.tokenTicker);
+    const hasTicker = Boolean(base.tokenTicker || mergedMeta?.ticker);
+    const hasDecimals = typeof (base.tokenDecimals ?? mergedMeta?.decimals) === "number";
+
+    if (shouldFetch && (!hasTicker || !hasDecimals)) {
+      tokensToFetch.add(lookupId!);
+    }
+
+    operations.push(base);
   }
 
   return { operations, tokensToFetch: Array.from(tokensToFetch) };
@@ -550,9 +611,31 @@ export default function HistoryPage(): React.JSX.Element {
     fetchingTokenMetaRef.current.clear();
   }, [accountKey]);
 
-  const historyQuery = useInfiniteQuery({
+  const historyQuery = useInfiniteQuery<
+    { records: any[]; cursor: string | null; hasMore: boolean },
+    Error,
+    InfiniteData<{ records: any[]; cursor: string | null; hasMore: boolean }, HistoryQueryPageParam>,
+    [string, string],
+    HistoryQueryPageParam
+  >({
     queryKey: ["history", accountKey],
     queryFn: async ({ pageParam }) => {
+      const params: HistoryQueryPageParam =
+        pageParam && typeof pageParam === "object"
+          ? {
+              cursor: typeof (pageParam as HistoryQueryPageParam).cursor === "string"
+                ? (pageParam as HistoryQueryPageParam).cursor
+                : null,
+              depth: (() => {
+                const raw = Number((pageParam as HistoryQueryPageParam).depth);
+                if (Number.isFinite(raw) && raw > 0) {
+                  return Math.min(SUBSEQUENT_PAGE_DEPTH, Math.max(1, Math.round(raw)));
+                }
+                return INITIAL_PAGE_DEPTH;
+              })(),
+            }
+          : { cursor: null, depth: INITIAL_PAGE_DEPTH };
+
       if (typeof window === "undefined" || !window.keeta?.history) {
         return { records: [], cursor: null, hasMore: false } as {
           records: any[];
@@ -567,8 +650,8 @@ export default function HistoryPage(): React.JSX.Element {
       } catch {}
 
       const resp = await window.keeta.history({
-        depth: 50,
-        cursor: pageParam ?? null,
+        depth: params.depth,
+        cursor: params.cursor,
         includeOperations: true,
         includeTokenMetadata: true,
       } as any);
@@ -579,9 +662,10 @@ export default function HistoryPage(): React.JSX.Element {
         const uc: any = await window.keeta.getUserClient?.();
         const hasFilter = uc && (typeof uc.filterStapleOperations === "function" || typeof uc.filterStapleOps === "function");
         if (hasFilter && accountKey) {
-          for (const rec of records) {
-            const staple = (rec && typeof rec === "object") ? (rec as any).voteStaple : null;
-            if (!staple) continue;
+          const applyStapleFilter = async (rec: any) => {
+            if (!rec || typeof rec !== "object") return rec;
+            const staple = (rec as any).voteStaple;
+            if (!staple) return rec;
             try {
               let filtered: any;
               if (typeof uc.filterStapleOperations === "function") {
@@ -590,12 +674,15 @@ export default function HistoryPage(): React.JSX.Element {
                 filtered = await uc.filterStapleOps(staple, { account: accountKey });
               }
               if (Array.isArray(filtered)) {
-                rec.operations = filtered;
+                (rec as any).operations = filtered;
               } else if (filtered && Array.isArray(filtered.operations)) {
-                rec.operations = filtered.operations;
+                (rec as any).operations = filtered.operations;
               }
             } catch {}
-          }
+            return rec;
+          };
+
+          records = await Promise.all(records.map((rec) => applyStapleFilter(rec)));
         }
       } catch {}
 
@@ -605,8 +692,11 @@ export default function HistoryPage(): React.JSX.Element {
         hasMore: Boolean(resp?.hasMore),
       } as { records: any[]; cursor: string | null; hasMore: boolean };
     },
-    initialPageParam: null as string | null,
-    getNextPageParam: (lastPage) => (lastPage.hasMore ? lastPage.cursor : undefined),
+    initialPageParam: { cursor: null as string | null, depth: INITIAL_PAGE_DEPTH } satisfies HistoryQueryPageParam,
+    getNextPageParam: (lastPage) =>
+      lastPage.hasMore
+        ? ({ cursor: lastPage.cursor, depth: SUBSEQUENT_PAGE_DEPTH } satisfies HistoryQueryPageParam)
+        : undefined,
     staleTime: Infinity,
     gcTime: 24 * 60 * 60 * 1000,
     refetchOnMount: false,
@@ -628,16 +718,21 @@ export default function HistoryPage(): React.JSX.Element {
   }, [pages]);
 
   const normalized = React.useMemo(
-    () => normalizeHistoryRecords(allRecords, accountKey, tokenMetadata),
-    [allRecords, accountKey, tokenMetadata],
+    () => normalizeHistoryRecords(allRecords, accountKey),
+    [allRecords, accountKey],
+  );
+
+  const hydrated = React.useMemo(
+    () => hydrateNormalizedOperations(normalized.operations, tokenMetadata),
+    [normalized.operations, tokenMetadata],
   );
 
   React.useEffect(() => {
-    if (!normalized.tokensToFetch.length) {
+    if (!hydrated.tokensToFetch.length) {
       return;
     }
 
-    for (const tokenId of normalized.tokensToFetch) {
+    for (const tokenId of hydrated.tokensToFetch) {
       if (!tokenId) continue;
       if (tokenMetadata[tokenId]) continue;
       if (fetchingTokenMetaRef.current.has(tokenId)) continue;
@@ -686,11 +781,11 @@ export default function HistoryPage(): React.JSX.Element {
         }
       })();
     }
-  }, [normalized.tokensToFetch, tokenMetadata]);
+  }, [hydrated.tokensToFetch, tokenMetadata]);
 
   const groupedOperations = React.useMemo(
-    () => groupOperationsByBlock(normalized.operations),
-    [normalized.operations],
+    () => groupOperationsByBlock(hydrated.operations),
+    [hydrated.operations],
   );
 
   const awaitingWallet = isClient && accountKey.length === 0;
