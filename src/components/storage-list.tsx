@@ -274,7 +274,7 @@ export function StorageList({
   enabled?: boolean;
   onLoaded?: (count: number) => void;
 }) {
-  const { storages, error, refresh, loading } = useStorageAccounts(owner, { enabled });
+  const { storages, error, refresh: fetchStorages, loading } = useStorageAccounts(owner, { enabled });
   const { userClient, requestTransactionPermissions, isConnected, isUnlocked } = useWallet();
 
   const canTransact = isConnected && isUnlocked && !!userClient;
@@ -296,6 +296,17 @@ export function StorageList({
   const [tokensLoading, setTokensLoading] = React.useState(false);
   const [tokensError, setTokensError] = React.useState<string | null>(null);
   const originalInfoRef = React.useRef<{ name: string; description: string }>({ name: "", description: "" });
+  const fetchedDetailsRef = React.useRef<Set<string>>(new Set());
+
+  const refreshStorages = React.useCallback(async () => {
+    fetchedDetailsRef.current = new Set();
+    await fetchStorages();
+  }, [fetchStorages]);
+
+  React.useEffect(() => {
+    fetchedDetailsRef.current = new Set();
+    setDetails({});
+  }, [owner]);
 
   const canQueryStorageApi = React.useMemo(() => {
     const base = process.env.NEXT_PUBLIC_API_URL ?? "";
@@ -397,13 +408,13 @@ export function StorageList({
 
       toast.success("Storage details updated");
       setModal(null);
-      await refresh();
+      await refreshStorages();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Failed to update storage");
     } finally {
       setSavingInfo(false);
     }
-  }, [modal, viewForm, rowActionsEnabled, canTransact, requestTransactionPermissions, userClient, refresh]);
+  }, [modal, viewForm, rowActionsEnabled, canTransact, requestTransactionPermissions, userClient, refreshStorages]);
 
   const isInfoDirty = React.useMemo(() => {
     const original = originalInfoRef.current;
@@ -456,37 +467,47 @@ export function StorageList({
   }, [pageCount, pageIndex]);
 
   React.useEffect(() => {
+    const missing = storages
+      .map((entry) => entry.entity)
+      .filter((addr): addr is string => Boolean(addr) && !fetchedDetailsRef.current.has(addr));
+
+    if (missing.length === 0) {
+      return;
+    }
+
+    missing.forEach((addr) => {
+      fetchedDetailsRef.current.add(addr);
+    });
+
     let cancelled = false;
     async function loadDetails() {
-      // Fetch storage info details via SDK state reads
-      const pending: Array<Promise<void>> = [];
       const next: Record<string, { name?: string | null; description?: string | null }> = {};
-      for (const entry of storages) {
-        const addr = entry.entity;
-        if (!addr || details[addr]) continue;
-        pending.push(
-          (async () => {
-            try {
-              const state = await getAccountState(addr);
-              const rec = state && typeof state === 'object' ? (state as any) : null;
-              const infoObj = rec && typeof rec.info === 'object' ? (rec.info as Record<string, unknown>) : {};
-              const name = typeof infoObj.name === 'string' && infoObj.name.trim().length > 0 ? infoObj.name : null;
-              const description = typeof infoObj.description === 'string' && infoObj.description.trim().length > 0 ? infoObj.description : null;
-              next[addr] = { name, description };
-            } catch {
-              next[addr] = {};
-            }
-          })()
-        );
-      }
-      await Promise.allSettled(pending);
+      await Promise.allSettled(
+        missing.map(async (addr) => {
+          try {
+            const state = await getAccountState(addr);
+            const rec = state && typeof state === 'object' ? (state as Record<string, unknown>) : null;
+            const infoObj = rec && typeof rec.info === 'object' ? (rec.info as Record<string, unknown>) : {};
+            const name = typeof infoObj.name === 'string' && infoObj.name.trim().length > 0 ? infoObj.name : null;
+            const description = typeof infoObj.description === 'string' && infoObj.description.trim().length > 0 ? infoObj.description : null;
+            next[addr] = { name, description };
+          } catch {
+            fetchedDetailsRef.current.delete(addr);
+            next[addr] = {};
+          }
+        }),
+      );
       if (!cancelled && Object.keys(next).length > 0) {
         setDetails((prev) => ({ ...prev, ...next }));
       }
     }
-    loadDetails();
-    return () => { cancelled = true };
-  }, [storages, details]);
+
+    void loadDetails();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [storages]);
 
   const handleCreateStorage = async () => {
     try {
@@ -503,7 +524,7 @@ export function StorageList({
 
       const addr = await manager.createStorageAccount(operator, tokens);
       toast.success(`Storage created: ${addr}`);
-      await refresh();
+      await refreshStorages();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Failed to create storage");
     }
@@ -532,7 +553,7 @@ export function StorageList({
       toast.success("Permission granted");
       setModal(null);
       setGrantForm({ operator: "", token: "" });
-      await refresh();
+      await refreshStorages();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Failed to grant permission");
     }
@@ -562,7 +583,7 @@ export function StorageList({
       toast.success(`Withdrawal published: ${hash}`);
       setModal(null);
       setWithdrawForm({ destination: "", token: "", amountBase: "" });
-      await refresh();
+      await refreshStorages();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Failed to withdraw");
     }
@@ -594,7 +615,7 @@ export function StorageList({
 
       await manager.grantTokenPermission(parsed.data.storage, parsed.data.operator, parsed.data.token);
       toast.success("Permission granted");
-      await refresh();
+      await refreshStorages();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Failed to grant permission");
     }
@@ -628,7 +649,7 @@ export function StorageList({
 
       const hash = await manager.selfWithdraw(parsed.data.storage, parsed.data.destination, parsed.data.token, BigInt(parsed.data.amountBase));
       toast.success(`Withdrawal published: ${hash}`);
-      await refresh();
+      await refreshStorages();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Failed to withdraw");
     }
@@ -698,7 +719,13 @@ export function StorageList({
               </div>
             </div>
             <DialogFooter className="flex items-center justify-between gap-3">
-              <Link href={`/explorer/storage/${modal.entry.entity}`} className="text-accent hover:text-foreground text-sm">Open in Explorer</Link>
+              <Link
+                href={`/explorer/storage/${modal.entry.entity}`}
+                prefetch={false}
+                className="text-accent hover:text-foreground text-sm"
+              >
+                Open in Explorer
+              </Link>
               <div className="flex items-center gap-2">
                 <Button variant="outline" onClick={() => setModal(null)} disabled={savingInfo}>Cancel</Button>
                 <Button
@@ -843,6 +870,7 @@ export function StorageList({
                       ) : null}
                       <Link
                         href={`/explorer/storage/${entry.entity}`}
+                        prefetch={false}
                         className="min-w-0 truncate text-xs text-accent hover:text-foreground"
                       >
                         {truncateId(entry.entity, 12, 10)}
@@ -851,6 +879,7 @@ export function StorageList({
                     <div className="flex min-w-0 flex-col">
                       <Link
                         href={`/explorer/account/${entry.principal}`}
+                        prefetch={false}
                         className="min-w-0 truncate text-sm font-medium text-accent hover:text-foreground"
                       >
                         {truncateId(entry.principal, 12, 10)}
