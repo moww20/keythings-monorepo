@@ -17,6 +17,8 @@ import { useWallet } from "@/app/contexts/WalletContext";
 import StorageAccountManager from "@/app/lib/storage-account-manager";
 import { toast } from "sonner";
 
+const CAN_QUERY_STORAGE_API = Boolean(process.env.NEXT_PUBLIC_API_URL?.trim());
+
 export const StorageAclEntrySchema = z
   .object({
     principal: z.string().min(1),
@@ -54,17 +56,19 @@ export function useStorageAccounts(owner: string | null | undefined, options?: {
 
   const fetchStorages = React.useCallback(async () => {
     if (!enabled) {
+      setLoading(false);
       return;
     }
     try {
       console.log('[StorageList] fetchStorages called', { owner });
+      setError(null);
       if (!owner) {
         console.log('[StorageList] No owner provided - skipping fetch');
         setStorages([]);
+        setLoading(false);
         return;
       }
       setLoading(true);
-      setError(null);
 
       // Prefer extension provider RPC (matches how the extension surfaces data to dApps)
       let entriesRaw: unknown = null;
@@ -296,11 +300,9 @@ export function StorageList({
   const [tokensLoading, setTokensLoading] = React.useState(false);
   const [tokensError, setTokensError] = React.useState<string | null>(null);
   const originalInfoRef = React.useRef<{ name: string; description: string }>({ name: "", description: "" });
+  const fetchedDetailsRef = React.useRef(new Set<string>());
 
-  const canQueryStorageApi = React.useMemo(() => {
-    const base = process.env.NEXT_PUBLIC_API_URL ?? "";
-    return base.trim().length > 0;
-  }, []);
+  const canQueryStorageApi = CAN_QUERY_STORAGE_API;
 
   React.useEffect(() => {
     if (modal?.type === "view" && modal.entry) {
@@ -456,37 +458,51 @@ export function StorageList({
   }, [pageCount, pageIndex]);
 
   React.useEffect(() => {
+    if (storages.length === 0) {
+      return;
+    }
+
+    const addressesToLoad = storages
+      .map((entry) => entry.entity)
+      .filter((addr): addr is string => Boolean(addr) && !fetchedDetailsRef.current.has(addr));
+
+    if (addressesToLoad.length === 0) {
+      return;
+    }
+
+    addressesToLoad.forEach((addr) => {
+      fetchedDetailsRef.current.add(addr);
+    });
+
     let cancelled = false;
-    async function loadDetails() {
-      // Fetch storage info details via SDK state reads
-      const pending: Array<Promise<void>> = [];
-      const next: Record<string, { name?: string | null; description?: string | null }> = {};
-      for (const entry of storages) {
-        const addr = entry.entity;
-        if (!addr || details[addr]) continue;
-        pending.push(
-          (async () => {
-            try {
-              const state = await getAccountState(addr);
-              const rec = state && typeof state === 'object' ? (state as any) : null;
-              const infoObj = rec && typeof rec.info === 'object' ? (rec.info as Record<string, unknown>) : {};
-              const name = typeof infoObj.name === 'string' && infoObj.name.trim().length > 0 ? infoObj.name : null;
-              const description = typeof infoObj.description === 'string' && infoObj.description.trim().length > 0 ? infoObj.description : null;
-              next[addr] = { name, description };
-            } catch {
-              next[addr] = {};
-            }
-          })()
-        );
-      }
-      await Promise.allSettled(pending);
+    const next: Record<string, { name?: string | null; description?: string | null }> = {};
+
+    void Promise.allSettled(
+      addressesToLoad.map(async (addr) => {
+        try {
+          const state = await getAccountState(addr);
+          const rec = state && typeof state === 'object' ? (state as Record<string, unknown>) : null;
+          const infoObj = rec && typeof rec.info === 'object' ? ((rec.info ?? {}) as Record<string, unknown>) : {};
+          const name = typeof infoObj.name === 'string' && infoObj.name.trim().length > 0 ? infoObj.name : null;
+          const description =
+            typeof infoObj.description === 'string' && infoObj.description.trim().length > 0
+              ? infoObj.description
+              : null;
+          next[addr] = { name, description };
+        } catch {
+          next[addr] = {};
+        }
+      }),
+    ).then(() => {
       if (!cancelled && Object.keys(next).length > 0) {
         setDetails((prev) => ({ ...prev, ...next }));
       }
-    }
-    loadDetails();
-    return () => { cancelled = true };
-  }, [storages, details]);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [storages]);
 
   const handleCreateStorage = async () => {
     try {
@@ -698,7 +714,13 @@ export function StorageList({
               </div>
             </div>
             <DialogFooter className="flex items-center justify-between gap-3">
-              <Link href={`/explorer/storage/${modal.entry.entity}`} className="text-accent hover:text-foreground text-sm">Open in Explorer</Link>
+              <Link
+                href={`/explorer/storage/${modal.entry.entity}`}
+                prefetch={false}
+                className="text-accent hover:text-foreground text-sm"
+              >
+                Open in Explorer
+              </Link>
               <div className="flex items-center gap-2">
                 <Button variant="outline" onClick={() => setModal(null)} disabled={savingInfo}>Cancel</Button>
                 <Button
@@ -843,6 +865,7 @@ export function StorageList({
                       ) : null}
                       <Link
                         href={`/explorer/storage/${entry.entity}`}
+                        prefetch={false}
                         className="min-w-0 truncate text-xs text-accent hover:text-foreground"
                       >
                         {truncateId(entry.entity, 12, 10)}
@@ -851,6 +874,7 @@ export function StorageList({
                     <div className="flex min-w-0 flex-col">
                       <Link
                         href={`/explorer/account/${entry.principal}`}
+                        prefetch={false}
                         className="min-w-0 truncate text-sm font-medium text-accent hover:text-foreground"
                       >
                         {truncateId(entry.principal, 12, 10)}
