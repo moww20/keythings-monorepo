@@ -1,5 +1,6 @@
 "use client"
 
+import Link from "next/link"
 import * as React from "react"
 import { usePathname } from "next/navigation"
 import type { LucideIcon } from "lucide-react"
@@ -38,13 +39,14 @@ export function NavSecondary({
           {items.map((item) => (
             <SidebarMenuItem key={item.title}>
               <SidebarMenuButton asChild isActive={isActivePath(item.url)}>
-                <a
+                <Link
                   href={item.url}
+                  prefetch
                   aria-current={isActivePath(item.url) ? "page" : undefined}
                 >
                   <item.icon />
                   <span>{item.title}</span>
-                </a>
+                </Link>
               </SidebarMenuButton>
             </SidebarMenuItem>
           ))}
