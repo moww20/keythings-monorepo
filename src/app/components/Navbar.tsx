@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { createPortal } from "react-dom";
 import Link from "next/link";
@@ -42,25 +42,26 @@ export default function Navbar(): React.JSX.Element {
 
   const isActive = (path: string) => pathname === path;
 
-  const menuItems: MenuItem[] = [
-    { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, enabled: true },
-    { path: '/trade', label: 'Trade', icon: TrendingUp, enabled: true },
-    { path: null, label: 'OTC Swap', icon: ArrowLeftRight, enabled: false },
-    { path: null, label: 'Launchpad', icon: Rocket, enabled: false },
-    { path: null, label: 'NFT Marketplace', icon: Image, enabled: false },
-    { path: null, label: 'Account', icon: UserCircle, enabled: false },
-    { path: null, label: 'Settings', icon: Settings, enabled: false },
-  ];
+  const menuItems: MenuItem[] = useMemo(
+    () => [
+      { path: "/dashboard", label: "Dashboard", icon: LayoutDashboard, enabled: true },
+      { path: "/trade", label: "Trade", icon: TrendingUp, enabled: true },
+      { path: null, label: "OTC Swap", icon: ArrowLeftRight, enabled: false },
+      { path: null, label: "Launchpad", icon: Rocket, enabled: false },
+      { path: null, label: "NFT Marketplace", icon: Image, enabled: false },
+      { path: null, label: "Account", icon: UserCircle, enabled: false },
+      { path: null, label: "Settings", icon: Settings, enabled: false },
+    ],
+    [],
+  );
 
-  const handleMenuClick = (item: MenuItem) => {
+  const handleMenuClick = useCallback((item: MenuItem) => {
     if (!item.enabled) return;
-    
-    if (item.path) {
-      router.push(item.path);
-    } else if (item.onClick) {
+
+    if (item.onClick) {
       item.onClick();
     }
-  };
+  }, []);
 
   const redirectToDashboard = useCallback(() => {
     if (typeof window === "undefined") return;
@@ -86,6 +87,14 @@ export default function Navbar(): React.JSX.Element {
   useEffect(() => {
     updateNavHeight();
   }, [updateNavHeight, wallet.isConnected, mobileOpen]);
+
+  useEffect(() => {
+    menuItems.forEach((item) => {
+      if (item.enabled && item.path) {
+        router.prefetch(item.path);
+      }
+    });
+  }, [menuItems, router]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -135,8 +144,6 @@ export default function Navbar(): React.JSX.Element {
     return `${address.slice(0, 6)}...${address.slice(-4)}`;
   };
 
-  const linkClass = (href: string): string =>
-    `px-3 py-1.5 rounded-full text-sm transition ${pathname.startsWith(href) ? "bg-white/10 text-foreground" : "text-foreground/90 hover:bg-white/5"}`;
   return (
     <motion.nav
       ref={navRef}
@@ -230,23 +237,51 @@ export default function Navbar(): React.JSX.Element {
             const Icon = item.icon;
             const active = item.path ? isActive(item.path) : false;
             
+            const classes = `flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg whitespace-nowrap ${
+              !item.enabled
+                ? "text-muted/40 cursor-not-allowed opacity-50"
+                : active
+                ? "text-foreground bg-surface-strong border border-hairline"
+                : "text-muted hover:text-foreground hover:bg-white/10"
+            }`;
+
+            if (item.enabled && item.path) {
+              return (
+                <Link
+                  key={item.path}
+                  href={item.path}
+                  prefetch
+                  aria-current={active ? "page" : undefined}
+                  className={classes}
+                  onClick={mobileOpen ? closeMobileMenu : undefined}
+                >
+                  <Icon className="h-4 w-4 flex-shrink-0" />
+                  <span className="hidden sm:inline">{item.label}</span>
+                  <span className="sm:hidden">{item.label.split(" ")[0]}</span>
+                </Link>
+              );
+            }
+
+            if (item.enabled && item.onClick) {
+              return (
+                <button
+                  key={item.label}
+                  onClick={() => handleMenuClick(item)}
+                  className={classes}
+                >
+                  <Icon className="h-4 w-4 flex-shrink-0" />
+                  <span className="hidden sm:inline">{item.label}</span>
+                  <span className="sm:hidden">{item.label.split(" ")[0]}</span>
+                </button>
+              );
+            }
+
             return (
-              <button
-                key={index}
-                onClick={() => handleMenuClick(item)}
-                disabled={!item.enabled}
-                className={`flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg whitespace-nowrap ${
-                  !item.enabled
-                    ? 'text-muted/40 cursor-not-allowed opacity-50'
-                    : active
-                    ? 'text-foreground bg-surface-strong border border-hairline'
-                    : 'text-muted hover:text-foreground hover:bg-white/10'
-                }`}
-              >
+              <span key={item.label} className={classes} aria-disabled="true">
                 <Icon className="h-4 w-4 flex-shrink-0" />
                 <span className="hidden sm:inline">{item.label}</span>
-                <span className="sm:hidden">{item.label.split(' ')[0]}</span>
-              </button>
+                <span className="sm:hidden">{item.label.split(" ")[0]}</span>
+              </span>
             );
           })}
         </div>
