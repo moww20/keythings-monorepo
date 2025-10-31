@@ -16,31 +16,32 @@ interface FooterSection {
 
 export default function Footer(): React.JSX.Element {
   const currentYear = new Date().getFullYear();
+  const docsBase = process.env.NEXT_PUBLIC_DOCS_URL || "https://docs.keythings.xyz";
 
   const footerSections: FooterSection[] = [
     {
       title: "Product",
       links: [
-        { href: "/docs/getting-started", label: "Getting Started" },
-        { href: "/docs/developer/integration", label: "Integration Guide" },
-        { href: "/docs/developer/api-reference", label: "API Reference" },
-        { href: "/docs/security", label: "Security" },
+        { href: `${docsBase}/introduction`, label: "Getting Started" },
+        { href: `${docsBase}/developer/integration`, label: "Integration Guide" },
+        { href: `${docsBase}/developer/api-reference`, label: "API Reference" },
+        { href: `${docsBase}/security`, label: "Security" },
       ],
     },
     {
       title: "Resources",
       links: [
-        { href: "/docs", label: "Documentation" },
-        { href: "/docs/tutorials/setup", label: "Tutorials" },
-        { href: "/docs/nostr-basics", label: "Keeta Network Basics" },
+        { href: `${docsBase}`, label: "Documentation" },
+        { href: `${docsBase}/tutorials/setup`, label: "Tutorials" },
+        { href: `${docsBase}/nostr-basics`, label: "Keeta Network Basics" },
         { href: "https://github.com/moww20/keythings-extension-wallet", label: "GitHub Repository" },
       ],
     },
     {
       title: "Support",
       links: [
-        { href: "/docs/privacy-policy", label: "Privacy Policy" },
-        { href: "/docs/licensing", label: "Licensing" },
+        { href: `${docsBase}/privacy-policy`, label: "Privacy Policy" },
+        { href: `${docsBase}/licensing`, label: "Licensing" },
         { href: "mailto:support@keythings.wallet", label: "Contact Support" },
         { href: "https://chromewebstore.google.com/", label: "Chrome Web Store" },
       ],
@@ -51,7 +52,7 @@ export default function Footer(): React.JSX.Element {
         { href: "https://x.com/keythings_wallet", label: "X (Twitter)" },
         { href: "https://discord.gg/keythings", label: "Discord" },
         { href: "https://github.com/moww20/keythings-extension-wallet", label: "GitHub" },
-        { href: "/docs/authentication", label: "Authentication" },
+        { href: `${docsBase}/authentication`, label: "Authentication" },
       ],
     },
   ];
@@ -135,10 +136,10 @@ export default function Footer(): React.JSX.Element {
               © {currentYear} Keythings Wallet. All rights reserved.
             </div>
             <div className="flex flex-wrap items-center gap-6 text-xs text-foreground/60">
-              <Link href="/docs/privacy-policy" className="hover:text-foreground/80 transition-colors">
+              <Link href={`${docsBase}/privacy-policy`} target="_blank" rel="noopener noreferrer" className="hover:text-foreground/80 transition-colors">
                 Privacy Policy
               </Link>
-              <Link href="/docs/licensing" className="hover:text-foreground/80 transition-colors">
+              <Link href={`${docsBase}/licensing`} target="_blank" rel="noopener noreferrer" className="hover:text-foreground/80 transition-colors">
                 Terms of Service
               </Link>
               <a

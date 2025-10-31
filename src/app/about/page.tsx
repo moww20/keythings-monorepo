@@ -1,16 +1,23 @@
 "use client"
 
 import React from "react"
+import Link from "next/link"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import { HelpCircle, Github, ExternalLink, Mail, Shield, Users, Target } from "lucide-react"
-import Link from "next/link"
+import { AppSidebar } from "@/components/app-sidebar"
+import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
 
 export default function AboutPage() {
-  return (
-    <div className="container mx-auto px-6 py-8 max-w-4xl">
+  const sidebarStyles = {
+    "--sidebar-width": "calc(var(--spacing) * 72)",
+    "--header-height": "calc(var(--spacing) * 12)",
+  } as React.CSSProperties
+
+  const aboutContent = (
+    <div className="space-y-8">
       <div className="mb-8">
         <h1 className="text-4xl font-bold text-foreground mb-4">About Keythings</h1>
         <p className="text-lg text-muted">
@@ -199,13 +206,28 @@ export default function AboutPage() {
               <span className="text-muted">Keeta Network:</span>
               <span className="text-foreground">Testnet</span>
             </div>
-            <Separator />
-            <p className="text-xs text-muted text-center">
-              © 2024 Keythings. Built for the Keeta Network ecosystem.
-            </p>
           </CardContent>
         </Card>
       </div>
+    </div>
+  )
+
+  return (
+    <div className="h-screen bg-background">
+      <SidebarProvider style={sidebarStyles}>
+        <AppSidebar variant="inset" />
+        <SidebarInset>
+          <div className="flex h-full flex-1 flex-col">
+            <div className="@container/main flex flex-1 flex-col gap-2 overflow-auto">
+              <div className="flex flex-1 flex-col gap-4 py-4 md:gap-6 md:py-6">
+                <div className="px-4 lg:px-6">
+                  {aboutContent}
+                </div>
+              </div>
+            </div>
+          </div>
+        </SidebarInset>
+      </SidebarProvider>
     </div>
   )
 }

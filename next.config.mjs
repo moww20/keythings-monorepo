@@ -75,6 +75,22 @@ const nextConfig = {
       // },
     ]
   },
+
+  async redirects() {
+    const docsBase = process.env.NEXT_PUBLIC_DOCS_URL || 'https://docs.keythings.xyz';
+    return [
+      {
+        source: '/docs',
+        destination: docsBase,
+        permanent: true,
+      },
+      {
+        source: '/docs/:path*',
+        destination: `${docsBase}/:path*`,
+        permanent: true,
+      },
+    ];
+  },
 };
 
 export default nextConfig;

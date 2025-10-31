@@ -180,6 +180,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const isWalletLoading = walletContext.isLoading || walletState.isInitializing
   const hydratedWalletConnected = !isWalletLoading && walletState.connected && !walletState.isLocked
   const hydratedWalletAddress = walletState.connected ? walletContext.publicKey : null
+  const docsUrl = process.env.NEXT_PUBLIC_DOCS_URL || "https://docs.keythings.xyz"
 
   return (
     <Sidebar collapsible="offcanvas" {...props}>
@@ -248,7 +249,9 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             </a>
             {!isDocsRoute && (
               <Link
-                href="/docs/introduction"
+                href={docsUrl}
+                target="_blank"
+                rel="noopener noreferrer"
                 className="inline-flex h-9 w-9 items-center justify-center rounded-full text-foreground/85 transition hover:bg-surface"
                 aria-label="Documentation"
               >

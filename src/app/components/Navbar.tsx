@@ -26,6 +26,7 @@ export default function Navbar(): React.JSX.Element {
   const pathname = usePathname();
   const router = useRouter();
   const wallet = useWallet();
+  const docsUrl = process.env.NEXT_PUBLIC_DOCS_URL || "https://docs.keythings.xyz";
   const [openMenuPath, setOpenMenuPath] = useState<string | null>(null);
   const mobileOpen = openMenuPath === pathname;
   const openMobileMenu = useCallback(() => setOpenMenuPath(pathname), [pathname]);
@@ -188,7 +189,7 @@ export default function Navbar(): React.JSX.Element {
           </a>
           <ThemeToggle />
           <a 
-            href="https://docs.keythings.xyz/docs/introduction" 
+            href={docsUrl} 
             target="_blank"
             rel="noopener noreferrer"
             aria-label="Documentation"
@@ -321,7 +322,7 @@ export default function Navbar(): React.JSX.Element {
                   </div>
                   <div className="grid gap-2">
                     <a 
-                      href="https://docs.keythings.xyz/docs/introduction" 
+                      href={docsUrl} 
                       target="_blank"
                       rel="noopener noreferrer"
                       className="flex items-center gap-2 px-3 py-1.5 rounded-full text-sm transition bg-white/10 text-foreground hover:bg-white/15"
