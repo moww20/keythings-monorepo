@@ -13,6 +13,7 @@ import { parseExplorerOperation } from "@/lib/explorer/client";
 import { parseTokenMetadata, formatTokenAmount } from "@/app/explorer/utils/token-metadata";
 import { getTokenMeta } from "@/lib/tokens/metadata-service";
 import { useWallet } from "@/app/contexts/WalletContext";
+// Provider-only history path (remove SDK/raw fallback)
 
 const BASE_TOKEN_TICKER = "KTA";
 const FALLBACK_MESSAGE = "Connect your Keeta wallet to pull on-chain activity.";
@@ -218,7 +219,7 @@ function normalizeHistoryRecords(
 
     const fallbackAmount = sx(op.amount ?? op.rawAmount) ?? sx(record.amount ?? record.rawAmount);
     const fallbackToken = sx(op.token ?? op.tokenAddress) ?? sx(record.token ?? record.tokenAddress);
-    const fallbackFrom = sx(op.from) ?? sx(record.from ?? record.account);
+    const fallbackFrom = sx(op.from) ?? sx(op.account) ?? sx(record.from ?? record.account);
     const fallbackTo = sx(op.to ?? op.toAccount) ?? sx(record.to);
     const fallbackFormatted = sx(op.formattedAmount) ?? sx(record.formattedAmount);
     const fallbackTicker = sx(op.tokenTicker) ?? sx(record.tokenTicker);
@@ -227,11 +228,25 @@ function normalizeHistoryRecords(
       : undefined;
     const fallbackMetadata = op.tokenMetadata ?? record.tokenMetadata ?? record.metadata;
 
-    const block = {
+    const blockAccountValue =
+      sx(op.account) ?? sx(record?.account) ?? sx(record?.from) ?? accountKey;
+    let block = {
       $hash: blockHash,
-      date: resolveDate(op.date, record?.date, record?.createdAt, record?.timestamp),
-      account: sx(op.account ?? record?.account ?? record?.from),
+      date: resolveDate(
+        op.date,
+        op.block?.date,
+        (op.block as any)?.createdAt,
+        record?.date,
+        record?.createdAt,
+        record?.timestamp,
+        (record?.block as any)?.date,
+        (record?.block as any)?.createdAt,
+      ),
+      account: blockAccountValue,
     };
+    if (!block.date || (typeof block.date === 'string' && block.date.trim().length === 0)) {
+      block = { ...block, date: new Date().toISOString() };
+    }
 
     const operationPayload: Record<string, any> = {
       type: normalizedType,
@@ -531,7 +546,7 @@ function groupOperationsByBlock(baseOperations: ExplorerOperation[]): ExplorerOp
 }
 
 export default function HistoryPage(): React.JSX.Element {
-  const { publicKey } = useWallet();
+  const { publicKey, wallet } = useWallet();
   const [isClient, setIsClient] = React.useState(false);
   const [tokenMetadata, setTokenMetadata] = React.useState<Record<string, CachedTokenMeta>>({});
   const fetchingTokenMetaRef = React.useRef<Set<string>>(new Set());
@@ -553,57 +568,180 @@ export default function HistoryPage(): React.JSX.Element {
   const historyQuery = useInfiniteQuery({
     queryKey: ["history", accountKey],
     queryFn: async ({ pageParam }) => {
-      if (typeof window === "undefined" || !window.keeta?.history) {
-        return { records: [], cursor: null, hasMore: false } as {
-          records: any[];
-          cursor: string | null;
-          hasMore: boolean;
-        };
+      const depth = 50;
+      if (!accountKey) {
+        return { records: [], cursor: null, hasMore: false } as { records: any[]; cursor: string | null; hasMore: boolean };
       }
-      try {
-        if (typeof window.keeta.requestCapabilities === "function") {
-          await window.keeta.requestCapabilities(["read"]);
+      // Provider-only: use wallet extension history to derive operations
+      if (typeof window === "undefined" || !(window as any)?.keeta?.history) {
+        return { records: [], cursor: null, hasMore: false } as { records: any[]; cursor: string | null; hasMore: boolean };
+      }
+
+      const prov = await (window as any).keeta.history({ depth });
+      const recs = prov && typeof prov === "object" && Array.isArray((prov as any).records) ? (prov as any).records : null;
+      if (!Array.isArray(recs) || recs.length === 0) {
+        return { records: [], cursor: null, hasMore: false } as { records: any[]; cursor: string | null; hasMore: boolean };
+      }
+
+      const extracted: any[] = [];
+      const toStringSafe = (val: unknown): string | undefined => {
+        if (typeof val === "string") return val;
+        if (val && typeof (val as { toString?: () => string }).toString === "function") {
+          try {
+            const s = (val as { toString: () => string }).toString();
+            if (typeof s === "string" && s !== "[object Object]") return s;
+          } catch {}
         }
-      } catch {}
-
-      const resp = await window.keeta.history({
-        depth: 50,
-        cursor: pageParam ?? null,
-        includeOperations: true,
-        includeTokenMetadata: true,
-      } as any);
-
-      let records: any[] = Array.isArray(resp?.records) ? resp.records : [];
-
-      try {
-        const uc: any = await window.keeta.getUserClient?.();
-        const hasFilter = uc && (typeof uc.filterStapleOperations === "function" || typeof uc.filterStapleOps === "function");
-        if (hasFilter && accountKey) {
-          for (const rec of records) {
-            const staple = (rec && typeof rec === "object") ? (rec as any).voteStaple : null;
-            if (!staple) continue;
+        return undefined;
+      };
+      const accountToString = (candidate: unknown): string | undefined => {
+        if (typeof candidate === "string") return candidate;
+        if (candidate && typeof candidate === "object") {
+          const obj = candidate as Record<string, unknown>;
+          const pk = obj.publicKeyString as unknown;
+          if (typeof pk === "string" && pk.trim().length > 0) return pk;
+          if (pk && typeof (pk as { get?: () => unknown }).get === "function") {
             try {
-              let filtered: any;
-              if (typeof uc.filterStapleOperations === "function") {
-                filtered = await uc.filterStapleOperations(staple, { account: accountKey });
-              } else if (typeof uc.filterStapleOps === "function") {
-                filtered = await uc.filterStapleOps(staple, { account: accountKey });
-              }
-              if (Array.isArray(filtered)) {
-                rec.operations = filtered;
-              } else if (filtered && Array.isArray(filtered.operations)) {
-                rec.operations = filtered.operations;
+              const got = (pk as { get: () => unknown }).get();
+              if (typeof got === "string" && got.trim().length > 0) return got;
+              if (got && typeof (got as { toString?: () => string }).toString === "function") {
+                const s = (got as { toString: () => string }).toString();
+                if (typeof s === "string" && s !== "[object Object]") return s;
               }
             } catch {}
           }
+          if (pk && typeof (pk as { toString?: () => string }).toString === "function") {
+            try {
+              const s = (pk as { toString: () => string }).toString();
+              if (typeof s === "string" && s !== "[object Object]") return s;
+            } catch {}
+          }
         }
-      } catch {}
+        return toStringSafe(candidate);
+      };
+      const normalizeOpType = (value: unknown): string => {
+        const map: Record<number, string> = {
+          0: 'SEND',
+          1: 'RECEIVE',
+          2: 'SWAP',
+          3: 'SWAP_FORWARD',
+          4: 'TOKEN_ADMIN_SUPPLY',
+          5: 'TOKEN_ADMIN_MODIFY_BALANCE',
+        };
+        if (typeof value === 'number' && value in map) return map[value];
+        if (typeof value === 'string') {
+          const n = Number(value);
+          if (Number.isInteger(n) && n in map) return map[n];
+          return value.toUpperCase();
+        }
+        return 'UNKNOWN';
+      };
+      for (const entry of recs as any[]) {
+        const blocks = Array.isArray((entry as any)?.blocks) ? (entry as any).blocks : [];
+        const stapleDateIso = (() => {
+          const raw = (entry as any)?.date ?? (entry as any)?.createdAt ?? (entry as any)?.timestamp;
+          if (raw instanceof Date) return raw.toISOString();
+          if (typeof raw === "number") {
+            const ms = raw < 1_000_000_000_000 ? raw * 1000 : raw;
+            return new Date(ms).toISOString();
+          }
+          if (typeof raw === "string") return raw;
+          return undefined;
+        })();
+        for (const block of blocks as any[]) {
+          const list = Array.isArray(block?.operations) ? block.operations : Array.isArray(block?.transactions) ? block.transactions : [];
+          const blockHash = typeof block?.hash === "string" ? block.hash : toStringSafe(block?.hash);
+          const bdateRaw = (block?.createdAt ?? block?.date ?? stapleDateIso) as unknown;
+          const blockDate = (() => {
+            if (bdateRaw instanceof Date) return bdateRaw.toISOString();
+            if (typeof bdateRaw === "number") {
+              const ms = bdateRaw < 1_000_000_000_000 ? bdateRaw * 1000 : bdateRaw;
+              return new Date(ms).toISOString();
+            }
+            if (typeof bdateRaw === "string") return bdateRaw;
+            return undefined;
+          })();
+          const blockAccount = accountToString((block as any)?.account);
+          for (const raw of list) {
+            const rec = (raw && typeof raw === "object") ? (raw as Record<string, unknown>) : {};
+            const type = normalizeOpType(rec.type);
+            const from = accountToString(rec.from ?? rec.sender ?? undefined);
+            const to = accountToString(rec.to ?? rec.receiver ?? undefined);
+            const initialTokenCandidate = rec.token ?? rec.tokenAddress ?? rec.account ?? rec.target ?? rec.asset ?? rec.currency;
+            const token = accountToString(initialTokenCandidate ?? undefined);
+            const amt = rec.amount as unknown;
+            let amount: string | undefined;
+            if (typeof amt === "bigint") amount = amt.toString();
+            else if (typeof amt === "number") amount = Math.trunc(amt).toString();
+            else if (typeof amt === "string") amount = amt;
 
-      return {
-        records,
-        cursor: typeof resp?.cursor === "string" ? resp.cursor : null,
-        hasMore: Boolean(resp?.hasMore),
-      } as { records: any[]; cursor: string | null; hasMore: boolean };
+            const rawOperation = rec;
+            const entry: Record<string, any> = {
+              type,
+              operationType: type,
+              from,
+              to,
+              token,
+              tokenAddress: token,
+              amount: amount ?? "0",
+              rawAmount: amount ?? "0",
+              block: blockHash,
+              date: blockDate,
+              account: blockAccount,
+              rawOperation,
+            };
+
+            if (rawOperation && typeof rawOperation === "object") {
+              const deriveTokenFromRaw = (): string | undefined => {
+                const candidate =
+                  rawOperation.token ??
+                  rawOperation.tokenAddress ??
+                  (rawOperation as any)?.operationSend?.token ??
+                  (rawOperation as any)?.operationReceive?.token ??
+                  (rawOperation as any)?.operationForward?.token ??
+                  (rawOperation as any)?.asset ??
+                  (rawOperation as any)?.currency ??
+                  (rawOperation as any)?.account ??
+                  (rawOperation as any)?.target;
+                return accountToString(candidate);
+              };
+
+              const derivedToken = deriveTokenFromRaw();
+              if (!entry.token && derivedToken) {
+                entry.token = derivedToken;
+                entry.tokenAddress = derivedToken;
+              }
+
+              const copyString = (value: unknown): string | undefined =>
+                typeof value === "string" && value.trim().length > 0 ? value : undefined;
+
+              const copyObject = (value: unknown): Record<string, unknown> | undefined =>
+                value && typeof value === "object" ? (value as Record<string, unknown>) : undefined;
+
+              entry.operationSend = copyObject((rawOperation as any)?.operationSend);
+              entry.operationReceive = copyObject((rawOperation as any)?.operationReceive);
+              entry.operationForward = copyObject((rawOperation as any)?.operationForward);
+
+              if (!entry.formattedAmount) {
+                entry.formattedAmount = copyString((rawOperation as any)?.formattedAmount);
+              }
+              if (!entry.tokenTicker) {
+                entry.tokenTicker = copyString((rawOperation as any)?.tokenTicker);
+              }
+              if (!entry.tokenMetadata && (rawOperation as any)?.tokenMetadata) {
+                entry.tokenMetadata = (rawOperation as any)?.tokenMetadata;
+              }
+              if (!entry.tokenDecimals && typeof (rawOperation as any)?.tokenDecimals === "number") {
+                entry.tokenDecimals = (rawOperation as any)?.tokenDecimals;
+              }
+            }
+
+            extracted.push(entry);
+          }
+        }
+      }
+      const records = extracted.length > 0 ? [{ operations: extracted }] : [];
+      return { records, cursor: null, hasMore: false } as { records: any[]; cursor: string | null; hasMore: boolean };
     },
     initialPageParam: null as string | null,
     getNextPageParam: (lastPage) => (lastPage.hasMore ? lastPage.cursor : undefined),
@@ -614,7 +752,10 @@ export default function HistoryPage(): React.JSX.Element {
     enabled: isClient && accountKey.length > 0,
   });
 
-  const { data, fetchNextPage, hasNextPage = false, isFetchingNextPage = false, isLoading, isError } = historyQuery;
+  // Proactively refetch once the wallet connects and account key is present
+  const { data, fetchNextPage, hasNextPage = false, isFetchingNextPage = false, isLoading, isError, refetch } = historyQuery;
+
+  // Remove extra refetch effect to avoid duplicate queries/race conditions.
 
   const pages = React.useMemo(() => data?.pages ?? [], [data]);
   const allRecords = React.useMemo(() => {

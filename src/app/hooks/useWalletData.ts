@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { normalizeBalances } from '@/app/lib/balances/normalize';
+import { getReadClient, getAccountState, getAggregatedBalancesForOwner } from '@/lib/explorer/sdk-read-client';
 
 // Import the existing KeetaProvider type to avoid conflicts
 import type { KeetaProvider, KeetaNetworkInfo, KeetaBalanceEntry, KeetaBaseTokenInfo } from '../../types/keeta';
@@ -121,48 +122,46 @@ export function useWalletData() {
         return;
       }
 
-      // Only request capabilities if explicitly requested
-      let capabilityTokens: any = null;
-      if (requestCapabilities) {
-        try {
-          if (typeof provider.requestCapabilities === 'function') {
-            capabilityTokens = await provider.requestCapabilities(['read', 'transact']);
-          }
-        } catch {
-        }
-      }
-
-      // Extract the read token if available
-      const readToken = Array.isArray(capabilityTokens) && capabilityTokens.length > 0 
-        ? capabilityTokens[0]?.token 
-        : null;
-
-      // Fetch balance and network using RPC with capability token
-      // The wallet extension expects capability tokens wrapped in an object: { capabilityToken: token }
+      // SDK-only reads for balance and network
       let balance = '0';
-      let network = null;
-
+      let network: unknown = null;
       try {
-        if (typeof provider.request === 'function') {
-          // Use RPC method with capability token wrapped in object
-          const balanceResult = await provider.request({
-            method: 'keeta_getBalance',
-            params: readToken ? [accounts[0], { capabilityToken: readToken }] : [accounts[0]]
-          });
-          balance = typeof balanceResult === 'string' ? balanceResult : String(balanceResult ?? '0');
-        }
-      } catch {
-      }
+        const client = await getReadClient();
+        // Derive base token address
+        let baseTokenAddress = '';
+        try {
+          const bt = (client as any)?.baseToken;
+          const pk = (bt?.publicKeyString && typeof bt.publicKeyString === 'string')
+            ? bt.publicKeyString
+            : (bt?.publicKeyString && typeof bt.publicKeyString?.toString === 'function')
+              ? String(bt.publicKeyString.toString())
+              : '';
+          if (pk && pk !== '[object Object]') baseTokenAddress = pk;
+        } catch {}
 
-      try {
-        if (typeof provider.request === 'function') {
-          // Use RPC method with capability token wrapped in object
-          const networkResult = await provider.request({
-            method: 'keeta_getNetwork',
-            params: readToken ? [{ capabilityToken: readToken }] : []
-          });
-          network = networkResult;
+        const state: any = await getAccountState(accounts[0]);
+        const entries: any[] = Array.isArray(state?.balances)
+          ? state.balances
+          : Array.isArray(state?.tokens)
+            ? state.tokens
+            : [];
+        if (entries.length && baseTokenAddress) {
+          for (const entry of entries) {
+            const tokenAddr = ((): string => {
+              const v = (entry as any)?.token ?? (entry as any)?.publicKey;
+              if (typeof v === 'string') return v;
+              try { return String(v?.toString?.() ?? ''); } catch { return ''; }
+            })();
+            const raw = (entry as any)?.balance ?? (entry as any)?.amount;
+            if (tokenAddr === baseTokenAddress && (typeof raw === 'string' || typeof raw === 'number' || typeof raw === 'bigint')) {
+              balance = String(raw);
+              break;
+            }
+          }
         }
+        try {
+          network = (client as any)?.networkAlias ?? (client as any)?.network ?? null;
+        } catch {}
       } catch {
       }
 
@@ -331,7 +330,7 @@ export function useWalletData() {
 }
 
 // Hook for fetching token balances - with capability token support
-export function useTokenBalances(shouldFetch: boolean = false) {
+export function useTokenBalances(shouldFetch: boolean = false, ownerPublicKey?: string) {
   const [balances, setBalances] = useState<unknown[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -344,77 +343,37 @@ export function useTokenBalances(shouldFetch: boolean = false) {
   }, []);
 
   const fetchTokenBalances = useCallback(async () => {
-      const provider = getWalletProvider();
-    if (!provider) {
-      if (isMountedRef.current) {
-        setBalances([]);
-        }
-        return;
-      }
-
-      try {
+    if (!ownerPublicKey) {
+      if (isMountedRef.current) setBalances([]);
+      return;
+    }
+    try {
       if (isMountedRef.current) {
         setIsLoading(true);
         setError(null);
       }
-      
-      // Request read capability first
-      let readToken: string | null = null;
-      try {
-        if (typeof provider.requestCapabilities === 'function') {
-          const tokens = await provider.requestCapabilities(['read', 'transact']);
-          if (Array.isArray(tokens) && tokens.length > 0 && tokens[0] && typeof tokens[0] === 'object' && 'token' in tokens[0]) {
-            readToken = tokens[0].token as string;
-          }
-        }
-      } catch {
-      }
-
-      // Prefer normalized balances RPC, fallback to all balances
-      let result;
-      if (typeof provider.request === 'function' && readToken) {
-        try {
-          result = await provider.request({
-            method: 'keeta_getNormalizedBalances',
-            params: [{ capabilityToken: readToken }]
-          });
-        } catch {
-          result = await provider.request({
-            method: 'keeta_getAllBalances',
-            params: [{ capabilityToken: readToken }]
-          });
-        }
-      } else {
-        if (typeof (provider as any).getNormalizedBalances === 'function') {
-          result = await (provider as any).getNormalizedBalances();
-        } else {
-          result = await provider.getAllBalances();
-        }
-      }
-      
-      // If wallet path returned empty, keep result as-is (no SDK fallback in browser build)
-      
+      const entries = await getAggregatedBalancesForOwner(ownerPublicKey, { includeTokenMetadata: true });
       if (!isMountedRef.current) return;
-      
-      const normalized = normalizeBalances(result);
+      // Map to the minimal shape expected downstream
+      const mapped = entries.map((e) => ({ token: e.token, balance: e.balance, metadata: e.metadata }));
+      // Keep normalize utility to ensure consistent shape
+      const normalized = normalizeBalances(mapped as any);
       setBalances(normalized);
     } catch (error) {
       if (!isMountedRef.current) return;
       setError(`Failed to fetch balances: ${error instanceof Error ? error.message : 'Unknown error'}`);
       setBalances([]);
     } finally {
-      if (isMountedRef.current) {
-        setIsLoading(false);
-      }
+      if (isMountedRef.current) setIsLoading(false);
     }
-  }, []);
+  }, [ownerPublicKey]);
 
   // Automatically fetch when shouldFetch changes to true
   useEffect(() => {
-    if (shouldFetch) {
+    if (shouldFetch && ownerPublicKey) {
       fetchTokenBalances();
     }
-  }, [shouldFetch, fetchTokenBalances]);
+  }, [shouldFetch, ownerPublicKey, fetchTokenBalances]);
 
   return {
     balances,

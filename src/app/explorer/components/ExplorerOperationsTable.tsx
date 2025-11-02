@@ -18,6 +18,7 @@ import { Button } from "@/components/ui/button";
 import {
   formatRelativeTime,
   summarizeOperation,
+  parseExplorerDate,
 } from "../utils/operation-format";
 import {
   resolveExplorerPath,
@@ -145,14 +146,27 @@ export default function ExplorerOperationsTable(
 ): React.JSX.Element {
   const [pageIndex, setPageIndex] = useState(0);
   const pageSize = 5;
-  const pageCount = Math.max(1, Math.ceil(operations.length / pageSize));
+  // Stable sort by block date desc, then hash to avoid jitter between renders
+  const sortedOperations = useMemo(() => {
+    const copy = operations.slice();
+    copy.sort((a, b) => {
+      const ad = parseExplorerDate(a.block.date)?.getTime() ?? 0;
+      const bd = parseExplorerDate(b.block.date)?.getTime() ?? 0;
+      if (bd !== ad) return bd - ad;
+      const ah = (a.block.$hash || '').toString();
+      const bh = (b.block.$hash || '').toString();
+      return ah.localeCompare(bh);
+    });
+    return copy;
+  }, [operations]);
+  const pageCount = Math.max(1, Math.ceil(sortedOperations.length / pageSize));
   useEffect(() => {
     setPageIndex((prev) => Math.min(prev, pageCount - 1));
-  }, [operations.length, pageCount]);
+  }, [sortedOperations.length, pageCount]);
   const pageRows = useMemo(() => {
     const start = pageIndex * pageSize;
-    return operations.slice(start, start + pageSize);
-  }, [operations, pageIndex]);
+    return sortedOperations.slice(start, start + pageSize);
+  }, [sortedOperations, pageIndex]);
   if (loading && !operations.length) {
     // Render table shell with skeleton rows
     return (
@@ -245,21 +259,13 @@ export default function ExplorerOperationsTable(
           <TableBody>
             {pageRows.map((operation, idx) => {
               const summary = summarizeOperation(operation);
-              if (process.env.NODE_ENV === "development") {
-                console.log("[ExplorerOperationsTable] Rendering operation", {
-                  type: operation.type,
-                  blockHash: operation.block.$hash,
-                  rawOperation: operation,
-                  summary,
-                });
-              }
               const blockLink = `/explorer/block/${operation.block.$hash}`;
               const fromLink = resolveLink(summary.participants.from ?? null);
               const toLink = resolveLink(summary.participants.to ?? null);
-              const typeUpper = (operation.type || '').toUpperCase();
-              const showOnlyTo = participantsMode === 'smart' && typeUpper === 'SEND';
-              const showOnlyFrom = participantsMode === 'smart' && typeUpper === 'RECEIVE';
-              const relative = formatRelativeTime(summary.timestamp) ?? "Just now";
+              const showOnlyTo = false;
+              const showOnlyFrom = false;
+              const relative = formatRelativeTime(summary.timestamp) ?? "—";
+              const absolute = summary.timestamp ? summary.timestamp.toISOString() : null;
 
               const primaryOp = operation.operation ?? {};
               const sendOp = operation.operationSend ?? {};
@@ -338,16 +344,7 @@ export default function ExplorerOperationsTable(
               }
 
               const tokenLink = rawTokenIdentifier ? resolveLink(rawTokenIdentifier) : null;
-              if (process.env.NODE_ENV === "development" && !rawTokenIdentifier) {
-                console.warn("[ExplorerOperationsTable] Missing token identifier", {
-                  operationType: operation.type,
-                  primaryOp,
-                  sendOp,
-                  receiveOp,
-                  operationAny,
-                  tokenCandidates,
-                });
-              }
+              
               
               // Enhanced metadata name extraction from multiple sources
               const metadataName = 
@@ -386,7 +383,7 @@ export default function ExplorerOperationsTable(
 
               return (
                 <TableRow
-                  key={`${operation.block.$hash}-${operation.voteStapleHash ?? operation.type}-${idx}`}
+                  key={`${operation.block.$hash}-${operation.type}-${operation.from ?? ''}-${operation.to ?? ''}-${operation.amount ?? ''}`}
                   className="border-hairline text-sm text-foreground"
                 >
                   <TableCell className="px-6 py-4 w-[220px] align-top">
@@ -462,7 +459,7 @@ export default function ExplorerOperationsTable(
                       </div>
                     </div>
                   </TableCell>
-                  <TableCell className="px-6 py-4 w-[120px] text-sm text-muted align-top whitespace-nowrap">
+                  <TableCell className="px-6 py-4 w-[120px] text-sm text-muted align-top whitespace-nowrap" title={absolute ?? undefined}>
                     {relative}
                   </TableCell>
                 </TableRow>

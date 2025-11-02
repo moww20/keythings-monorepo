@@ -18,8 +18,20 @@ export function parseExplorerDate(value: unknown): Date | null {
   if (value instanceof Date && !Number.isNaN(value.getTime())) {
     return value;
   }
-  if (typeof value === "string" || typeof value === "number") {
-    const parsed = new Date(value);
+  if (typeof value === "number") {
+    const ms = value < 1_000_000_000_000 ? value * 1000 : value;
+    const d = new Date(ms);
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (/^\d+$/.test(trimmed)) {
+      const n = Number(trimmed);
+      const ms = n < 1_000_000_000_000 ? n * 1000 : n;
+      const d = new Date(ms);
+      return Number.isNaN(d.getTime()) ? null : d;
+    }
+    const parsed = new Date(trimmed);
     if (!Number.isNaN(parsed.getTime())) {
       return parsed;
     }
@@ -136,50 +148,6 @@ export function summarizeOperation(operation: ExplorerOperation): OperationSumma
       operation.operationReceive?.token
   );
 
-          if (process.env.NODE_ENV === "development") {
-            console.log("[ExplorerOperations] summarizeOperation participants", {
-              type: operation.type,
-              blockAccount,
-              resolvedSendFrom,
-              resolvedSendTo,
-              resolvedReceiveFrom,
-              resolvedReceiveTo,
-              resolvedToken,
-              operation,
-            });
-            
-            // Debug the actual field extraction
-            console.log("[ExplorerOperations] Field extraction debug", {
-              "operation.operation?.from": operation.operation?.from,
-              "operation.operationSend?.from": operation.operationSend?.from,
-              "(operation as Record<string, unknown>)?.from": (operation as Record<string, unknown>)?.from,
-              "operation.operation?.to": operation.operation?.to,
-              "operation.operationSend?.to": operation.operationSend?.to,
-              "(operation as Record<string, unknown>)?.to": (operation as Record<string, unknown>)?.to,
-              "operation.operation?.token": operation.operation?.token,
-              "operation.operationSend?.token": operation.operationSend?.token,
-              "(operation as Record<string, unknown>)?.token": (operation as Record<string, unknown>)?.token,
-            });
-            
-            // Debug the full operation structure
-            console.log("[ExplorerOperations] Full operation structure", {
-              operationKeys: Object.keys(operation),
-              operationValues: Object.values(operation),
-              operationStringified: JSON.stringify(operation, null, 2),
-            });
-            
-            // Debug the top-level fields specifically
-            console.log("[ExplorerOperations] Top-level fields debug", {
-              "operation.from": (operation as Record<string, unknown>).from,
-              "operation.to": (operation as Record<string, unknown>).to,
-              "operation.token": (operation as Record<string, unknown>).token,
-              "operation.amount": (operation as Record<string, unknown>).amount,
-              "operation.tokenAddress": (operation as Record<string, unknown>).tokenAddress,
-              "operation.tokenTicker": (operation as Record<string, unknown>).tokenTicker,
-              "operation.rawAmount": (operation as Record<string, unknown>).rawAmount,
-            });
-          }
-
   switch (operation.type) {
     case "SEND": {
       participants.from = resolvedSendFrom ?? blockAccount;
@@ -213,7 +181,23 @@ export function summarizeOperation(operation: ExplorerOperation): OperationSumma
     }
   }
 
-  const timestamp = parseExplorerDate(operation.block.date);
+  const pickParsedDate = (...values: unknown[]): Date | null => {
+    for (const v of values) {
+      const d = parseExplorerDate(v);
+      if (d) return d;
+    }
+    return null;
+  };
+  const timestamp = pickParsedDate(
+    (operation.block as any)?.date,
+    (operation.block as any)?.createdAt,
+    (operation as any)?.timestamp,
+    (operation as any)?.date,
+    (operation as any)?.createdAt,
+    (operation as any)?.blockTimestamp,
+    (operation.operation as any)?.date,
+    (operation.operation as any)?.timestamp,
+  );
 
   return {
     description,

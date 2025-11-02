@@ -53,6 +53,7 @@ function getNetwork(): 'test' | 'main' {
 }
 
 let cachedClient: any | null = null;
+let lastHistoryClientSource: 'wallet' | 'read' = 'read';
 
 type TokenMetadataRecord = {
   metadata?: string | null;
@@ -155,6 +156,138 @@ export async function getReadClient(): Promise<any> {
   console.debug('[sdk-read-client] getReadClient ready');
   return client;
 }
+ 
+async function getClientForHistory(): Promise<any> {
+  try {
+    if (typeof window !== 'undefined') {
+      const w = window as any;
+      const hasKeeta = Boolean(w?.keeta);
+      const hasGetUserClient = hasKeeta && typeof w.keeta.getUserClient === 'function';
+      try { console.debug('[sdk-read-client] getClientForHistory probe', { hasKeeta, hasGetUserClient }); } catch {}
+      if (hasGetUserClient) {
+        const c = await w.keeta.getUserClient();
+        if (c) {
+          lastHistoryClientSource = 'wallet';
+          try { console.debug('[sdk-read-client] getClientForHistory selected', { source: lastHistoryClientSource }); } catch {}
+          return c;
+        }
+      }
+    }
+  } catch {}
+  lastHistoryClientSource = 'read';
+  try { console.debug('[sdk-read-client] getClientForHistory selected', { source: lastHistoryClientSource }); } catch {}
+  return getReadClient();
+}
+
+export async function getHistory(options?: { depth?: number; cursor?: string | null; accountPublicKey?: string }): Promise<unknown> {
+  try {
+    const KeetaNet = await loadKeeta();
+    const client = await getClientForHistory();
+    const query: Record<string, unknown> = {};
+    if (options?.depth != null) query.depth = Math.max(1, Math.min(options.depth, 100));
+    if (options?.cursor) (query as any).startBlocksHash = options.cursor;
+    if (options?.accountPublicKey) {
+      try {
+        (query as any).account = KeetaNet.lib.Account.fromPublicKeyString(options.accountPublicKey);
+      } catch {}
+    }
+
+    if (typeof client.history === 'function') {
+      console.debug('[sdk-read-client] getHistory', { hasAccount: Boolean((query as any).account), depth: query.depth, hasCursor: Boolean((query as any).startBlocksHash), clientSource: lastHistoryClientSource });
+      let res = await client.history(query);
+      const inspect = (value: unknown) => {
+        if (Array.isArray(value)) {
+          try {
+            const firstKeys = value.length > 0 && value[0] ? Object.keys(value[0]).slice(0, 6) : null;
+            console.debug('[sdk-read-client] getHistory raw', { length: value.length, firstKeys });
+          } catch {}
+        } else {
+          const type = value === null ? 'null' : typeof value;
+          const keys = value && typeof value === 'object' ? Object.keys(value as Record<string, unknown>).slice(0, 6) : null;
+          console.debug('[sdk-read-client] getHistory object', { type, keys });
+        }
+      };
+      inspect(res);
+      if (!Array.isArray(res) && res && typeof res === 'object') {
+        const containerKeys = ['records', 'history', 'voteStaples', 'items', 'data'];
+        for (const key of containerKeys) {
+          const candidate = (res as Record<string, unknown>)[key];
+          if (Array.isArray(candidate)) {
+            res = candidate;
+            inspect(res);
+            break;
+          }
+        }
+      }
+      if ((!Array.isArray(res) || res.length === 0) && (query as any).account) {
+        try {
+          const { account, ...rest } = query as any;
+          console.debug('[sdk-read-client] getHistory empty with account, retrying without account', { clientSource: lastHistoryClientSource });
+          let res2: unknown = await client.history(rest);
+          inspect(res2);
+          if (!Array.isArray(res2) && res2 && typeof res2 === 'object') {
+            const containerKeys = ['records', 'history', 'voteStaples', 'items', 'data'];
+            for (const key of containerKeys) {
+              const candidate = (res2 as Record<string, unknown>)[key];
+              if (Array.isArray(candidate)) {
+                res2 = candidate;
+                inspect(res2);
+                break;
+              }
+            }
+          }
+          res = Array.isArray(res2) ? (res2 as any[]) : [];
+        } catch {}
+      }
+      if (!Array.isArray(res) || res.length === 0) {
+        try {
+          const rc = await getReadClient();
+          console.debug('[sdk-read-client] getHistory forcing read client');
+          let resR: unknown = await rc.history(query as any);
+          inspect(resR);
+          if (!Array.isArray(resR) && resR && typeof resR === 'object') {
+            const containerKeys = ['records', 'history', 'voteStaples', 'items', 'data'];
+            for (const key of containerKeys) {
+              const candidate = (resR as Record<string, unknown>)[key];
+              if (Array.isArray(candidate)) {
+                resR = candidate;
+                inspect(resR);
+                break;
+              }
+            }
+          }
+          if ((!Array.isArray(resR) || (Array.isArray(resR) && resR.length === 0)) && (query as any).account) {
+            try {
+              const { account, ...rest } = query as any;
+              let resR2: unknown = await rc.history(rest);
+              inspect(resR2);
+              if (!Array.isArray(resR2) && resR2 && typeof resR2 === 'object') {
+                const containerKeys = ['records', 'history', 'voteStaples', 'items', 'data'];
+                for (const key of containerKeys) {
+                  const candidate = (resR2 as Record<string, unknown>)[key];
+                  if (Array.isArray(candidate)) {
+                    resR2 = candidate;
+                    inspect(resR2);
+                    break;
+                  }
+                }
+              }
+              resR = Array.isArray(resR2) ? resR2 : [];
+            } catch {}
+          }
+          if (Array.isArray(resR) && resR.length > 0) {
+            res = resR as any[];
+          }
+        } catch {}
+      }
+      return res;
+    }
+    return [];
+  } catch (e) {
+    console.error('[sdk-read-client] getHistory error', e);
+    return [];
+  }
+}
 
 export async function getAccountState(publicKey: string): Promise<unknown | null> {
   try {
@@ -185,26 +318,6 @@ export async function getAccountState(publicKey: string): Promise<unknown | null
   } catch (e) {
     console.error('[sdk-read-client] getAccountState error', e);
     return null;
-  }
-}
-
-export async function getHistory(options?: { depth?: number; cursor?: string | null }): Promise<unknown> {
-  try {
-    const client = await getReadClient();
-    const query: Record<string, unknown> = {};
-    if (options?.depth != null) query.depth = Math.max(1, Math.min(options.depth, 100));
-    if (options?.cursor) (query as any).startBlocksHash = options.cursor;
-
-    if (typeof client.history === 'function') {
-      console.debug('[sdk-read-client] getHistory', { query });
-      const res = await client.history(query);
-      console.debug('[sdk-read-client] getHistory result', { length: Array.isArray(res) ? res.length : undefined });
-      return res;
-    }
-    return [];
-  } catch (e) {
-    console.error('[sdk-read-client] getHistory error', e);
-    return [];
   }
 }
 
@@ -597,23 +710,128 @@ export async function getHistoryForAccount(
 }>> {
   try {
     const KeetaNet = await loadKeeta();
-    const client = await getReadClient();
+    const client = await getClientForHistory();
+    const accountObj = KeetaNet.lib.Account.fromPublicKeyString(accountPublicKey);
 
     const depth = Math.max(1, Math.min(options?.depth ?? 25, 100));
     const query: Record<string, unknown> = { depth };
     if (options?.cursor) (query as any).startBlocksHash = options.cursor;
+    (query as any).account = accountObj;
 
-    console.debug('[sdk-read-client] getHistoryForAccount start', { accountPublicKey, query });
-    const response: any[] = typeof client.history === 'function' ? await client.history(query) : [];
-    if (!Array.isArray(response) || response.length === 0) return [];
+    console.debug('[sdk-read-client] getHistoryForAccount start', { accountPublicKey, depth: query.depth, hasCursor: Boolean(query.startBlocksHash), clientSource: lastHistoryClientSource });
+    const inspect = (value: unknown) => {
+      if (Array.isArray(value)) {
+        try {
+          const firstKeys = value.length > 0 && value[0] ? Object.keys(value[0]).slice(0, 6) : null;
+          console.debug('[sdk-read-client] getHistoryForAccount response', { length: value.length, firstKeys });
+        } catch {}
+      } else {
+        const type = value === null ? 'null' : typeof value;
+        const keys = value && typeof value === 'object' ? Object.keys(value as Record<string, unknown>).slice(0, 6) : null;
+        console.debug('[sdk-read-client] getHistoryForAccount object', { type, keys });
+      }
+    };
+    let response: unknown = typeof client.history === 'function' ? await client.history(query) : [];
+    inspect(response);
+    if (!Array.isArray(response) && response && typeof response === 'object') {
+      const containerKeys = ['records', 'history', 'voteStaples', 'items', 'data'];
+      for (const key of containerKeys) {
+        const candidate = (response as Record<string, unknown>)[key];
+        if (Array.isArray(candidate)) {
+          response = candidate;
+          inspect(response);
+          break;
+        }
+      }
+    }
+    if ((!Array.isArray(response) || response.length === 0)) {
+      try {
+        const { account, ...rest } = query as any;
+        console.debug('[sdk-read-client] getHistoryForAccount empty; retrying without account filter', { clientSource: lastHistoryClientSource });
+        let fallbackRes: unknown = await client.history(rest);
+        inspect(fallbackRes);
+        if (!Array.isArray(fallbackRes) && fallbackRes && typeof fallbackRes === 'object') {
+          const containerKeys = ['records', 'history', 'voteStaples', 'items', 'data'];
+          for (const key of containerKeys) {
+            const candidate = (fallbackRes as Record<string, unknown>)[key];
+            if (Array.isArray(candidate)) {
+              fallbackRes = candidate;
+              inspect(fallbackRes);
+              break;
+            }
+          }
+        }
+        response = Array.isArray(fallbackRes) ? fallbackRes : [];
+      } catch {}
+      if (!Array.isArray(response) || response.length === 0) {
+        try {
+          const rc = await getReadClient();
+          console.debug('[sdk-read-client] getHistoryForAccount forcing read client');
+          let resR: unknown = await rc.history(query as any);
+          inspect(resR);
+          if (!Array.isArray(resR) && resR && typeof resR === 'object') {
+            const containerKeys = ['records', 'history', 'voteStaples', 'items', 'data'];
+            for (const key of containerKeys) {
+              const candidate = (resR as Record<string, unknown>)[key];
+              if (Array.isArray(candidate)) {
+                resR = candidate;
+                inspect(resR);
+                break;
+              }
+            }
+          }
+          if ((!Array.isArray(resR) || (Array.isArray(resR) && resR.length === 0))) {
+            try {
+              const { account, ...rest } = query as any;
+              let resR2: unknown = await rc.history(rest);
+              inspect(resR2);
+              if (!Array.isArray(resR2) && resR2 && typeof resR2 === 'object') {
+                const containerKeys = ['records', 'history', 'voteStaples', 'items', 'data'];
+                for (const key of containerKeys) {
+                  const candidate = (resR2 as Record<string, unknown>)[key];
+                  if (Array.isArray(candidate)) {
+                    resR2 = candidate;
+                    inspect(resR2);
+                    break;
+                  }
+                }
+              }
+              resR = Array.isArray(resR2) ? resR2 : [];
+            } catch {}
+          }
+          if (Array.isArray(resR) && resR.length > 0) {
+            response = resR as any[];
+          }
+        } catch {}
+        if (!Array.isArray(response) || response.length === 0) {
+          console.debug('[sdk-read-client] getHistoryForAccount empty response after retry', { clientSource: lastHistoryClientSource });
+          return [];
+        }
+      }
+    }
 
-    const staplesWithEffects = response.filter((entry) => Boolean(entry?.voteStaple && entry?.effects));
-    if (!staplesWithEffects.length) return [];
+    // Handle both wrapper objects { voteStaple, effects? } and bare VoteStaple objects
+    const voteStaples: any[] = response
+      .map((entry) => (entry && typeof entry === 'object' && 'voteStaple' in entry ? (entry as any).voteStaple : entry))
+      .filter((v) => Boolean(v));
+    if (voteStaples.length === 0) {
+      console.debug('[sdk-read-client] getHistoryForAccount no voteStaples', { clientSource: lastHistoryClientSource });
+      return [];
+    }
 
-    const voteStaples = staplesWithEffects.map((entry) => entry.voteStaple);
-    const filtered: Record<string, Array<{ block: any; filteredOperations: any[] }>> = typeof client.filterStapleOperations === 'function'
-      ? client.filterStapleOperations(voteStaples)
-      : {};
+    let filtered: Record<string, Array<{ block: any; filteredOperations: any[] }>> = {};
+    try {
+      if (typeof client.filterStapleOperations === 'function') {
+        // Prefer passing account context so only relevant ops are returned
+        const ctx = { account: accountObj } as any;
+        const result = client.filterStapleOperations(voteStaples, ctx);
+        filtered = (await Promise.resolve(result)) as typeof filtered;
+      } else if (typeof client.filterStapleOps === 'function') {
+        const ctx = { account: accountObj } as any;
+        const result = client.filterStapleOps(voteStaples, ctx);
+        filtered = (await Promise.resolve(result)) as typeof filtered;
+      }
+    } catch {}
 
     const normalizeAddress = (candidate: unknown): string | undefined => {
       if (typeof candidate === 'string') {
@@ -669,65 +887,114 @@ export async function getHistoryForAccount(
 
     const pending: PendingOperation[] = [];
 
-    for (const [stapleHash, blocks] of Object.entries(filtered)) {
-      for (const { block, filteredOperations } of blocks) {
-        const blockTimestamp = block?.date instanceof Date ? block.date.getTime() : Date.now();
-        const blockHash = typeof block?.hash?.toString === 'function' ? block.hash.toString() : undefined;
-        const blockAccount = normalizeAddress(block?.account) ?? '';
+    // If filter API returned results, use them; otherwise derive from staple blocks directly
+    const hasFiltered = filtered && Object.keys(filtered).length > 0;
+    if (hasFiltered) {
+      for (const [stapleHash, blocks] of Object.entries(filtered)) {
+        for (const { block, filteredOperations } of blocks) {
+          const blockTimestamp = block?.date instanceof Date ? block.date.getTime() : Date.now();
+          const blockHash = typeof block?.hash?.toString === 'function' ? block.hash.toString() : undefined;
+          const blockAccount = normalizeAddress(block?.account) ?? '';
 
-        for (const operation of filteredOperations) {
-          const type = String((operation as any)?.type ?? 'UNKNOWN');
-          const amountRaw = (operation as any)?.amount;
-          const amount = typeof amountRaw === 'bigint'
-            ? amountRaw.toString()
-            : typeof amountRaw === 'number'
-              ? Math.trunc(amountRaw).toString()
-              : typeof amountRaw === 'string'
-                ? amountRaw
-                : undefined;
+          for (const operation of filteredOperations) {
+            const type = String((operation as any)?.type ?? 'UNKNOWN');
+            const amountRaw = (operation as any)?.amount;
+            const amount = typeof amountRaw === 'bigint'
+              ? amountRaw.toString()
+              : typeof amountRaw === 'number'
+                ? Math.trunc(amountRaw).toString()
+                : typeof amountRaw === 'string'
+                  ? amountRaw
+                  : undefined;
 
-          const from = normalizeAddress((operation as any).from) ?? blockAccount;
-          const to = normalizeAddress((operation as any).to) ?? blockAccount;
-          const token = normalizeAddress((operation as any).token
-            ?? (operation as any).tokenAddress
-            ?? (operation as any).account
-            ?? (operation as any).target
-            ?? (operation as any).asset
-            ?? (operation as any).currency);
+            const from = normalizeAddress((operation as any).from) ?? blockAccount;
+            const to = normalizeAddress((operation as any).to) ?? blockAccount;
+            const token = normalizeAddress((operation as any).token
+              ?? (operation as any).tokenAddress
+              ?? (operation as any).account
+              ?? (operation as any).target
+              ?? (operation as any).asset
+              ?? (operation as any).currency);
 
-          if (accountPublicKey !== from && accountPublicKey !== to && accountPublicKey !== blockAccount) {
-            continue;
-          }
-
-          let record: TokenMetadataRecord | null | undefined;
-          if (includeTokenMetadata && token) {
-            record = getCachedTokenMetadata(token);
-            if (record === undefined) {
-              tokensRequiringMetadata.add(token);
+            if (accountPublicKey !== from && accountPublicKey !== to && accountPublicKey !== blockAccount) {
+              continue;
             }
-          }
 
-          pending.push({
-            id: blockHash || `${stapleHash}:${type}:${from ?? ''}:${to ?? ''}`,
-            block: blockHash,
-            timestamp: blockTimestamp,
-            type,
-            amount: amount ?? '0',
-            from: from ?? '',
-            to: to ?? '',
-            token: token ?? '',
-            tokenTicker:
-              record && record.ticker ? record.ticker : null,
-            tokenDecimals:
-              record && typeof record.decimals === 'number' ? record.decimals : null,
-            tokenMetadata: record
-              ? {
-                  name: record.name ?? null,
-                  ticker: record.ticker ?? null,
-                  decimals: record.decimals ?? null,
-                }
-              : null,
-          });
+            let record: TokenMetadataRecord | null | undefined;
+            if (includeTokenMetadata && token) {
+              record = getCachedTokenMetadata(token);
+              if (record === undefined) {
+                tokensRequiringMetadata.add(token);
+              }
+            }
+
+            pending.push({
+              id: blockHash || `${stapleHash}:${type}:${from ?? ''}:${to ?? ''}`,
+              block: blockHash,
+              timestamp: blockTimestamp,
+              type,
+              amount: amount ?? '0',
+              from: from ?? '',
+              to: to ?? '',
+              token: token ?? '',
+              tokenTicker: record && record.ticker ? record.ticker : null,
+              tokenDecimals: record && typeof record.decimals === 'number' ? record.decimals : null,
+              tokenMetadata: record
+                ? {
+                    name: record.name ?? null,
+                    ticker: record.ticker ?? null,
+                    decimals: record.decimals ?? null,
+                  }
+                : null,
+            });
+          }
+        }
+      }
+    } else {
+      // Manual extraction from staple blocks when filter API is unavailable
+      for (const staple of voteStaples as any[]) {
+        const stapleHash = typeof (staple?.hash?.toString) === 'function' ? staple.hash.toString() : undefined;
+        const blocks = Array.isArray(staple?.blocks) ? staple.blocks : [];
+        for (const block of blocks as any[]) {
+          const ops = Array.isArray(block?.operations) ? block.operations : Array.isArray(block?.transactions) ? block.transactions : [];
+          const blockTimestamp = block?.date instanceof Date ? block.date.getTime() : Date.now();
+          const blockHash = typeof block?.hash?.toString === 'function' ? block.hash.toString() : stapleHash;
+          const blockAccount = normalizeAddress(block?.account) ?? '';
+          for (const operation of ops) {
+            const type = String((operation as any)?.type ?? 'UNKNOWN');
+            const amountRaw = (operation as any)?.amount;
+            const amount = typeof amountRaw === 'bigint'
+              ? amountRaw.toString()
+              : typeof amountRaw === 'number'
+                ? Math.trunc(amountRaw).toString()
+                : typeof amountRaw === 'string'
+                  ? amountRaw
+                  : undefined;
+            const from = normalizeAddress((operation as any).from) ?? blockAccount;
+            const to = normalizeAddress((operation as any).to) ?? blockAccount;
+            const token = normalizeAddress((operation as any).token
+              ?? (operation as any).tokenAddress
+              ?? (operation as any).account
+              ?? (operation as any).target
+              ?? (operation as any).asset
+              ?? (operation as any).currency);
+            if (accountPublicKey && accountPublicKey !== from && accountPublicKey !== to && accountPublicKey !== blockAccount) {
+              continue;
+            }
+            pending.push({
+              id: blockHash || `${stapleHash}:${type}:${from ?? ''}:${to ?? ''}`,
+              block: blockHash,
+              timestamp: blockTimestamp,
+              type,
+              amount: amount ?? '0',
+              from: from ?? '',
+              to: to ?? '',
+              token: token ?? '',
+              tokenTicker: null,
+              tokenDecimals: null,
+              tokenMetadata: null,
+            });
+          }
         }
       }
     }
@@ -772,7 +1039,7 @@ export async function getHistoryForAccount(
 
     results.push(...pending);
     results.sort((a, b) => (b.timestamp ?? 0) - (a.timestamp ?? 0));
-    console.debug('[sdk-read-client] getHistoryForAccount done', { count: results.length });
+    console.debug('[sdk-read-client] getHistoryForAccount done', { count: results.length, hadFilter: hasFiltered });
     return results;
   } catch (e) {
     console.error('[sdk-read-client] getHistoryForAccount error', e);

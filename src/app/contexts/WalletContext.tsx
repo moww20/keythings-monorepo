@@ -25,6 +25,7 @@ import {
   extractBlockHash,
 } from "../lib/storage-account-manager";
 import { decodeFromBase64 } from "../lib/encoding";
+import { getReadClient, getAccountState } from "@/lib/explorer/sdk-read-client";
 import type {
   RFQStorageAccountDetails,
   RFQStorageCreationResult,
@@ -183,7 +184,7 @@ export function WalletProvider({ children }: WalletProviderProps) {
   
   // Determine if we should fetch token balances
   const shouldFetchTokens = walletData.wallet.connected && !walletData.wallet.isLocked;
-  const tokenBalances = useTokenBalances(shouldFetchTokens);
+  const tokenBalances = useTokenBalances(shouldFetchTokens, walletData.wallet.accounts?.[0]);
   
   // Process raw token balances into ProcessedToken[] format
   const [processedTokens, setProcessedTokens] = useState<ProcessedToken[]>([]);
@@ -301,12 +302,20 @@ export function WalletProvider({ children }: WalletProviderProps) {
       }
 
       try {
-        // Get base token address for comparison
-        const provider = typeof window !== 'undefined' ? window.keeta : null;
-        const baseTokenInfo = provider ? await provider.getBaseToken?.() : null;
-        const baseTokenAddress = baseTokenInfo && typeof baseTokenInfo === 'object' && baseTokenInfo !== null && 'address' in baseTokenInfo
-          ? (baseTokenInfo as { address?: string }).address
-          : null;
+        // Get base token address for comparison via SDK
+        let baseTokenAddress: string | null = null;
+        try {
+          const client = await getReadClient();
+          const bt = (client as any)?.baseToken;
+          const pk = bt?.publicKeyString
+            ? (typeof bt.publicKeyString === 'string'
+                ? bt.publicKeyString
+                : (typeof bt.publicKeyString.toString === 'function'
+                    ? String(bt.publicKeyString.toString())
+                    : ''))
+            : '';
+          baseTokenAddress = pk && pk !== '[object Object]' ? pk : null;
+        } catch {}
 
         const processed = await Promise.all(
           (tokenBalances.balances as KeetaBalanceEntry[]).map(async (entry) => {
@@ -319,7 +328,7 @@ export function WalletProvider({ children }: WalletProviderProps) {
           })
         );
 
-        // Update token address and decimals cache with real data from wallet
+        // Update token address and decimals cache with real data
         const tokenAddressMap = new Map<string, string>();
         const tokenDecimalsMap = new Map<string, number>();
         (tokenBalances.balances as KeetaBalanceEntry[]).forEach((entry) => {
@@ -626,14 +635,9 @@ export function WalletProvider({ children }: WalletProviderProps) {
   const validateAtomicSwapTerms = useCallback(
     async (order: RFQOrder, fillAmount: number, storageAddress: string): Promise<boolean> => {
       try {
-        const provider = window.keeta;
-        if (!provider?.getAccountInfo) {
-          console.error('[validateAtomicSwapTerms] Wallet provider does not expose getAccountInfo');
-          return false;
-        }
-
-        const accountInfo = await provider.getAccountInfo(storageAddress);
-        const metadata = (accountInfo as Record<string, unknown>)?.metadata;
+        // Read storage account info from SDK only
+        const accountState: any = await getAccountState(storageAddress);
+        const metadata = accountState?.info?.metadata;
 
         if (!metadata || (typeof metadata !== 'string' && typeof metadata !== 'object')) {
           console.error('[validateAtomicSwapTerms] Storage account is missing atomic swap metadata');

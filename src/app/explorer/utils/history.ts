@@ -372,6 +372,7 @@ function deriveTypeLabel(typeValue: unknown, opTypeValue: unknown, account?: str
 }
 
 export function normalizeHistoryRecord(input: unknown, contextAccount?: string): RecentActivityItem | null {
+  try { console.debug("[normalizeHistoryRecord] start", { input, contextAccount }); } catch {}
   const parsed = KeetaHistoryRecordSchema.safeParse(input);
   if (!parsed.success) return null;
   const r = parsed.data;
@@ -420,6 +421,7 @@ export function normalizeHistoryRecord(input: unknown, contextAccount?: string):
   const hasSwapHints = Boolean(r.operationSend && r.operationReceive);
   const typeLabel = deriveTypeLabel(r.type, r.operationType, contextAccount, from, to, hasSwapHints);
 
+  try { console.debug("[normalizeHistoryRecord] result", { id, block, timestamp, type: typeLabel, amount: amountRaw, from, to, token, tokenTicker: tokenDetails.ticker, tokenDecimals: tokenDetails.decimals, operationType: toStringSafe(r.operationType) || toStringSafe(r.type) || "UNKNOWN", tokenMetadata: normalizedTokenMetadata }); } catch {}
   return {
     id,
     block,
@@ -439,9 +441,11 @@ export function normalizeHistoryRecord(input: unknown, contextAccount?: string):
 }
 
 export function normalizeHistoryResponse(data: unknown, contextAccount?: string): RecentActivityItem[] {
+  try { console.debug("[normalizeHistoryResponse] start", { data, contextAccount }); } catch {}
   const resp = KeetaHistoryResponseSchema.safeParse(data);
   if (!resp.success) return [];
   const { records } = resp.data;
+  try { console.debug("[normalizeHistoryResponse] records", { recordsCount: records.length }); } catch {}
   return records
     .map((r) => normalizeHistoryRecord(r, contextAccount))
     .filter((x): x is RecentActivityItem => x !== null);
@@ -474,6 +478,7 @@ const KeetaSDKHistoryItemSchema = z
   .passthrough();
 
 export function extractActivityFromSDKHistory(data: unknown, contextAccount?: string): RecentActivityItem[] {
+  try { console.debug("[extractActivityFromSDKHistory] start", { data, contextAccount }); } catch {}
   const items = Array.isArray(data) ? data : [];
   const results: RecentActivityItem[] = [];
 
@@ -502,19 +507,16 @@ export function extractActivityFromSDKHistory(data: unknown, contextAccount?: st
     return toTimestampMs(v, Date.now());
   }
 
-  function classifyAndBuild(op: any, block: any, ctx?: string): RecentActivityItem | null {
-    const blockHash = getPK(block?.hash) || toStringSafe(block?.$hash, "");
+  function classifyAndBuild(op: any, block: any, contextAccount?: string): RecentActivityItem | null {
+    const blockHash = toStringSafe((block?.hash as unknown), "");
     const ts = getDateMsMaybe(block);
     const blockAccount = getPK(block?.account);
-    const opTo = getPK(op?.to);
-    const opFrom = getPK(op?.from);
-    const token = getPK(op?.token);
-    const amount = getAmount(op?.amount);
+    const opFrom = getPK((op as any)?.from ?? (op as any)?.sender);
+    const opTo = getPK((op as any)?.to ?? (op as any)?.receiver);
+    const token = getPK((op as any)?.token ?? (op as any)?.tokenAddress ?? (op as any)?.account ?? (op as any)?.target ?? (op as any)?.asset ?? (op as any)?.currency);
+    const amount = getAmount((op as any)?.amount);
+    const ctx = contextAccount;
 
-    // Choose classification rules inspired by explorer-main server mapping
-    // SEND as seen from the chain owner: if op.to != ctx and block.account == ctx => SEND
-    // RECEIVE: if op.to == ctx or op.from exists and block.account == ctx => RECEIVE
-    // If ctx provided, filter to related ops
     if (ctx) {
       const involved = blockAccount === ctx || opTo === ctx || opFrom === ctx;
       if (!involved) return null;
@@ -531,18 +533,18 @@ export function extractActivityFromSDKHistory(data: unknown, contextAccount?: st
         to = opTo;
       } else {
         type = "SEND";
-        from = blockAccount || ctx || "";
+        from = blockAccount || (ctx ?? "");
         to = opTo;
       }
     } else if (opFrom) {
       type = "RECEIVE";
       from = opFrom;
-      to = blockAccount || ctx || "";
+      to = blockAccount || (ctx ?? "");
     }
 
     // Fall back to generic mapping if neither to/from present
     if (!from && !to) {
-      from = blockAccount || ctx || "";
+      from = blockAccount || (ctx ?? "");
     }
 
     return {
@@ -573,10 +575,12 @@ export function extractActivityFromSDKHistory(data: unknown, contextAccount?: st
       }
     }
   }
+  try { console.debug("[extractActivityFromSDKHistory] result", { resultsCount: results.length }); } catch {}
   return results;
 }
 
 function extractFromBlockObject(blockObj: any, contextAccount?: string): RecentActivityItem[] {
+  try { console.debug("[extractFromBlockObject] start", { blockObj, contextAccount }); } catch {}
   const blockHash = toStringSafe(blockObj?.hash, "");
   const ts = toTimestampMs(blockObj?.timestamp ?? blockObj?.createdAt, Date.now());
   const ops = Array.isArray(blockObj?.operations) ? blockObj.operations : [];
@@ -592,6 +596,7 @@ function extractFromBlockObject(blockObj: any, contextAccount?: string): RecentA
     const n = normalizeHistoryRecord(merged, contextAccount);
     if (n) results.push(n);
   }
+  try { console.debug("[extractFromBlockObject] result", { resultsCount: results.length }); } catch {}
   return results;
 }
 
@@ -600,6 +605,7 @@ export function enrichActivityWithBlocks(
   blocksByHash: Record<string, unknown>,
   contextAccount?: string,
 ): RecentActivityItem[] {
+  try { console.debug("[enrichActivityWithBlocks] start", { itemsCount: items.length, blocksByHashCount: Object.keys(blocksByHash).length, contextAccount }); } catch {}
   const out: RecentActivityItem[] = [];
   for (const item of items) {
     if (item.from && item.to && item.token) {
@@ -622,6 +628,7 @@ export function enrichActivityWithBlocks(
     );
     out.push(matchByAccount ?? derived[0]);
   }
+  try { console.debug("[enrichActivityWithBlocks] result", { outCount: out.length }); } catch {}
   return out;
 }
 
@@ -830,426 +837,34 @@ function resolveOperationType(value: unknown): ExplorerOperationType {
 
 export function processKeetaHistoryWithFiltering(
   historyData: unknown,
-  contextAccount?: string
+  contextAccount?: string,
 ): RecentActivityItem[] {
-  globalThis.console.warn('🔍 [PARSING] processKeetaHistoryWithFiltering called with:', {
-    historyData,
-    contextAccount,
-    isArray: Array.isArray(historyData),
-    length: Array.isArray(historyData) ? historyData.length : 'not array',
-    dataType: typeof historyData,
-    dataKeys: historyData && typeof historyData === 'object' ? Object.keys(historyData) : 'not object'
-  });
-  
-  // Handle different data structures from RPC vs SDK
-  let items: any[] = [];
-  
-  if (Array.isArray(historyData)) {
-    items = historyData;
-    globalThis.console.warn('🔍 [PARSING] Data is array, processing directly');
-  } else if (historyData && typeof historyData === 'object') {
-    // Check if it's an object with a specific structure
-    const dataObj = historyData as any;
-    
-    // Check for common RPC response structures
-    if (dataObj.history && Array.isArray(dataObj.history)) {
-      items = dataObj.history;
-      globalThis.console.warn('🔍 [PARSING] Found history array in object');
-    } else if (dataObj.data && Array.isArray(dataObj.data)) {
-      items = dataObj.data;
-      globalThis.console.warn('🔍 [PARSING] Found data array in object');
-    } else if (dataObj.result && Array.isArray(dataObj.result)) {
-      items = dataObj.result;
-      globalThis.console.warn('🔍 [PARSING] Found result array in object');
-    } else if (dataObj.records && Array.isArray(dataObj.records)) {
-      items = dataObj.records;
-      globalThis.console.warn('🔍 [PARSING] Found records array in object');
-    } else if (dataObj.voteStaples && Array.isArray(dataObj.voteStaples)) {
-      items = dataObj.voteStaples;
-      globalThis.console.warn('🔍 [PARSING] Found voteStaples array in object');
-    } else if (dataObj.voteStaples && typeof dataObj.voteStaples === 'object') {
-      // Handle case where voteStaples is an object with nested structure
-      globalThis.console.warn('🔍 [PARSING] voteStaples is object, checking for nested arrays');
-      if (Array.isArray(dataObj.voteStaples.blocks)) {
-        items = dataObj.voteStaples.blocks;
-        globalThis.console.warn('🔍 [PARSING] Found blocks array in voteStaples object');
-      } else {
-        // Try to find any array in the voteStaples object
-        for (const [key, value] of Object.entries(dataObj.voteStaples)) {
-          if (Array.isArray(value)) {
-            items = value as any[];
-            globalThis.console.warn(`🔍 [PARSING] Found array in voteStaples.${key}`);
-            break;
-          }
-        }
-      }
-    } else {
-      globalThis.console.warn('🔍 [PARSING] Unknown object structure, trying to extract arrays');
-      // Try to find any array in the object
-      for (const [key, value] of Object.entries(dataObj)) {
-        if (Array.isArray(value)) {
-          items = value as any[];
-          globalThis.console.warn(`🔍 [PARSING] Found array in key: ${key}`);
-          break;
-        }
-      }
-      
-      // If no array found, check if the object itself is a transaction record
-      if (items.length === 0 && dataObj.id && dataObj.block && dataObj.timestamp) {
-        globalThis.console.warn('🔍 [PARSING] Object appears to be a single transaction record, wrapping in array');
-        items = [dataObj];
-      }
-    }
-  }
-  
-  globalThis.console.warn('🔍 [PARSING] Processing items:', items.length);
-  const results: RecentActivityItem[] = [];
-
-  for (const item of items) {
-    globalThis.console.warn('🔍 [PARSING] Processing item:', item);
-    globalThis.console.warn('🔍 [PARSING] Item type:', typeof item);
-    globalThis.console.warn('🔍 [PARSING] Item keys:', item && typeof item === 'object' ? Object.keys(item) : 'not object');
-    
-    // Check if this is already a flattened transaction record (RPC format)
-    globalThis.console.warn('🔍 [PARSING] Checking if item is flattened record:', {
-      isObject: item && typeof item === 'object',
-      hasId: item && typeof item === 'object' && 'id' in item,
-      hasBlock: item && typeof item === 'object' && 'block' in item,
-      hasTimestamp: item && typeof item === 'object' && 'timestamp' in item,
-      itemKeys: item && typeof item === 'object' ? Object.keys(item) : 'not object'
+  // Legacy helper kept for compatibility (token explorer fallback).
+  // Simply reuse the SDK extraction logic, ensuring we always return an array.
+  try {
+    console.debug("[processKeetaHistoryWithFiltering] invoked", {
+      hasArray: Array.isArray(historyData),
+      type: typeof historyData,
+      contextAccount,
     });
-    
-    if (item && typeof item === 'object' && 'id' in item && 'block' in item && 'timestamp' in item) {
-      globalThis.console.warn('🔍 [PARSING] Found flattened transaction record, processing directly');
-      
-      // Extract operation type
-      let operationType = 'UNKNOWN';
-      const typeCandidates: unknown[] = [
-        (item as any)?.type,
-        (item as any)?.operationType,
-      ];
+  } catch {}
 
-      let numericType: number | null = null;
-      for (const candidate of typeCandidates) {
-        const parsed = parseNumericOperationType(candidate);
-        if (parsed !== null) {
-          numericType = parsed;
-          break;
-        }
-      }
-
-      if (numericType !== null && !Number.isNaN(numericType)) {
-        operationType = getOperationTypeFromNumeric(numericType);
-      }
-
-      // Extract addresses
-      const from = toAddressString((item as any)?.from);
-      const to = toAddressString((item as any)?.to);
-      const token = toAddressString((item as any)?.token);
-      
-      // Debug the extracted values
-      globalThis.console.warn('🔍 [PARSING] Extracted addresses:', {
-        from,
-        to,
-        token,
-        rawFrom: (item as any)?.from,
-        rawTo: (item as any)?.to,
-        rawToken: (item as any)?.token,
-        itemKeys: item && typeof item === 'object' ? Object.keys(item) : 'not object'
-      });
-      
-      // Extract amount
-      const amountValue = toBigIntSafe((item as any)?.amount);
-      
-      // Get token metadata for proper formatting
-      const tokenMetadata = extractTokenMetadataFromOperation(item);
-      let formattedAmount = amountValue.toString();
-      
-      if (tokenMetadata && tokenMetadata.decimals !== undefined) {
-        try {
-          formattedAmount = formatTokenAmount(
-            amountValue,
-            tokenMetadata.decimals,
-            tokenMetadata.fieldType || 'decimals',
-            tokenMetadata.ticker || 'UNKNOWN'
-          );
-        } catch (error) {
-          console.warn('Failed to format token amount:', error);
-          formattedAmount = amountValue.toString();
-        }
-      }
-      
-      const blockHash = toStringSafe((item as any)?.block);
-      const timestamp = toTimestampMs((item as any)?.timestamp, Date.now());
-      
-      // Determine transaction type based on context account
-      let type = 'Transaction';
-      if (contextAccount) {
-        if (to === contextAccount) {
-          type = 'RECEIVE';
-        } else if (from === contextAccount) {
-          type = 'SEND';
-        }
-      }
-      
-      // Only include if it's relevant to the context account
-      // For RPC data with empty from/to, include if we have a valid amount and block
-      const hasValidData = amountValue > BigInt(0) && blockHash;
-      const isRelevantToAccount = !contextAccount || from === contextAccount || to === contextAccount;
-      
-      globalThis.console.warn('🔍 [PARSING] Filtering check:', {
-        hasValidData,
-        isRelevantToAccount,
-        from,
-        to,
-        contextAccount,
-        amountValue: amountValue.toString(),
-        blockHash,
-        willInclude: isRelevantToAccount || (hasValidData && !from && !to)
-      });
-      
-      if (isRelevantToAccount || (hasValidData && !from && !to)) {
-        const uniqueId = `${blockHash || 'unknown'}-${operationType}-${timestamp}-${Math.random().toString(36).substr(2, 9)}`;
-        
-        const result = {
-          id: uniqueId,
-          block: blockHash,
-          timestamp,
-          type,
-          amount: formattedAmount,
-          from,
-          to,
-          token,
-          operationType: operationType.toString(),
-          tokenMetadata,
-        };
-
-        globalThis.console.warn('🔍 [PARSING] Adding flattened record result:', result);
-        results.push(result);
-      }
-      continue;
-    }
-    
-    const parsed = KeetaSDKHistoryItemSchema.safeParse(item);
-    if (!parsed.success) {
-      globalThis.console.warn('🔍 [PARSING] Schema validation failed for item:', parsed.error);
-      globalThis.console.warn('🔍 [PARSING] Item structure:', JSON.stringify(item, null, 2));
-      
-      // Try alternative parsing for different RPC response formats
-      if (item && typeof item === 'object') {
-        globalThis.console.warn('🔍 [PARSING] Trying alternative parsing for RPC response');
-        
-        // Check if this is a direct block with operations
-        if (Array.isArray(item.operations)) {
-          globalThis.console.warn('🔍 [PARSING] Found direct block with operations');
-          const block = item;
-          const operations = block.operations ?? [];
-          
-          for (const operation of operations) {
-            globalThis.console.warn('🔍 [PARSING] Processing direct operation:', operation);
-            
-            // Extract operation type
-            let operationType = 'UNKNOWN';
-            const typeCandidates: unknown[] = [
-              (operation as any)?.type,
-              (operation as any)?.operationType,
-            ];
-
-            let numericType: number | null = null;
-            for (const candidate of typeCandidates) {
-              const parsed = parseNumericOperationType(candidate);
-              if (parsed !== null) {
-                numericType = parsed;
-                break;
-              }
-            }
-
-            if (numericType !== null && !Number.isNaN(numericType)) {
-              operationType = getOperationTypeFromNumeric(numericType);
-            }
-
-            // Extract addresses
-            const from = toAddressString((operation as any)?.from);
-            const to = toAddressString((operation as any)?.to);
-            const token = extractTokenAddress({ voteStaple: null, effects: null, operation });
-            
-            // Extract amount
-            const amountValue = toBigIntSafe((operation as any)?.amount);
-            
-            // Get token metadata for proper formatting
-            const tokenMetadata = extractTokenMetadataFromOperation(operation);
-            let formattedAmount = amountValue.toString();
-            
-            if (tokenMetadata && tokenMetadata.decimals !== undefined) {
-              try {
-                formattedAmount = formatTokenAmount(
-                  amountValue,
-                  tokenMetadata.decimals,
-                  tokenMetadata.fieldType || 'decimals',
-                  tokenMetadata.ticker || 'UNKNOWN'
-                );
-              } catch (error) {
-                console.warn('Failed to format token amount:', error);
-                formattedAmount = amountValue.toString();
-              }
-            }
-            
-            const blockHash = getAccountString(block?.hash);
-            const timestamp = getTimestamp(block);
-            
-            // Determine transaction type based on context account
-            let type = 'Transaction';
-            if (contextAccount) {
-              if (to === contextAccount) {
-                type = 'RECEIVE';
-              } else if (from === contextAccount) {
-                type = 'SEND';
-              }
-            }
-            
-            // Only include if it's relevant to the context account
-            if (!contextAccount || from === contextAccount || to === contextAccount) {
-              const uniqueId = `${blockHash || 'unknown'}-${operationType}-${timestamp}-${Math.random().toString(36).substr(2, 9)}`;
-              
-              const result = {
-                id: uniqueId,
-                block: blockHash,
-                timestamp,
-                type,
-                amount: formattedAmount,
-                from,
-                to,
-                token,
-                operationType: operationType.toString(),
-                tokenMetadata,
-              };
-
-              globalThis.console.warn('🔍 [PARSING] Adding direct operation result:', result);
-              results.push(result);
-            }
-          }
-          continue;
-        }
-      }
-      
-      continue;
-    }
-
-    const { voteStaple, effects } = parsed.data;
-    globalThis.console.warn('🔍 [PARSING] Parsed voteStaple:', voteStaple);
-    
-    // Extract operations from voteStaple blocks
-    const blocks = voteStaple?.blocks ?? [];
-    globalThis.console.warn('🔍 [PARSING] Found blocks:', blocks.length);
-    
-    for (const block of blocks) {
-      const operations = block?.operations ?? [];
-      globalThis.console.warn('🔍 [PARSING] Block operations:', operations.length, operations);
-      
-      for (const operation of operations) {
-        globalThis.console.warn('🔍 [PARSING] Processing operation:', operation);
-        
-        // Extract operation type using wallet extension pattern
-        let operationType = 'UNKNOWN';
-        const typeCandidates: unknown[] = [
-          (operation as any)?.type,
-          (operation as any)?.operationType,
-        ];
-
-        let numericType: number | null = null;
-        for (const candidate of typeCandidates) {
-          const parsed = parseNumericOperationType(candidate);
-          if (parsed !== null) {
-            numericType = parsed;
-            break;
-          }
-        }
-
-        if (numericType !== null && !Number.isNaN(numericType)) {
-          operationType = getOperationTypeFromNumeric(numericType);
-        }
-
-        // Extract addresses using wallet extension pattern
-        const from = toAddressString(
-          (operation as any)?.from ?? (effects as any)?.from
-        );
-        const to = toAddressString(
-          (operation as any)?.to ?? (effects as any)?.to
-        );
-        const token = extractTokenAddress({ voteStaple, effects, operation });
-        
-        // Extract amount using wallet extension pattern
-        const amountValue = toBigIntSafe(
-          (operation as any)?.amount ?? (effects as any)?.amount
-        );
-        
-        // Get token metadata for proper formatting
-        const tokenMetadata = extractTokenMetadataFromOperation(operation);
-        let formattedAmount = amountValue.toString();
-        
-        if (tokenMetadata && tokenMetadata.decimals !== undefined) {
-          try {
-            formattedAmount = formatTokenAmount(
-              amountValue,
-              tokenMetadata.decimals,
-              tokenMetadata.fieldType || 'decimals',
-              tokenMetadata.ticker || 'UNKNOWN'
-            );
-          } catch (error) {
-            console.warn('Failed to format token amount:', error);
-            formattedAmount = amountValue.toString();
-          }
-        }
-        
-        const blockHash = getAccountString(block?.hash);
-        const timestamp = getTimestamp(block);
-        
-        // Determine transaction type based on context account
-        let type = 'Transaction';
-        if (contextAccount) {
-          if (to === contextAccount) {
-            type = 'RECEIVE';
-          } else if (from === contextAccount) {
-            type = 'SEND';
-          }
-        }
-        
-        // Only include if it's relevant to the context account
-        if (!contextAccount || from === contextAccount || to === contextAccount) {
-            // Create unique ID to avoid duplicates
-            const uniqueId = `${blockHash || 'unknown'}-${operationType}-${timestamp}-${Math.random().toString(36).substr(2, 9)}`;
-            
-            const result = {
-              id: uniqueId,
-              block: blockHash,
-              timestamp,
-              type,
-              amount: formattedAmount,
-              from,
-              to,
-              token,
-              operationType: operationType.toString(),
-              tokenMetadata,
-            };
-
-            globalThis.console.warn('🔍 [PARSING] Adding result:', result);
-            globalThis.console.warn('🔍 [PARSING] Unique ID created:', uniqueId);
-            globalThis.console.warn('🔍 [PARSING] Block hash:', blockHash);
-            globalThis.console.warn('🔍 [PARSING] Operation type:', operationType);
-            globalThis.console.warn('🔍 [PARSING] Numeric type:', numericType);
-            globalThis.console.warn('🔍 [PARSING] From/To:', { from, to });
-            globalThis.console.warn('🔍 [PARSING] Token:', token);
-            globalThis.console.warn('🔍 [PARSING] Amount (raw):', amountValue.toString());
-            globalThis.console.warn('🔍 [PARSING] Amount (formatted):', formattedAmount);
-            globalThis.console.warn('🔍 [PARSING] Token metadata:', tokenMetadata);
-            results.push(result);
-        }
-      }
-    }
+  const extracted = extractActivityFromSDKHistory(historyData, contextAccount);
+  if (extracted.length) {
+    return extracted;
   }
 
-  globalThis.console.warn('🔍 [PARSING] Final results:', results);
-  return results;
+  // As a final fallback, attempt to normalize any array-like structures.
+  if (Array.isArray(historyData)) {
+    return historyData
+      .map((item) => normalizeHistoryRecord(item, contextAccount))
+      .filter((item): item is RecentActivityItem => Boolean(item));
+  }
+
+  try {
+    console.debug("[processKeetaHistoryWithFiltering] returning empty results");
+  } catch {}
+  return [];
 }
 
 // Helper functions for extracting data from Keeta SDK objects

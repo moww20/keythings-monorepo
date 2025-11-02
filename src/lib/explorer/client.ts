@@ -445,31 +445,85 @@ async function fetchTransactionsFromWallet(query: ExplorerTransactionsQuery): Pr
     
     const historyResult = await (userClient as any).history(historyOptions);
     console.log('[CLIENT] History from wallet:', historyResult);
-    
+
+    const normAddr = (v: any): string => {
+      if (typeof v === 'string') return v;
+      try {
+        if (v?.publicKeyString && typeof v.publicKeyString === 'string') return v.publicKeyString;
+        if (v?.publicKeyString?.get) {
+          const got = v.publicKeyString.get();
+          if (typeof got === 'string') return got;
+          if (got?.toString) {
+            const s = String(got.toString());
+            if (s && s !== '[object Object]') return s;
+          }
+        }
+        if (v?.publicKeyString?.toString) {
+          const s = String(v.publicKeyString.toString());
+          if (s && s !== '[object Object]') return s;
+        }
+        if (v?.toString) {
+          const s = String(v.toString());
+          if (s && s !== '[object Object]') return s;
+        }
+      } catch {}
+      return '';
+    };
+    const normType = (t: any): string => {
+      const map: Record<number, string> = {
+        0: 'SEND',
+        1: 'RECEIVE',
+        2: 'SWAP',
+        3: 'SWAP_FORWARD',
+        4: 'TOKEN_ADMIN_SUPPLY',
+        5: 'TOKEN_ADMIN_MODIFY_BALANCE',
+      };
+      if (typeof t === 'number' && t in map) return map[t];
+      if (typeof t === 'string') {
+        const n = Number(t);
+        if (Number.isInteger(n) && n in map) return map[n];
+        return t.toUpperCase();
+      }
+      return 'UNKNOWN';
+    };
+    const normAmt = (a: any): string => {
+      if (typeof a === 'bigint') return a.toString();
+      if (typeof a === 'number') return String(Math.trunc(a));
+      if (typeof a === 'string') return a;
+      return '0';
+    };
+
     // Transform wallet history to frontend format
-    const stapleOperations = historyResult.records?.map((record: any) => ({
-      type: record.operationType || record.type || 'Transaction',
-      voteStapleHash: record.block || '',
-      toAccount: record.to || '',
-      // Preserve top-level fields for proper extraction
-      from: record.from,
-      to: record.to,
-      amount: record.amount,
-      token: record.token,
-      tokenMetadata: record.tokenMetadata,
-      block: {
-        $hash: record.block || record.id || '',
-        date: new Date(record.timestamp || Date.now()).toISOString(),
-        account: query.publicKey || '',
-      },
-      operation: {
-        type: record.operationType || record.type,
-        from: record.from,
-        to: record.to,
-        amount: record.amount,
-        token: record.token,
-      },
-    })) || [];
+    const stapleOperations = historyResult.records?.map((record: any) => {
+      const type = normType(record.operationType ?? record.type);
+      const from = normAddr(record.from);
+      const to = normAddr(record.to);
+      const token = normAddr(record.token);
+      const amount = normAmt(record.amount);
+      const hash = typeof record.block === 'string' ? record.block : (typeof record.id === 'string' ? record.id : '');
+      const tsRaw = (record.timestamp ?? record.date ?? record.blockTimestamp ?? null);
+      const date = tsRaw ? new Date(tsRaw).toISOString() : '1970-01-01T00:00:00.000Z';
+      const account = query.publicKey || '';
+      return {
+        type,
+        voteStapleHash: hash,
+        toAccount: to,
+        from,
+        to,
+        amount,
+        token,
+        tokenAddress: token,
+        tokenMetadata: record.tokenMetadata,
+        block: {
+          $hash: hash,
+          date,
+          account,
+        },
+        operation: { type, from, to, amount, token },
+        operationSend: type === 'SEND' ? { from, to, amount, token } : undefined,
+        operationReceive: type === 'RECEIVE' ? { from, to, amount, token } : undefined,
+      };
+    }) || [];
     
     return {
       nextCursor: historyResult.cursor,

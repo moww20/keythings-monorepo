@@ -31,15 +31,23 @@ export function resolveDate(...candidates: unknown[]): string {
       return candidate.toISOString();
     }
     if (typeof candidate === 'number' && Number.isFinite(candidate)) {
-      const normalized = new Date(candidate);
+      const ms = candidate < 1_000_000_000_000 ? candidate * 1000 : candidate;
+      const normalized = new Date(ms);
       if (!Number.isNaN(normalized.getTime())) return normalized.toISOString();
     }
     if (typeof candidate === 'string') {
-      const parsed = new Date(candidate);
+      const trimmed = candidate.trim();
+      if (/^\d+$/.test(trimmed)) {
+        const n = Number(trimmed);
+        const ms = n < 1_000_000_000_000 ? n * 1000 : n;
+        const d = new Date(ms);
+        if (!Number.isNaN(d.getTime())) return d.toISOString();
+      }
+      const parsed = new Date(trimmed);
       if (!Number.isNaN(parsed.getTime())) return parsed.toISOString();
     }
   }
-  return new Date().toISOString();
+  return '';
 }
 
 export type TokenDisplayEntry = {

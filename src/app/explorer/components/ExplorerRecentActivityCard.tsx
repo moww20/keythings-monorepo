@@ -11,21 +11,14 @@ import {
   parseExplorerOperation,
   type ExplorerOperation,
 } from "@/lib/explorer/client";
-import {
-  fetchWalletHistory,
-  type WalletHistoryOptions,
-  type WalletHistoryRecord,
-} from "@/app/lib/wallet-history";
+import { type WalletHistoryRecord } from "@/app/lib/wallet-history";
+import { getHistoryForAccount } from "@/lib/explorer/sdk-read-client";
+import { useWallet } from "@/app/contexts/WalletContext";
 
 const FALLBACK_MESSAGE =
   "Connect your Keeta wallet to pull recent on-chain activity in real time.";
 
-const HISTORY_OPTIONS: WalletHistoryOptions = {
-  depth: 40,
-  cursor: null,
-  includeOperations: true,
-  includeTokenMetadata: true,
-};
+const HISTORY_DEPTH = 40;
 
 const processedHistoryCache = new Map<string, { fingerprint: string; operations: ExplorerOperation[] }>();
 
@@ -289,6 +282,7 @@ function transformHistoryRecords(records: WalletHistoryRecord[]): ExplorerOperat
 }
 
 export default function ExplorerRecentActivityCard(): React.JSX.Element {
+  const { publicKey } = useWallet();
   const [operations, setOperations] = useState<ExplorerOperation[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -299,20 +293,27 @@ export default function ExplorerRecentActivityCard(): React.JSX.Element {
     async function load() {
       try {
         setLoading(true);
-        const history = await fetchWalletHistory(HISTORY_OPTIONS);
+        const acct = typeof publicKey === 'string' ? publicKey : '';
+        if (!acct) {
+          setOperations([]);
+          setError(FALLBACK_MESSAGE);
+          return;
+        }
+        const ops = await getHistoryForAccount(acct, { depth: HISTORY_DEPTH, includeTokenMetadata: true });
 
         if (cancelled) {
           return;
         }
 
-        if (!history.records.length) {
+        if (!Array.isArray(ops) || ops.length === 0) {
           setOperations([]);
           setError(FALLBACK_MESSAGE);
           return;
         }
 
-        const cacheKey = JSON.stringify(HISTORY_OPTIONS);
-        const fingerprint = fingerprintHistory(history.records);
+        const records: WalletHistoryRecord[] = [{ operations: ops } as unknown as WalletHistoryRecord];
+        const cacheKey = `${acct}:${HISTORY_DEPTH}`;
+        const fingerprint = fingerprintHistory(records);
         const cached = processedHistoryCache.get(cacheKey);
         if (cached && cached.fingerprint === fingerprint) {
           setOperations(cached.operations);
@@ -320,7 +321,7 @@ export default function ExplorerRecentActivityCard(): React.JSX.Element {
           return;
         }
 
-        const transformed = transformHistoryRecords(history.records);
+        const transformed = transformHistoryRecords(records);
         processedHistoryCache.set(cacheKey, {
           fingerprint,
           operations: transformed,
@@ -345,7 +346,7 @@ export default function ExplorerRecentActivityCard(): React.JSX.Element {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [publicKey]);
 
   const hasData = useMemo(() => operations.length > 0, [operations]);
 

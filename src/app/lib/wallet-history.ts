@@ -1,6 +1,7 @@
 "use client";
 
 import { createTimedCache } from "@/lib/cache/timed-cache";
+import { getHistory as sdkGetHistory } from "@/lib/explorer/sdk-read-client";
 
 export interface WalletHistoryOptions {
   depth?: number;
@@ -50,27 +51,13 @@ function buildKey(options: WalletHistoryOptions): string {
 }
 
 async function requestHistory(options: WalletHistoryOptions): Promise<WalletHistoryResponse> {
-  if (typeof window === "undefined" || !window.keeta?.history) {
-    return { records: [], nextCursor: null };
-  }
-
-  const response = await window.keeta.history({
-    depth: options.depth,
-    cursor: options.cursor ?? null,
-    includeOperations: options.includeOperations ?? false,
-    includeTokenMetadata: options.includeTokenMetadata ?? false,
-  } as any);
-
-  if (!response || typeof response !== "object") {
-    return { records: [], nextCursor: null };
-  }
-
-  const records = Array.isArray((response as any).records)
-    ? ((response as any).records as WalletHistoryRecord[])
-    : [];
-  const nextCursor = typeof (response as any).nextCursor === "string" ? (response as any).nextCursor : null;
-
-  return { records, nextCursor };
+  const depth = options.depth ?? undefined;
+  const cursor = options.cursor ?? undefined;
+  const staples = (await sdkGetHistory({ depth, cursor })) as unknown[];
+  // SDK returns an array of history entries (vote staples + effects). We surface them as records.
+  const records = Array.isArray(staples) ? (staples as WalletHistoryRecord[] as any) : [];
+  // SDK path currently does not provide pagination cursor; expose null for now.
+  return { records, nextCursor: null };
 }
 
 export async function fetchWalletHistory(
