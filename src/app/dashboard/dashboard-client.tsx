@@ -1,7 +1,7 @@
 "use client";
 
 import type { JSX } from "react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 
 import EstimatedBalance, { type KtaPriceData } from "@/app/components/EstimatedBalance";
 import { useWallet } from "@/app/contexts/WalletContext";
@@ -9,6 +9,7 @@ import { SectionCards } from "@/components/section-cards";
 import { TokensDataTable, schema } from "@/components/tokens-data-table";
 import { formatAmountWithCommas, fromBaseUnits } from "@/app/lib/token-utils";
 import type { z } from "zod";
+import { useKtaPrice } from "@/app/hooks/useKtaPrice";
 
 function resolveNetworkName(network: unknown): string {
   if (typeof network === "object" && network !== null) {
@@ -83,8 +84,7 @@ export default function DashboardClient(): JSX.Element {
   } = useWallet();
 
   const [isConnecting, setIsConnecting] = useState(false);
-  const [ktaPriceData, setKtaPriceData] = useState<KtaPriceData | null>(null);
-  const priceFetchInProgress = useRef(false);
+  const { data: ktaPriceData, isLoading: isKtaPriceLoading } = useKtaPrice();
 
   const handleConnectWallet = useCallback(async () => {
     if (isConnecting) return;
@@ -112,57 +112,6 @@ export default function DashboardClient(): JSX.Element {
       setIsConnecting(false);
     }
   }, [connectWallet, requestTransactionPermissions, hasTransactionPermissions, isConnecting]);
-
-  const fetchKtaPrice = useCallback(async () => {
-    if (typeof window === "undefined" || priceFetchInProgress.current) {
-      return;
-    }
-
-    const provider = window.keeta;
-    if (!provider) {
-      return;
-    }
-
-    priceFetchInProgress.current = true;
-    try {
-      let priceData: unknown = null;
-      if (typeof provider.getKtaPrice === "function") {
-        priceData = await provider.getKtaPrice();
-      } else if (typeof provider.request === "function") {
-        try {
-          priceData = await provider.request({ method: "keeta_getKtaPrice" });
-        } catch (error) {
-          console.warn("keeta_getKtaPrice request failed:", error);
-        }
-      }
-
-      if (priceData && typeof priceData === "object") {
-        const data = priceData as Record<string, unknown>;
-        if (typeof data.usd === "number") {
-          setKtaPriceData({
-            usd: data.usd,
-            usd_market_cap: typeof data.usd_market_cap === "number" ? data.usd_market_cap : undefined,
-            usd_24h_vol: typeof data.usd_24h_vol === "number" ? data.usd_24h_vol : undefined,
-            usd_24h_change: typeof data.usd_24h_change === "number" ? data.usd_24h_change : undefined,
-          });
-          return;
-        }
-      }
-
-      setKtaPriceData(null);
-    } catch (error) {
-      console.error("Failed to fetch KTA price:", error);
-      setKtaPriceData(null);
-    } finally {
-      priceFetchInProgress.current = false;
-    }
-  }, []);
-
-  useEffect(() => {
-    if (wallet.connected && !wallet.isLocked) {
-      void fetchKtaPrice();
-    }
-  }, [wallet.connected, wallet.isLocked, fetchKtaPrice]);
 
   const tokensTableData = useMemo(
     () => mapTokensToTable(tokens, wallet.network, wallet.connected && !wallet.isLocked, ktaPriceData),
@@ -197,7 +146,8 @@ export default function DashboardClient(): JSX.Element {
 
   const tokensCount = tokens.length;
 
-  const showLoadingMessage = (isWalletLoading || isTokensLoading) && tokensTableData.length === 0;
+  const showLoadingMessage =
+    (isWalletLoading || isTokensLoading || isKtaPriceLoading) && tokensTableData.length === 0;
 
   return (
     <>

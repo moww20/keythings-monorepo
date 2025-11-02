@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { createTimedCache } from "../cache/timed-cache";
+
 /**
  * Explorer Client (SSR-safe, wallet-only)
  *
@@ -126,6 +128,16 @@ const networkStatsSchema = z.object({
   }),
 });
 
+type NetworkStats = {
+  blockCount: number;
+  transactionCount: number;
+  representativeCount: number;
+  queryTime: number;
+  time: string;
+};
+
+const networkStatsCache = createTimedCache<string, NetworkStats>(30_000);
+
 const voteStapleSchema = z.object({
   voteStaple: z.object({
     blocks: z.array(z.object({
@@ -201,32 +213,31 @@ export type ExplorerVoteStapleResponse = z.infer<typeof voteStapleSchema>;
 export type ExplorerToken = z.infer<typeof tokenSchema>["token"];
 export type ExplorerCertificate = z.infer<typeof accountCertificateSchema>["certificate"];
 
-export async function fetchNetworkStats() {
+async function resolveNetworkStats(): Promise<NetworkStats> {
   try {
-    // Use wallet extension for network stats if available
     if (typeof window !== 'undefined' && window.keeta) {
       console.log('[CLIENT] Using wallet extension for network stats');
       return await fetchNetworkStatsFromWallet();
     }
-    
+
     console.log('[CLIENT] Wallet extension not available, using fallback stats');
-    return {
-      blockCount: 0,
-      transactionCount: 0,
-      representativeCount: 0,
-      queryTime: 0,
-      time: new Date().toISOString(),
-    };
   } catch (error) {
     console.error('Error fetching network stats:', error);
-    return {
-      blockCount: 0,
-      transactionCount: 0,
-      representativeCount: 0,
-      queryTime: 0,
-      time: new Date().toISOString(),
-    };
   }
+
+  return {
+    blockCount: 0,
+    transactionCount: 0,
+    representativeCount: 0,
+    queryTime: 0,
+    time: new Date().toISOString(),
+  } satisfies NetworkStats;
+}
+
+export async function fetchNetworkStats(options: { forceRefresh?: boolean } = {}): Promise<NetworkStats> {
+  return networkStatsCache.get('default', () => resolveNetworkStats(), {
+    forceRefresh: options.forceRefresh,
+  });
 }
 
 export async function fetchVoteStaple(blockhash: string) {

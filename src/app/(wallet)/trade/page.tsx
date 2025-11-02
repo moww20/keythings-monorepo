@@ -14,6 +14,7 @@ import { RFQUnifiedPanel } from '@/app/components/rfq/RFQUnifiedPanel';
 import { fetchRfqAvailablePairs } from '@/app/lib/rfq-api';
 import { AppSidebar } from '@/components/app-sidebar';
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar';
+import { useKtaPrice } from '@/app/hooks/useKtaPrice';
 
 const TIMEFRAMES: TradingViewTimeframe[] = ['1s', '15m', '1H', '4H', '1D', '1W'];
 const MODES = [
@@ -61,12 +62,7 @@ export default function TradePage(): React.JSX.Element {
   const [tokenB, setTokenB] = useState<TokenChoice | null>(null);
   const [timeframe, setTimeframe] = useState<TradingViewTimeframe>('1D');
   const [mode, setMode] = useState<TradePageMode>('rfq_taker');
-  const [ktaPriceData, setKtaPriceData] = useState<{
-    usd: number;
-    usd_24h_change: number;
-    usd_24h_vol: number;
-  } | null>(null);
-  const [isLoadingPrice, setIsLoadingPrice] = useState(false);
+  const { data: sharedKtaPrice, isLoading: isKtaPriceLoading } = useKtaPrice();
   const [marketPairs, setMarketPairs] = useState<MarketPairInfo[]>([]);
   const [isLoadingPairs, setIsLoadingPairs] = useState(false);
   const [pairsError, setPairsError] = useState<string | null>(null);
@@ -221,35 +217,18 @@ export default function TradePage(): React.JSX.Element {
     [getChoiceForSymbol, reconcileChoice],
   );
 
-  // Fetch live KTA price data
-  useEffect(() => {
-    const fetchKtaPrice = async () => {
-      if (!window.keeta?.getKtaPrice) return;
-      
-      try {
-        setIsLoadingPrice(true);
-        const priceData = await window.keeta.getKtaPrice();
-        if (priceData && typeof priceData === 'object' && 'usd' in priceData) {
-          const data = priceData as any;
-          setKtaPriceData({
-            usd: data.usd || 0,
-            usd_24h_change: data.usd_24h_change || 0,
-            usd_24h_vol: data.usd_24h_vol || 0,
-          });
-        }
-      } catch (error) {
-        console.error('Failed to fetch KTA price:', error);
-      } finally {
-        setIsLoadingPrice(false);
-      }
+  const ktaPriceData = useMemo(() => {
+    if (!sharedKtaPrice) {
+      return null;
+    }
+    return {
+      usd: sharedKtaPrice.usd,
+      usd_24h_change: sharedKtaPrice.usd_24h_change ?? 0,
+      usd_24h_vol: sharedKtaPrice.usd_24h_vol ?? 0,
     };
+  }, [sharedKtaPrice]);
 
-    fetchKtaPrice();
-    
-    // Set up interval to refresh price data every 30 seconds
-    const interval = setInterval(fetchKtaPrice, 30000);
-    return () => clearInterval(interval);
-  }, []);
+  const isLoadingPrice = isKtaPriceLoading && !ktaPriceData;
 
   const selectedPairSymbol = useMemo<string | null>(() => {
     if (!tokenA || !tokenB) {

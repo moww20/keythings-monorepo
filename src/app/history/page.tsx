@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { AppSidebar } from "@/components/app-sidebar";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import type { ExplorerOperation } from "@/lib/explorer/client";
+import { fetchWalletHistory } from "@/app/lib/wallet-history";
 import { parseExplorerOperation } from "@/lib/explorer/client";
 import { parseTokenMetadata, formatTokenAmount } from "@/app/explorer/utils/token-metadata";
 import { getTokenMeta } from "@/lib/tokens/metadata-service";
@@ -636,7 +637,15 @@ export default function HistoryPage(): React.JSX.Element {
             }
           : { cursor: null, depth: INITIAL_PAGE_DEPTH };
 
-      if (typeof window === "undefined" || !window.keeta?.history) {
+      if (typeof window === "undefined") {
+        return { records: [], cursor: null, hasMore: false } as {
+          records: any[];
+          cursor: string | null;
+          hasMore: boolean;
+        };
+      }
+      const provider = window.keeta;
+      if (!provider) {
         return { records: [], cursor: null, hasMore: false } as {
           records: any[];
           cursor: string | null;
@@ -644,22 +653,22 @@ export default function HistoryPage(): React.JSX.Element {
         };
       }
       try {
-        if (typeof window.keeta.requestCapabilities === "function") {
-          await window.keeta.requestCapabilities(["read"]);
+        if (typeof provider.requestCapabilities === "function") {
+          await provider.requestCapabilities(["read"]);
         }
       } catch {}
 
-      const resp = await window.keeta.history({
+      const resp = await fetchWalletHistory({
         depth: params.depth,
         cursor: params.cursor,
         includeOperations: true,
         includeTokenMetadata: true,
-      } as any);
+      });
 
-      let records: any[] = Array.isArray(resp?.records) ? resp.records : [];
+      let records: any[] = Array.isArray(resp.records) ? resp.records : [];
 
       try {
-        const uc: any = await window.keeta.getUserClient?.();
+        const uc: any = await provider.getUserClient?.();
         const hasFilter = uc && (typeof uc.filterStapleOperations === "function" || typeof uc.filterStapleOps === "function");
         if (hasFilter && accountKey) {
           const applyStapleFilter = async (rec: any) => {
@@ -688,8 +697,8 @@ export default function HistoryPage(): React.JSX.Element {
 
       return {
         records,
-        cursor: typeof resp?.cursor === "string" ? resp.cursor : null,
-        hasMore: Boolean(resp?.hasMore),
+        cursor: typeof resp.nextCursor === "string" ? resp.nextCursor : null,
+        hasMore: Boolean(resp.nextCursor),
       } as { records: any[]; cursor: string | null; hasMore: boolean };
     },
     initialPageParam: { cursor: null as string | null, depth: INITIAL_PAGE_DEPTH } satisfies HistoryQueryPageParam,
