@@ -6,6 +6,7 @@
 import type { RFQOrder } from '@/app/types/rfq';
 import type { OrderSide } from '@/app/types/rfq';
 import { z } from 'zod';
+import { getTokenMetadataRecord } from '@/lib/explorer/sdk-read-client';
 
 export type TokenFieldType = "decimalPlaces" | "decimals";
 

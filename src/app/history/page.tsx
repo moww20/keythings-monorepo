@@ -118,19 +118,7 @@ export default function HistoryPage(): JSX.Element {
   }, [isClient]);
 
   useEffect(() => {
-    try {
-      console.debug("[HistoryPage] gating", {
-        isClient,
-        walletConnected: wallet.connected,
-        walletLocked: wallet.isLocked,
-        accountKey,
-        canCallHistory,
-        hasHistoryCapability,
-        capabilityLoading,
-        capabilityError,
-        hasProviderMethods: Boolean(capabilityProvider),
-      });
-    } catch {}
+    // no-op; previously logged gating state
   }, [isClient, wallet.connected, wallet.isLocked, accountKey, canCallHistory, hasHistoryCapability, capabilityLoading, capabilityError, capabilityProvider]);
 
   const enableHistoryQuery =
@@ -155,7 +143,6 @@ export default function HistoryPage(): JSX.Element {
     enabled: enableHistoryQuery,
     queryFn: async ({ pageParam }) => {
       const provider = typeof window !== "undefined" ? window.keeta : undefined;
-      try { console.debug("[HistoryPage] queryFn", { pageParam, hasProvider: Boolean(provider), enableHistoryQuery }); } catch {}
       return fetchProviderHistory(provider, {
         depth: HISTORY_DEPTH,
         cursor: typeof pageParam === "string" && pageParam.length > 0 ? pageParam : undefined,
@@ -186,39 +173,14 @@ export default function HistoryPage(): JSX.Element {
   );
 
   useEffect(() => {
-    try {
-      const pagesCount = Array.isArray(pages) ? pages.length : 0;
-      const sampleRecords = pagesCount > 0 && Array.isArray((pages[0] as any)?.records)
-        ? (pages[0] as any).records
-        : [];
-      const sampleKeys = sampleRecords.length > 0 && sampleRecords[0]
-        ? Object.keys(sampleRecords[0]).slice(0, 8)
-        : [];
-      const sampleRecordPreview = sampleRecords.length > 0 && sampleRecords[0]
-        ? Object.fromEntries(Object.entries(sampleRecords[0]).slice(0, 6))
-        : null;
-      console.debug("[HistoryPage] data pages", {
-        pagesCount,
-        firstPageRecords: sampleRecords.length,
-        sampleKeys,
-        sampleRecordPreview,
-      });
-      if (typeof window !== "undefined") {
-        (window as any).__HISTORY_DEBUG_PAGES__ = pages;
-        (window as any).__HISTORY_DEBUG_NORMALIZED__ = normalized;
-      }
-    } catch {}
+    if (typeof window !== "undefined") {
+      (window as any).__HISTORY_DEBUG_PAGES__ = pages;
+      (window as any).__HISTORY_DEBUG_NORMALIZED__ = normalized;
+    }
   }, [pages, normalized]);
 
   useEffect(() => {
-    try {
-      console.debug("[HistoryPage] normalized", {
-        records: allRecords.length,
-        operations: normalized.operations.length,
-        tokensToFetch: normalized.tokensToFetch.length,
-        blocksToFetch: normalized.blocksToFetch.length,
-      });
-    } catch {}
+    // no-op; previously logged normalization stats
   }, [allRecords.length, normalized.operations.length, normalized.tokensToFetch.length, normalized.blocksToFetch.length]);
 
   useEffect(() => {
@@ -310,14 +272,6 @@ export default function HistoryPage(): JSX.Element {
         fetchingBlocks.current.add(hash);
         try {
           const blockData = await getBlock(hash);
-          try {
-            const keys =
-              blockData && typeof blockData === "object"
-                ? Object.keys(blockData as Record<string, unknown>).slice(0, 12)
-                : null;
-            console.debug("[HistoryPage] fetched block", { hash, hasData: Boolean(blockData), keys });
-          } catch {}
-
           const timestampCandidates = [
             (blockData as any)?.timestamp,
             (blockData as any)?.createdAt,
@@ -355,13 +309,9 @@ export default function HistoryPage(): JSX.Element {
             if (!Number.isNaN(parsed.getTime())) {
               updates.set(hash, parsed.toISOString());
             }
-          } else {
-            try {
-              console.debug("[HistoryPage] block timestamp not found", { hash });
-            } catch {}
           }
         } catch (error) {
-          console.debug("[HistoryPage] failed to fetch block timestamp", { hash, error });
+          // ignore block fetch errors
         }
       }
 

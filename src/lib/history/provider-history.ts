@@ -57,20 +57,12 @@ export async function fetchProviderHistory(
     requestPayload.cursor = options.cursor;
   }
 
-  try { console.debug('[provider-history] request', { payload: requestPayload, hasCursor: Boolean(requestPayload.cursor) }); } catch {}
   const response = await provider.history(requestPayload);
-  try {
-    const type = response === null ? 'null' : typeof response;
-    const keys = response && typeof response === 'object' ? Object.keys(response as Record<string, unknown>).slice(0, 8) : null;
-    console.debug('[provider-history] raw response', { type, keys });
-  } catch {}
   const parsed = ProviderHistoryResponseSchema.safeParse(response);
   if (!parsed.success) {
-    try { console.warn('[provider-history] schema validation failed', parsed.error); } catch {}
     // Fallback: some providers may return a raw array of records or nest under common keys
     try {
       if (Array.isArray(response)) {
-        console.debug('[provider-history] accepting array response as records', { length: response.length });
         return { records: response, cursor: null, hasMore: false };
       }
       if (response && typeof response === 'object') {
@@ -78,7 +70,6 @@ export async function fetchProviderHistory(
         for (const key of containerKeys) {
           const candidate = (response as Record<string, unknown>)[key];
           if (Array.isArray(candidate)) {
-            console.debug('[provider-history] accepting container array under key', { key, length: candidate.length });
             return { records: candidate, cursor: null, hasMore: false };
           }
         }
@@ -88,7 +79,6 @@ export async function fetchProviderHistory(
   }
 
   const { records, cursor, hasMore } = parsed.data;
-  try { console.debug('[provider-history] parsed', { recordsCount: Array.isArray(records) ? records.length : 0, hasMore: Boolean(hasMore), cursor: cursor ?? null }); } catch {}
   return {
     records,
     cursor: cursor ?? null,
@@ -116,6 +106,29 @@ function coerceAmountString(value: unknown): string | undefined {
     return value.toString();
   }
   return undefined;
+}
+
+function decimalToBaseUnits(value: string, decimals: number): string | undefined {
+  if (!Number.isFinite(decimals) || decimals < 0) {
+    return undefined;
+  }
+
+  const trimmed = value.trim();
+  if (!/^[-+]?\d+(?:\.\d+)?$/.test(trimmed)) {
+    return undefined;
+  }
+
+  const negative = trimmed.startsWith("-");
+  const unsigned = negative || trimmed.startsWith("+") ? trimmed.slice(1) : trimmed;
+  const [wholePartRaw, fractionRaw = ""] = unsigned.split(".");
+  const wholePart = wholePartRaw.replace(/^0+(?=\d)/, "") || "0";
+  const fractionDigits = fractionRaw.replace(/[^0-9]/g, "");
+  const paddedFraction = (fractionDigits + "0".repeat(decimals)).slice(0, decimals);
+  const combined = `${wholePart}${paddedFraction}`.replace(/^0+(?=\d)/, "") || "0";
+  if (combined === "0") {
+    return "0";
+  }
+  return negative ? `-${combined}` : combined;
 }
 
 function normalizeMetadataCandidate(value: unknown): CachedTokenMeta | undefined {
@@ -297,9 +310,14 @@ export function normalizeHistoryRecords(
 
     const normalizedType = typeof op.type === "string" ? op.type.toUpperCase() : "UNKNOWN";
 
-    const fallbackAmount =
-      coerceAmountString(op.amount ?? op.rawAmount) ??
-      coerceAmountString(record.amount ?? record.rawAmount);
+    const rawAmountCandidate =
+      coerceAmountString(op.rawAmount ?? record.rawAmount) ??
+      coerceAmountString((op as any)?.operation?.rawAmount) ??
+      coerceAmountString((record as any)?.operation?.rawAmount);
+    const amountCandidate =
+      coerceAmountString(op.amount ?? record.amount) ??
+      coerceAmountString((op as any)?.operation?.amount) ??
+      coerceAmountString((record as any)?.operation?.amount);
     const fallbackToken = sx(op.token ?? op.tokenAddress) ?? sx(record.token ?? record.tokenAddress);
     const fallbackFrom = sx(op.from) ?? sx(op.account) ?? sx(record.from ?? record.account);
     const fallbackTo = sx(op.to ?? op.toAccount) ?? sx(record.to);
@@ -309,6 +327,29 @@ export function normalizeHistoryRecords(
       ? Number(op.tokenDecimals ?? record.tokenDecimals)
       : undefined;
     const fallbackMetadata = op.tokenMetadata ?? record.tokenMetadata ?? record.metadata;
+
+    const fallbackFieldType =
+      (typeof (op.tokenMetadata as CachedTokenMeta | undefined)?.fieldType === "string"
+        ? (op.tokenMetadata as CachedTokenMeta | undefined)?.fieldType
+        : undefined) ??
+      (typeof (record.tokenMetadata as CachedTokenMeta | undefined)?.fieldType === "string"
+        ? (record.tokenMetadata as CachedTokenMeta | undefined)?.fieldType
+        : undefined);
+
+    let normalizedRawAmount = rawAmountCandidate;
+    if (!normalizedRawAmount && amountCandidate && amountCandidate.includes(".")) {
+      const decimalsForConversion = fallbackDecimals;
+      if (typeof decimalsForConversion === "number") {
+        const converted = decimalToBaseUnits(amountCandidate, decimalsForConversion);
+        if (converted !== undefined) {
+          normalizedRawAmount = converted;
+        }
+      }
+    }
+
+    if (!normalizedRawAmount) {
+      normalizedRawAmount = rawAmountCandidate ?? amountCandidate;
+    }
 
     const blockAccountValue =
       sx(op.account) ?? sx(record?.account) ?? sx(record?.from) ?? accountKey;
@@ -347,9 +388,9 @@ export function normalizeHistoryRecords(
       voteStapleHash: sx(record?.voteStaple?.hash) ?? blockHash,
       block,
       operation: { ...op },
-      amount: fallbackAmount ?? coerceAmountString(op.amount),
-      rawAmount: fallbackAmount ?? coerceAmountString(op.rawAmount ?? op.amount),
-      formattedAmount: fallbackFormatted ?? sx(op.formattedAmount),
+      amount: amountCandidate ?? coerceAmountString(op.amount),
+      rawAmount: normalizedRawAmount,
+      formattedAmount: fallbackFormatted ?? sx(op.formattedAmount) ?? (amountCandidate && amountCandidate.includes(".") ? amountCandidate : undefined),
       token: fallbackToken ?? sx(op.token),
       tokenAddress: fallbackToken ?? sx(op.tokenAddress),
       tokenTicker: fallbackTicker ?? sx(op.tokenTicker),
@@ -408,13 +449,7 @@ export function normalizeHistoryRecords(
 
     const parsed = parseExplorerOperation(operationPayload);
     if (!parsed) {
-      try {
-        console.debug("[provider-history] parse failure, using fallback", {
-          blockHash,
-          normalizedType,
-          keys: Object.keys(operationPayload),
-        });
-      } catch {}
+      // keep silent fallback when parsing fails
     }
 
     const baseOperation: ExplorerOperation = parsed ?? {
@@ -425,9 +460,13 @@ export function normalizeHistoryRecords(
       operationSend: operationPayload.operationSend,
       operationReceive: operationPayload.operationReceive,
       operationForward: operationPayload.operationForward,
-      amount: fallbackAmount ?? "0",
-      rawAmount: fallbackAmount ?? "0",
-      formattedAmount: operationPayload.formattedAmount ?? fallbackFormatted ?? fallbackAmount ?? "0",
+      amount: amountCandidate ?? normalizedRawAmount ?? "0",
+      rawAmount: normalizedRawAmount ?? amountCandidate ?? "0",
+      formattedAmount:
+        operationPayload.formattedAmount ??
+        fallbackFormatted ??
+        (amountCandidate && amountCandidate.includes(".") ? amountCandidate : normalizedRawAmount) ??
+        "0",
       token: operationPayload.token,
       tokenAddress: operationPayload.tokenAddress,
       tokenTicker: operationPayload.tokenTicker,
@@ -461,7 +500,7 @@ export function normalizeHistoryRecords(
     }
 
     const rawAmountValue =
-      coerceAmountString((baseOperation as any).rawAmount ?? (baseOperation as any).amount) ?? "";
+      coerceAmountString((baseOperation as any).rawAmount ?? normalizedRawAmount ?? amountCandidate) ?? "";
 
     const primaryTokenId = fallbackToken ?? undefined;
     const tokenLookupId =
@@ -470,6 +509,26 @@ export function normalizeHistoryRecords(
       (baseOperation.tokenAddress as string | undefined) ||
       ((baseOperation.operation as any)?.token as string | undefined) ||
       "";
+
+    if (!tokenLookupId) {
+      try {
+        console.debug("[history] normalizeHistoryRecords missing tokenLookupId", {
+          operationType: normalizedType,
+          voteStapleHash: sx(record?.voteStaple?.hash) ?? blockHash,
+          blockHash,
+          rawAmountValue,
+          tokenTicker: operationPayload.tokenTicker,
+          primaryTokenId,
+          operationToken: op.token,
+          operationTokenAddress: op.tokenAddress,
+          nestedOperationToken: (op.operation as any)?.token,
+          fallbackToken,
+          fallbackTicker,
+          fallbackDecimals,
+          metadataFromRecord,
+        });
+      } catch {}
+    }
 
     const dedupeKey = `${blockHash}|${fromValue}|${toValue}|${tokenLookupId}|${rawAmountValue}`;
     if (seenKeys.has(dedupeKey)) {
@@ -503,6 +562,34 @@ export function normalizeHistoryRecords(
         );
       } catch {
         // ignore formatting errors
+      }
+    }
+
+    const hasTokenDecimals = typeof enriched.tokenDecimals === "number";
+    const resolvedFieldType = mergedMeta?.fieldType ?? metadataFromRecord?.fieldType ?? fallbackFieldType;
+    if (!hasTokenDecimals || !resolvedFieldType) {
+      const debugPayload = {
+        tokenLookupId,
+        tokenTicker: enriched.tokenTicker ?? mergedMeta?.ticker ?? operationPayload.tokenTicker,
+        hasTokenDecimals,
+        resolvedFieldType,
+        fallbackDecimals,
+        metadataFromRecordDecimals: metadataFromRecord?.decimals,
+        cachedMetaDecimals: cachedMeta?.decimals,
+        mergedMetaDecimals: mergedMeta?.decimals,
+        operationPayloadDecimals: operationPayload.tokenDecimals,
+        rawAmountCandidate,
+        amountCandidate,
+        normalizedRawAmount,
+        operationType: enriched.type,
+      };
+
+      if (!hasTokenDecimals) {
+        console.debug("[history] normalizeHistoryRecords missing tokenDecimals", debugPayload);
+      }
+
+      if (!resolvedFieldType) {
+        console.debug("[history] normalizeHistoryRecords missing fieldType", debugPayload);
       }
     }
 
