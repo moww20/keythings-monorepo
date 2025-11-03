@@ -46,13 +46,41 @@ async function loadKeeta(): Promise<any> {
 
 const NetworkNameSchema = z.union([z.literal('test'), z.literal('main')]);
 
-function getNetwork(): 'test' | 'main' {
+function readPreferredNetworkFromLS(): 'test' | 'main' | null {
+  try {
+    if (typeof window === 'undefined' || !('localStorage' in window)) return null;
+    const raw = window.localStorage.getItem('keeta.network');
+    if (!raw) return null;
+    const parsed = NetworkNameSchema.safeParse(raw);
+    return parsed.success ? parsed.data : null;
+  } catch {
+    return null;
+  }
+}
+
+export function setPreferredNetwork(value: 'test' | 'main'): void {
+  try {
+    if (typeof window === 'undefined' || !('localStorage' in window)) return;
+    window.localStorage.setItem('keeta.network', value);
+    cachedClient = null;
+    cachedNetwork = null;
+  } catch {}
+}
+
+export function getPreferredNetwork(): 'test' | 'main' {
+  const fromLs = readPreferredNetworkFromLS();
+  if (fromLs) return fromLs;
   const env = (typeof process !== 'undefined' && process.env && process.env.NEXT_PUBLIC_KEETA_NETWORK) || 'test';
   const parsed = NetworkNameSchema.safeParse(env);
   return parsed.success ? parsed.data : 'test';
 }
 
+function getNetwork(): 'test' | 'main' {
+  return getPreferredNetwork();
+}
+
 let cachedClient: any | null = null;
+let cachedNetwork: 'test' | 'main' | null = null;
 let lastHistoryClientSource: 'wallet' | 'read' = 'read';
 
 type TokenMetadataRecord = {
@@ -209,12 +237,15 @@ export async function getTokenMetadataRecord(tokenAddress: string): Promise<Toke
 }
 
 export async function getReadClient(): Promise<any> {
-  if (cachedClient) return cachedClient;
+  const desiredNetwork = getNetwork();
+  if (cachedClient && cachedNetwork === desiredNetwork) {
+    return cachedClient;
+  }
 
   const KeetaNet = await loadKeeta();
   const seed = KeetaNet.lib.Account.generateRandomSeed({ asString: true });
   const account = KeetaNet.lib.Account.fromSeed(seed, 0);
-  const network = getNetwork();
+  const network = desiredNetwork;
 
   let client: any;
   if (typeof (KeetaNet as any).UserClient?.fromNetwork === 'function') {
@@ -228,6 +259,7 @@ export async function getReadClient(): Promise<any> {
   }
 
   cachedClient = client;
+  cachedNetwork = desiredNetwork;
   console.debug('[sdk-read-client] getReadClient ready');
   return client;
 }

@@ -2,12 +2,15 @@
 
 import { useCallback, useEffect, useState, type CSSProperties } from 'react';
 import Link from 'next/link';
-import { User, Bell, Globe, Clock, Zap } from 'lucide-react';
+import { Bell, Globe, Clock, Zap } from 'lucide-react';
 
 import { AppSidebar } from '@/components/app-sidebar';
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar';
 
 import { useWallet } from '../../contexts/WalletContext';
+import ThemeToggle from '@/app/components/ThemeToggle';
+import { getPreferredNetwork, setPreferredNetwork } from '@/lib/explorer/sdk-read-client';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 export default function SettingsPage() {
   const {
@@ -17,6 +20,13 @@ export default function SettingsPage() {
   } = useWallet();
 
   const [isConnecting, setIsConnecting] = useState(false);
+  const [network, setNetwork] = useState<'test' | 'main'>(() => {
+    try {
+      return getPreferredNetwork();
+    } catch {
+      return 'test';
+    }
+  });
 
   const handleConnectWallet = useCallback(async () => {
     if (isConnecting) {
@@ -99,34 +109,6 @@ export default function SettingsPage() {
         <p className="text-muted">Manage your profile, notifications, and preferences.</p>
       </div>
 
-      {/* Profile Section */}
-      <div className="glass rounded-lg border border-hairline shadow-[0_20px_60px_rgba(6,7,10,0.45)]">
-        <div className="border-b border-hairline p-6">
-          <h2 className="text-xl font-bold text-foreground">Profile</h2>
-        </div>
-
-        <div className="space-y-6 p-6">
-          {/* Nickname & Avatar */}
-          <div className="flex items-center justify-between gap-6">
-            <div className="flex-1">
-              <h3 className="mb-2 text-lg font-semibold text-foreground">Nickname & Avatar</h3>
-              <p className="mb-4 text-sm text-muted">
-                Set up an avatar and nickname, it is suggested not to use your real name or the name of your social account as a nickname.
-              </p>
-              <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-yellow-500">
-                  <User className="h-5 w-5 text-white" />
-                </div>
-                <span className="font-medium text-foreground">User-b9a60</span>
-              </div>
-            </div>
-            <button className="inline-flex min-w-[120px] items-center justify-center gap-2 rounded-md border border-hairline bg-surface px-6 py-2.5 font-medium text-foreground transition-colors hover:bg-surface-strong">
-              Edit
-            </button>
-          </div>
-        </div>
-      </div>
-
       {/* Notifications Section */}
       <div className="glass rounded-lg border border-hairline shadow-[0_20px_60px_rgba(6,7,10,0.45)]">
         <div className="border-b border-hairline p-6">
@@ -188,6 +170,41 @@ export default function SettingsPage() {
         </div>
 
         <div className="space-y-6 p-6">
+          {/* Appearance (Theme) */}
+          <div className="flex items-center justify-between gap-6">
+            <div className="flex-1">
+              <h3 className="mb-2 text-lg font-semibold text-foreground">Appearance</h3>
+              <p className="mb-4 text-sm text-muted">Switch between light and dark modes.</p>
+              <ThemeToggle />
+            </div>
+          </div>
+
+          {/* Network Selection */}
+          <div className="flex items-center justify-between gap-6">
+            <div className="flex-1">
+              <h3 className="mb-2 text-lg font-semibold text-foreground">Network</h3>
+              <p className="mb-4 text-sm text-muted">Choose which Keeta network to interact with.</p>
+              <div className="w-[220px]">
+                <Select
+                  value={network}
+                  onValueChange={(val) => {
+                    const v = (val === 'main' ? 'main' : 'test') as 'test' | 'main';
+                    setNetwork(v);
+                    setPreferredNetwork(v);
+                  }}
+                >
+                  <SelectTrigger className="bg-surface border-hairline text-foreground">
+                    <SelectValue placeholder="Select network" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="test">Testnet</SelectItem>
+                    <SelectItem value="main">Mainnet</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </div>
+
           {/* Language */}
           <div className="flex items-center justify-between gap-6">
             <div className="flex-1">

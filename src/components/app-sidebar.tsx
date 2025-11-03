@@ -8,7 +8,6 @@ import { BookOpen } from "lucide-react"
 import { siX, siDiscord } from "simple-icons"
 
 import SearchBar from "@/app/components/SearchBar"
-import ThemeToggle from "@/app/components/ThemeToggle"
 import { NavDocuments } from "@/components/nav-documents"
 import { NavMain } from "@/components/nav-main"
 import { NavSecondary } from "@/components/nav-secondary"
@@ -185,12 +184,11 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   return (
     <Sidebar collapsible="offcanvas" {...props}>
       <SidebarHeader className="gap-4">
-        <div className="flex items-center justify-between gap-3 rounded-lg bg-[color:var(--background)]/60 px-2 py-2">
+        <div className="flex items-center justify-start gap-3 rounded-lg bg-[color:var(--background)]/60 px-2 py-2">
           <Link href="/dashboard" className="flex items-center gap-2 text-foreground">
             <Wallet className="h-5 w-5" />
             <span className="text-base font-semibold">Keythings Wallet</span>
           </Link>
-          <ThemeToggle />
         </div>
 
         <div className="w-full">
