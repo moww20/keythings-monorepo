@@ -104,6 +104,20 @@ function shouldSkipTokenLookup(tokenId?: string | null, ticker?: string | null):
   return false;
 }
 
+function coerceAmountString(value: unknown): string | undefined {
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : undefined;
+  }
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return String(value);
+  }
+  if (typeof value === "bigint") {
+    return value.toString();
+  }
+  return undefined;
+}
+
 function normalizeMetadataCandidate(value: unknown): CachedTokenMeta | undefined {
   if (!value) return undefined;
 
@@ -283,7 +297,9 @@ export function normalizeHistoryRecords(
 
     const normalizedType = typeof op.type === "string" ? op.type.toUpperCase() : "UNKNOWN";
 
-    const fallbackAmount = sx(op.amount ?? op.rawAmount) ?? sx(record.amount ?? record.rawAmount);
+    const fallbackAmount =
+      coerceAmountString(op.amount ?? op.rawAmount) ??
+      coerceAmountString(record.amount ?? record.rawAmount);
     const fallbackToken = sx(op.token ?? op.tokenAddress) ?? sx(record.token ?? record.tokenAddress);
     const fallbackFrom = sx(op.from) ?? sx(op.account) ?? sx(record.from ?? record.account);
     const fallbackTo = sx(op.to ?? op.toAccount) ?? sx(record.to);
@@ -331,8 +347,8 @@ export function normalizeHistoryRecords(
       voteStapleHash: sx(record?.voteStaple?.hash) ?? blockHash,
       block,
       operation: { ...op },
-      amount: fallbackAmount ?? sx(op.amount),
-      rawAmount: fallbackAmount ?? sx(op.rawAmount ?? op.amount),
+      amount: fallbackAmount ?? coerceAmountString(op.amount),
+      rawAmount: fallbackAmount ?? coerceAmountString(op.rawAmount ?? op.amount),
       formattedAmount: fallbackFormatted ?? sx(op.formattedAmount),
       token: fallbackToken ?? sx(op.token),
       tokenAddress: fallbackToken ?? sx(op.tokenAddress),
@@ -444,7 +460,8 @@ export function normalizeHistoryRecords(
       }
     }
 
-    const rawAmountValue = sx((baseOperation as any).rawAmount ?? (baseOperation as any).amount) ?? "";
+    const rawAmountValue =
+      coerceAmountString((baseOperation as any).rawAmount ?? (baseOperation as any).amount) ?? "";
 
     const primaryTokenId = fallbackToken ?? undefined;
     const tokenLookupId =
