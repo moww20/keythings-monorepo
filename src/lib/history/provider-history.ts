@@ -4,6 +4,7 @@ import { coerceString as sx, resolveDate } from "@/lib/explorer/mappers";
 import { parseExplorerOperation } from "@/lib/explorer/client";
 import { parseTokenMetadata, formatTokenAmount } from "@/app/explorer/utils/token-metadata";
 import type { ExplorerOperation } from "@/lib/explorer/client";
+import type { WalletHistoryRecord } from "@/app/lib/wallet-history";
 import type { KeetaProvider } from "@/types/keeta";
 
 export const BASE_TOKEN_TICKER = "KTA";
@@ -55,13 +56,38 @@ export async function fetchProviderHistory(
     requestPayload.cursor = options.cursor;
   }
 
+  try { console.debug('[provider-history] request', { payload: requestPayload, hasCursor: Boolean(requestPayload.cursor) }); } catch {}
   const response = await provider.history(requestPayload);
+  try {
+    const type = response === null ? 'null' : typeof response;
+    const keys = response && typeof response === 'object' ? Object.keys(response as Record<string, unknown>).slice(0, 8) : null;
+    console.debug('[provider-history] raw response', { type, keys });
+  } catch {}
   const parsed = ProviderHistoryResponseSchema.safeParse(response);
   if (!parsed.success) {
+    try { console.warn('[provider-history] schema validation failed', parsed.error); } catch {}
+    // Fallback: some providers may return a raw array of records or nest under common keys
+    try {
+      if (Array.isArray(response)) {
+        console.debug('[provider-history] accepting array response as records', { length: response.length });
+        return { records: response, cursor: null, hasMore: false };
+      }
+      if (response && typeof response === 'object') {
+        const containerKeys = ['records', 'history', 'voteStaples', 'items', 'data'];
+        for (const key of containerKeys) {
+          const candidate = (response as Record<string, unknown>)[key];
+          if (Array.isArray(candidate)) {
+            console.debug('[provider-history] accepting container array under key', { key, length: candidate.length });
+            return { records: candidate, cursor: null, hasMore: false };
+          }
+        }
+      }
+    } catch {}
     return { records: [], cursor: null, hasMore: false };
   }
 
   const { records, cursor, hasMore } = parsed.data;
+  try { console.debug('[provider-history] parsed', { recordsCount: Array.isArray(records) ? records.length : 0, hasMore: Boolean(hasMore), cursor: cursor ?? null }); } catch {}
   return {
     records,
     cursor: cursor ?? null,
@@ -440,6 +466,54 @@ export function normalizeHistoryRecords(
       }
     } else {
       processCandidate(record, record);
+    }
+
+    if (Array.isArray((record as any)?.blocks)) {
+      for (const block of (record as any).blocks as Array<Record<string, unknown>>) {
+        if (!block || typeof block !== "object") {
+          continue;
+        }
+
+        const blockHash = sx((block as any)?.hash) ?? sx((block as any)?.id) ?? sx(record?.block);
+        const blockRecord = {
+          ...record,
+          block: blockHash ?? record?.block,
+          createdAt: (block as any)?.createdAt ?? record?.createdAt,
+          timestamp: (block as any)?.timestamp ?? record?.timestamp,
+          operations: Array.isArray((block as any)?.operations) ? (block as any)?.operations : [],
+        } satisfies WalletHistoryRecord;
+
+        if (Array.isArray(blockRecord.operations) && blockRecord.operations.length > 0) {
+          for (const operation of blockRecord.operations) {
+            processCandidate(operation, blockRecord);
+          }
+        }
+      }
+    }
+
+    if (record.voteStaple && typeof record.voteStaple === "object") {
+      const staple = record.voteStaple as {
+        operations?: unknown[];
+        blocks?: Array<{
+          operations?: unknown[];
+        }>;
+      };
+
+      if (Array.isArray(staple.operations)) {
+        for (const operation of staple.operations) {
+          processCandidate(operation, record);
+        }
+      }
+
+      if (Array.isArray(staple.blocks)) {
+        for (const block of staple.blocks) {
+          if (Array.isArray(block.operations)) {
+            for (const operation of block.operations) {
+              processCandidate(operation, record);
+            }
+          }
+        }
+      }
     }
   }
 

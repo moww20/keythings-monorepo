@@ -106,6 +106,37 @@ export default function HistoryPage(): JSX.Element {
     }
   }, [capabilityProvider, resetHistoryCapability]);
 
+  const canCallHistory = useMemo(() => {
+    if (typeof window === "undefined") return false;
+    return Boolean((window as any).keeta && typeof (window as any).keeta.history === "function");
+  }, [isClient]);
+
+  useEffect(() => {
+    try {
+      console.debug("[HistoryPage] gating", {
+        isClient,
+        walletConnected: wallet.connected,
+        walletLocked: wallet.isLocked,
+        accountKey,
+        canCallHistory,
+        hasHistoryCapability,
+        capabilityLoading,
+        capabilityError,
+        hasProviderMethods: Boolean(capabilityProvider),
+      });
+    } catch {}
+  }, [isClient, wallet.connected, wallet.isLocked, accountKey, canCallHistory, hasHistoryCapability, capabilityLoading, capabilityError, capabilityProvider]);
+
+  const enableHistoryQuery =
+    isClient &&
+    accountKey.length > 0 &&
+    canCallHistory &&
+    (
+      !capabilityProvider
+        ? true
+        : (hasHistoryCapability && !capabilityLoading)
+    );
+
   const historyQuery = useInfiniteQuery<
     ProviderHistoryPage,
     Error,
@@ -115,13 +146,10 @@ export default function HistoryPage(): JSX.Element {
   >({
     queryKey: ["history", accountKey],
     initialPageParam: null as string | null,
-    enabled:
-      isClient &&
-      accountKey.length > 0 &&
-      hasHistoryCapability &&
-      !capabilityLoading,
+    enabled: enableHistoryQuery,
     queryFn: async ({ pageParam }) => {
       const provider = typeof window !== "undefined" ? window.keeta : undefined;
+      try { console.debug("[HistoryPage] queryFn", { pageParam, hasProvider: Boolean(provider), enableHistoryQuery }); } catch {}
       return fetchProviderHistory(provider, {
         depth: HISTORY_DEPTH,
         cursor: typeof pageParam === "string" && pageParam.length > 0 ? pageParam : undefined,
@@ -150,6 +178,41 @@ export default function HistoryPage(): JSX.Element {
     () => normalizeHistoryRecords(allRecords, accountKey, tokenMetadata),
     [allRecords, accountKey, tokenMetadata],
   );
+
+  useEffect(() => {
+    try {
+      const pagesCount = Array.isArray(pages) ? pages.length : 0;
+      const sampleRecords = pagesCount > 0 && Array.isArray((pages[0] as any)?.records)
+        ? (pages[0] as any).records
+        : [];
+      const sampleKeys = sampleRecords.length > 0 && sampleRecords[0]
+        ? Object.keys(sampleRecords[0]).slice(0, 8)
+        : [];
+      const sampleRecordPreview = sampleRecords.length > 0 && sampleRecords[0]
+        ? Object.fromEntries(Object.entries(sampleRecords[0]).slice(0, 6))
+        : null;
+      console.debug("[HistoryPage] data pages", {
+        pagesCount,
+        firstPageRecords: sampleRecords.length,
+        sampleKeys,
+        sampleRecordPreview,
+      });
+      if (typeof window !== "undefined") {
+        (window as any).__HISTORY_DEBUG_PAGES__ = pages;
+        (window as any).__HISTORY_DEBUG_NORMALIZED__ = normalized;
+      }
+    } catch {}
+  }, [pages, normalized]);
+
+  useEffect(() => {
+    try {
+      console.debug("[HistoryPage] normalized", {
+        records: allRecords.length,
+        operations: normalized.operations.length,
+        tokensToFetch: normalized.tokensToFetch.length,
+      });
+    } catch {}
+  }, [allRecords.length, normalized.operations.length, normalized.tokensToFetch.length]);
 
   useEffect(() => {
     if (!normalized.tokensToFetch.length) {
@@ -228,6 +291,12 @@ export default function HistoryPage(): JSX.Element {
     [normalized.operations],
   );
 
+  useEffect(() => {
+    try {
+      console.debug("[HistoryPage] groupedOperations", { grouped: groupedOperations.length });
+    } catch {}
+  }, [groupedOperations.length]);
+
   const awaitingWallet =
     isClient && (!wallet.connected || wallet.isLocked || accountKey.length === 0);
   const missingCapability =
@@ -235,6 +304,7 @@ export default function HistoryPage(): JSX.Element {
     wallet.connected &&
     !wallet.isLocked &&
     accountKey.length > 0 &&
+    Boolean(capabilityProvider) &&
     !hasHistoryCapability &&
     !capabilityLoading;
 
