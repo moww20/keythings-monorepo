@@ -100,9 +100,10 @@ export function formatTokenAmount(
   amount: bigint,
   decimals: number,
   fieldType: 'decimalPlaces' | 'decimals',
-  ticker: string
+  ticker: string,
 ): string {
-  const divisor = BigInt(10 ** decimals);
+  const safeDecimals = Number.isFinite(decimals) ? Math.max(0, Math.trunc(decimals)) : 0;
+  const divisor = BigInt(10) ** BigInt(safeDecimals);
   const wholePart = amount / divisor;
   const fractionalPart = amount % divisor;
   
@@ -110,7 +111,7 @@ export function formatTokenAmount(
     return `${wholePart.toString()} ${ticker}`;
   }
   
-  const fractionalStr = fractionalPart.toString().padStart(decimals, '0');
+  const fractionalStr = fractionalPart.toString().padStart(safeDecimals, '0');
   const trimmedFractional = fractionalStr.replace(/0+$/, '');
   
   if (trimmedFractional === '') {
