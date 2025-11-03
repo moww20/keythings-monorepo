@@ -313,7 +313,7 @@ export function normalizeHistoryRecords(
         : undefined;
 
     const isPlaceholderDate = normalizedBlockDate === undefined;
-    const fallbackDate = isPlaceholderDate ? new Date().toISOString() : normalizedBlockDate;
+    const fallbackDate = normalizedBlockDate ?? null;
 
     const block = {
       $hash: blockHash,

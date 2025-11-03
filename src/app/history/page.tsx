@@ -15,7 +15,6 @@ import { Button } from "@/components/ui/button";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import {
   fetchProviderHistory,
-  groupOperationsByBlock,
   normalizeHistoryRecords,
   type CachedTokenMeta,
   type ProviderHistoryPage,
@@ -43,6 +42,7 @@ export default function HistoryPage(): JSX.Element {
   const [tokenMetadata, setTokenMetadata] = useState<Record<string, CachedTokenMeta>>({});
   const [blockTimestamps, setBlockTimestamps] = useState<Map<string, string>>(() => new Map());
   const fetchingTokenMeta = useRef<Set<string>>(new Set());
+  const fetchingBlocks = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     setIsClient(true);
@@ -108,7 +108,12 @@ export default function HistoryPage(): JSX.Element {
   }, [capabilityProvider, resetHistoryCapability]);
 
   const canCallHistory = useMemo(() => {
-    if (typeof window === "undefined") return false;
+    if (!isClient) {
+      return false;
+    }
+    if (typeof window === "undefined") {
+      return false;
+    }
     return Boolean((window as any).keeta && typeof (window as any).keeta.history === "function");
   }, [isClient]);
 
@@ -301,6 +306,8 @@ export default function HistoryPage(): JSX.Element {
 
       for (const hash of pending) {
         if (!hash) continue;
+        if (fetchingBlocks.current.has(hash)) continue;
+        fetchingBlocks.current.add(hash);
         try {
           const blockData = await getBlock(hash);
           try {
@@ -421,13 +428,40 @@ export default function HistoryPage(): JSX.Element {
     });
   }, [normalized.operations, blockTimestamps]);
 
-  const groupedOperations = useMemo(() => groupOperationsByBlock(hydratedOperations), [hydratedOperations]);
-
   useEffect(() => {
-    try {
-      console.debug("[HistoryPage] groupedOperations", { grouped: groupedOperations.length });
-    } catch {}
-  }, [groupedOperations.length]);
+    if (!blockTimestamps.size) {
+      return;
+    }
+
+    const remainingPlaceholders = new Set<string>();
+    for (const operation of normalized.operations) {
+      const block = operation.block;
+      if (!block) continue;
+      const blockHash = block.$hash;
+      if (!blockHash) continue;
+      const isPlaceholder = (block as any)?.placeholderDate === true;
+      const isValidDate = (() => {
+        if (!block.date) return false;
+        const parsed = new Date(block.date as string);
+        return !Number.isNaN(parsed.getTime());
+      })();
+      if (isPlaceholder || !isValidDate) {
+        remainingPlaceholders.add(blockHash);
+      }
+    }
+
+    if (remainingPlaceholders.size === 0) {
+      fetchingBlocks.current.clear();
+      return;
+    }
+
+    const hydratedHashes = Array.from(blockTimestamps.keys());
+    for (const hash of hydratedHashes) {
+      if (!remainingPlaceholders.has(hash)) {
+        fetchingBlocks.current.delete(hash);
+      }
+    }
+  }, [blockTimestamps, normalized.operations]);
 
   const awaitingWallet =
     isClient && (!wallet.connected || wallet.isLocked || accountKey.length === 0);
@@ -445,7 +479,7 @@ export default function HistoryPage(): JSX.Element {
   }, [requestHistoryCapability]);
 
   const tableLoading =
-    !awaitingWallet && hasHistoryCapability && (isLoading || capabilityLoading) && groupedOperations.length === 0;
+    !awaitingWallet && hasHistoryCapability && (isLoading || capabilityLoading) && hydratedOperations.length === 0;
 
   const statusContent = (() => {
     if (awaitingWallet) {
@@ -502,7 +536,7 @@ export default function HistoryPage(): JSX.Element {
                   <div className="flex flex-1 flex-col gap-4 overflow-hidden">
                     <div className="shrink-0">
                       <ExplorerOperationsTable
-                        operations={groupedOperations}
+                        operations={hydratedOperations}
                         participantsMode="smart"
                         loading={tableLoading}
                         emptyLabel="No history found."
