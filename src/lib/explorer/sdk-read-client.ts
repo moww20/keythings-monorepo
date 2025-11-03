@@ -58,6 +58,7 @@ let lastHistoryClientSource: 'wallet' | 'read' = 'read';
 type TokenMetadataRecord = {
   metadata?: string | null;
   decimals?: number;
+  fieldType?: 'decimalPlaces' | 'decimals';
   name?: string;
   ticker?: string;
 };
@@ -65,11 +66,70 @@ type TokenMetadataRecord = {
 const tokenMetadataCache = new Map<string, TokenMetadataRecord | null>();
 const tokenMetadataPromises = new Map<string, Promise<TokenMetadataRecord | null>>();
 
-function getCachedTokenMetadata(token: string): TokenMetadataRecord | null | undefined {
-  if (!tokenMetadataCache.has(token)) {
-    return undefined;
+// LocalStorage cache (client-side only)
+const LS_KEY = 'keeta.tokenMetadata';
+const LsEntrySchema = z
+  .object({
+    metadata: z.string().nullable().optional(),
+    decimals: z.number().optional(),
+    fieldType: z.enum(['decimalPlaces', 'decimals']).optional(),
+    name: z.string().optional(),
+    ticker: z.string().optional(),
+    updatedAt: z.number().optional(),
+  })
+  .partial();
+const LsStoreSchema = z.record(z.string(), LsEntrySchema);
+
+function readTokenMetadataFromLS(token: string): TokenMetadataRecord | null {
+  try {
+    if (typeof window === 'undefined' || !('localStorage' in window)) return null;
+    const raw = window.localStorage.getItem(LS_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    const res = LsStoreSchema.safeParse(parsed);
+    if (!res.success) return null;
+    const entry = (res.data as Record<string, z.infer<typeof LsEntrySchema>>)[token];
+    if (!entry) return null;
+    return {
+      metadata: typeof entry.metadata === 'string' || entry.metadata === null ? entry.metadata : undefined,
+      decimals: typeof entry.decimals === 'number' ? entry.decimals : undefined,
+      fieldType: entry.fieldType,
+      name: entry.name,
+      ticker: entry.ticker,
+    };
+  } catch {
+    return null;
   }
-  return tokenMetadataCache.get(token) ?? null;
+}
+
+function writeTokenMetadataToLS(token: string, record: TokenMetadataRecord): void {
+  try {
+    if (typeof window === 'undefined' || !('localStorage' in window)) return;
+    const raw = window.localStorage.getItem(LS_KEY);
+    let store: Record<string, any> = {};
+    if (raw) {
+      try {
+        const parsed = JSON.parse(raw);
+        const res = LsStoreSchema.safeParse(parsed);
+        if (res.success) store = res.data as Record<string, any>;
+      } catch {}
+    }
+    store[token] = { ...store[token], ...record, updatedAt: Date.now() };
+    window.localStorage.setItem(LS_KEY, JSON.stringify(store));
+  } catch {}
+}
+
+function getCachedTokenMetadata(token: string): TokenMetadataRecord | null | undefined {
+  if (tokenMetadataCache.has(token)) {
+    return tokenMetadataCache.get(token) ?? null;
+  }
+  // Fallback to LS
+  const fromLs = readTokenMetadataFromLS(token);
+  if (fromLs) {
+    tokenMetadataCache.set(token, fromLs);
+    return fromLs;
+  }
+  return undefined;
 }
 
 async function fetchTokenMetadataWithCache(
@@ -93,24 +153,33 @@ async function fetchTokenMetadataWithCache(
       const info = tokenState?.info ?? {};
       const metadata = typeof info?.metadata === 'string' ? info.metadata : undefined;
       let decimals: number | undefined;
+      let fieldType: 'decimalPlaces' | 'decimals' | undefined;
       if (metadata) {
         try {
           const decInfo = extractDecimalsAndFieldType(metadata);
           decimals = decInfo.decimals;
+          fieldType = decInfo.fieldType;
         } catch {}
       }
+      const desc = typeof (info as any)?.description === 'string' ? (info as any).description : undefined;
       const nm = typeof (info as any)?.name === 'string' ? (info as any).name : undefined;
       const tkSym = typeof (info as any)?.symbol === 'string' ? (info as any).symbol : undefined;
       const tkTicker = typeof (info as any)?.ticker === 'string' ? (info as any).ticker : undefined;
       const tkCode = typeof (info as any)?.currencyCode === 'string' ? (info as any).currencyCode : undefined;
       const derivedTicker = metadata ? getTokenTicker(metadata) : undefined;
-      const ticker = (tkSym || tkTicker || tkCode || derivedTicker)?.toString().trim().toUpperCase();
+      const ticker = (tkSym || tkTicker || tkCode || derivedTicker || nm)
+        ?.toString()
+        .trim()
+        .toUpperCase();
       const record: TokenMetadataRecord = {
         metadata: metadata ?? null,
         decimals,
-        name: nm,
+        fieldType,
+        name: (desc && desc.trim().length > 0) ? desc : nm,
         ticker: ticker && ticker.length > 0 ? ticker : undefined,
       };
+      // Persist to localStorage cache
+      try { writeTokenMetadataToLS(tokenAddress, record); } catch {}
       try {
         console.debug('[sdk-read-client] token metadata fetched', {
           token: tokenAddress,
@@ -131,6 +200,12 @@ async function fetchTokenMetadataWithCache(
   const resolved = await promise;
   tokenMetadataCache.set(tokenAddress, resolved);
   return resolved;
+}
+
+export async function getTokenMetadataRecord(tokenAddress: string): Promise<TokenMetadataRecord | null> {
+  const KeetaNet = await loadKeeta();
+  const client = await getReadClient();
+  return fetchTokenMetadataWithCache(client, KeetaNet, tokenAddress);
 }
 
 export async function getReadClient(): Promise<any> {

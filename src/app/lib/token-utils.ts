@@ -5,10 +5,88 @@
 
 import type { RFQOrder } from '@/app/types/rfq';
 import type { OrderSide } from '@/app/types/rfq';
+import { z } from 'zod';
 
 export type TokenFieldType = "decimalPlaces" | "decimals";
 
 const TOKEN_FALLBACK_DECIMALS = 6;
+const TOKEN_NAME_FALLBACK_PREFIX = 'Token';
+const TOKEN_TICKER_FALLBACK_LENGTH = 4;
+
+export interface TokenMetadataLookupResult {
+  decimals: number;
+  fieldType: TokenFieldType;
+  name?: string | null;
+  symbol?: string | null;
+  ticker?: string | null;
+  metadata?: unknown;
+}
+
+export type TokenMetadataFetcher = (tokenAddress: string) => Promise<TokenMetadataLookupResult | null>;
+
+export interface MetadataProcessingOptions {
+  tokenAddress: string;
+  baseTokenAddress?: string | null;
+  balanceEntryMetadata?: unknown;
+  fetchMetadata?: TokenMetadataFetcher;
+  infoName?: string | null;
+  infoDescription?: string | null;
+  infoSymbol?: string | null;
+  infoNameFallback?: string | null;
+  infoDescriptionFallback?: string | null;
+}
+
+export interface ProcessedMetadataResult {
+  decimals: number;
+  fieldType: TokenFieldType;
+  displayDecimals: number | null;
+  name: string;
+  ticker: string;
+  metadata: unknown;
+  isBaseToken: boolean;
+  isMalformed: boolean;
+}
+
+type MetadataDebugSummary = {
+  type: string;
+  length?: number;
+  keys?: string[];
+  hasNestedMetadata?: boolean;
+  preview?: string;
+};
+
+function summariseMetadataForDebug(metadata: unknown): MetadataDebugSummary {
+  if (metadata == null) {
+    return { type: typeof metadata };
+  }
+
+  if (typeof metadata === 'string') {
+    const normalized = metadata.replace(/\s+/g, '').slice(0, 160);
+    return {
+      type: 'string',
+      length: metadata.length,
+      preview: metadata.length > 160 ? `${normalized}…` : normalized,
+      hasNestedMetadata: false,
+    };
+  }
+
+  if (typeof metadata === 'object') {
+    const keys = Object.keys(metadata as Record<string, unknown>).slice(0, 12);
+    return {
+      type: Array.isArray(metadata) ? 'array' : 'object',
+      keys,
+      hasNestedMetadata: typeof (metadata as Record<string, unknown>).metadata !== 'undefined',
+      preview: JSON.stringify((metadata as Record<string, unknown>), (_key, value) => {
+        if (typeof value === 'string' && value.length > 120) {
+          return `${value.slice(0, 120)}…`;
+        }
+        return value;
+      }, 2)?.slice(0, 200),
+    };
+  }
+
+  return { type: typeof metadata };
+}
 
 function normalizeSymbol(symbol: string | undefined | null): string {
   if (!symbol) {
@@ -386,26 +464,126 @@ export function getTokenChipPresentation(token: ProcessedToken): TokenChipPresen
 /**
  * Parse base64 encoded metadata
  */
-function parseMetadata(metadata?: string | null): TokenMetadata | null {
+const TokenMetadataSchema = z
+  .object({
+    decimalPlaces: z.number().optional(),
+    decimals: z.number().optional(),
+    displayName: z.string().optional(),
+    name: z.string().optional(),
+    symbol: z.string().optional(),
+    ticker: z.string().optional(),
+    metadata: z.unknown().optional(),
+    info: z
+      .object({
+        name: z.string().optional(),
+        description: z.string().optional(),
+        symbol: z.string().optional(),
+        metadata: z.unknown().optional(),
+      })
+      .optional(),
+    kis: z
+      .object({
+        version: z.string().optional(),
+        icon: z
+          .object({
+            type: z.string().optional(),
+            letter: z.string().optional(),
+            bgColor: z.string().optional(),
+            textColor: z.string().optional(),
+            svg: z.string().optional(),
+            imageData: z.string().optional(),
+            format: z.string().optional(),
+            mimeType: z.string().optional(),
+          })
+          .optional(),
+      })
+      .optional(),
+    infoName: z.string().optional(),
+    infoDescription: z.string().optional(),
+  })
+  .strip()
+  .partial();
+
+type NormalizedTokenMetadata = z.infer<typeof TokenMetadataSchema>;
+
+function safeParseMetadata(metadata: unknown): NormalizedTokenMetadata | null {
   if (!metadata) return null;
-  // Try base64 -> JSON first
-  try {
-    const decoded = atob(metadata);
-    const parsed = JSON.parse(decoded);
-    return parsed && typeof parsed === 'object' ? (parsed as TokenMetadata) : null;
-  } catch {}
-  // Fallback: try plain JSON directly
-  try {
-    const parsed = JSON.parse(metadata);
-    return parsed && typeof parsed === 'object' ? (parsed as TokenMetadata) : null;
-  } catch {}
+
+  const toParse = (() => {
+    if (typeof metadata === 'string') {
+      try {
+        const decoded = atob(metadata);
+        return JSON.parse(decoded);
+      } catch {}
+      try {
+        return JSON.parse(metadata);
+      } catch {}
+      return null;
+    }
+    if (typeof metadata === 'object' && !Array.isArray(metadata)) {
+      return metadata;
+    }
+    return null;
+  })();
+
+  if (!toParse || typeof toParse !== 'object' || Array.isArray(toParse)) {
+    return null;
+  }
+
+  const parsed = TokenMetadataSchema.safeParse(toParse);
+  if (!parsed.success) {
+    try {
+      console.warn('[token-utils] Invalid metadata shape', parsed.error.issues);
+    } catch {}
+    return null;
+  }
+  return parsed.data;
+}
+
+function parseMetadata(metadata?: unknown): TokenMetadata | null {
+  if (!metadata) return null;
+  const parsed = safeParseMetadata(metadata);
+  if (!parsed) return null;
+
+  if (typeof parsed.metadata !== 'undefined') {
+    const nested = parseMetadata(parsed.metadata);
+    if (nested) {
+      return {
+        ...nested,
+        ...parsed,
+      } as TokenMetadata;
+    }
+  }
+
+  return parsed as TokenMetadata;
+}
+
+function coerceNumber(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string') {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function coerceStringValue(value: unknown): string | null {
+  if (typeof value === 'string') return value;
+  if (
+    value !== null &&
+    typeof value === 'object' &&
+    typeof (value as { toString?: () => string }).toString === 'function'
+  ) {
+    const str = (value as { toString: () => string }).toString();
+    return typeof str === 'string' ? str : null;
+  }
   return null;
 }
 
 /**
  * Extract decimals and field type from token metadata
  */
-export function extractDecimalsAndFieldType(metadata?: string | null): {
+export function extractDecimalsAndFieldType(metadata?: unknown): {
   decimals: number;
   fieldType: TokenFieldType;
   displayDecimals: number | null;
@@ -415,14 +593,8 @@ export function extractDecimalsAndFieldType(metadata?: string | null): {
     return { decimals: 0, fieldType: "decimals", displayDecimals: null };
   }
 
-  const decimalsValue =
-    typeof metadataObj.decimals === "number" && Number.isFinite(metadataObj.decimals)
-      ? Math.max(0, Math.trunc(metadataObj.decimals))
-      : null;
-  const decimalPlacesValue =
-    typeof metadataObj.decimalPlaces === "number" && Number.isFinite(metadataObj.decimalPlaces)
-      ? Math.max(0, Math.trunc(metadataObj.decimalPlaces))
-      : null;
+  const decimalsValue = coerceNumber(metadataObj.decimals);
+  const decimalPlacesValue = coerceNumber(metadataObj.decimalPlaces);
 
   const decimals = decimalsValue ?? decimalPlacesValue ?? 0;
   const fieldType: TokenFieldType = decimalsValue !== null ? "decimals" : "decimalPlaces";
@@ -517,13 +689,21 @@ export function formatAmountWithCommas(amount: string | number | bigint): string
 /**
  * Get token display name from metadata
  */
-export function getTokenDisplayName(metadata?: string | null): string {
+export function getTokenDisplayName(metadata?: unknown): string {
   const metadataObj = parseMetadata(metadata);
   if (!metadataObj) return "";
 
-  if (typeof metadataObj.displayName === "string") return metadataObj.displayName;
-  if (typeof metadataObj.name === "string") return metadataObj.name;
-  if (typeof metadataObj.symbol === "string") return metadataObj.symbol;
+  const displayName = coerceStringValue(metadataObj.displayName);
+  if (displayName) return displayName;
+
+  const name = coerceStringValue(metadataObj.name);
+  if (name) return name;
+
+  const description = coerceStringValue((metadataObj as any)?.infoDescription) || coerceStringValue((metadataObj as any)?.info?.description);
+  if (description) return description;
+
+  const symbol = coerceStringValue(metadataObj.symbol);
+  if (symbol) return symbol;
 
   return "";
 }
@@ -531,13 +711,18 @@ export function getTokenDisplayName(metadata?: string | null): string {
 /**
  * Get token ticker/symbol from metadata
  */
-export function getTokenTicker(metadata?: string | null): string {
+export function getTokenTicker(metadata?: unknown): string {
   const metadataObj = parseMetadata(metadata);
   if (!metadataObj) return "";
 
-  if (typeof metadataObj.symbol === "string") return metadataObj.symbol;
-  if (typeof metadataObj.ticker === "string") return metadataObj.ticker;
-  if (typeof metadataObj.name === "string") return metadataObj.name;
+  const symbol = coerceStringValue(metadataObj.symbol);
+  if (symbol) return symbol;
+
+  const ticker = coerceStringValue(metadataObj.ticker);
+  if (ticker) return ticker;
+
+  const infoName = coerceStringValue((metadataObj as any)?.infoName) || coerceStringValue((metadataObj as any)?.info?.name) || coerceStringValue(metadataObj.name);
+  if (infoName) return infoName;
 
   return "";
 }
@@ -545,7 +730,7 @@ export function getTokenTicker(metadata?: string | null): string {
 /**
  * Get token icon from metadata (Keeta Token Icon Standard - KIS)
  */
-export function getTokenIconFromMetadata(metadata?: string | null): TokenIcon | null {
+export function getTokenIconFromMetadata(metadata?: unknown): TokenIcon | null {
   const metadataObj = parseMetadata(metadata);
   if (!metadataObj) return null;
 
@@ -647,22 +832,145 @@ export function createFallbackTokenIcon(symbol: string): TokenIcon {
 /**
  * Process token metadata for display
  */
+async function resolveTokenMetadata(options: MetadataProcessingOptions): Promise<ProcessedMetadataResult> {
+  const {
+    tokenAddress,
+    baseTokenAddress,
+    balanceEntryMetadata,
+    fetchMetadata,
+    infoDescription,
+    infoName,
+    infoSymbol,
+    infoDescriptionFallback,
+    infoNameFallback,
+  } = options;
+
+  const isBaseToken = Boolean(baseTokenAddress && tokenAddress === baseTokenAddress);
+
+  const metadataCandidates: unknown[] = [];
+  if (typeof balanceEntryMetadata !== 'undefined') {
+    metadataCandidates.push(balanceEntryMetadata);
+  }
+
+  let fetchedMetadata: TokenMetadataLookupResult | null = null;
+  if (fetchMetadata) {
+    try {
+      fetchedMetadata = await fetchMetadata(tokenAddress);
+      if (fetchedMetadata?.metadata) {
+        metadataCandidates.push(fetchedMetadata.metadata);
+      }
+    } catch (error) {
+      try {
+        console.warn('[resolveTokenMetadata] fetchMetadata failed', { tokenAddress, error });
+      } catch {}
+      fetchedMetadata = null;
+    }
+  }
+
+  const parsedFromCandidates = metadataCandidates
+    .map((candidate) => ({ raw: candidate, parsed: parseMetadata(candidate) }))
+    .filter((entry) => entry.parsed !== null);
+
+  const firstParsed = parsedFromCandidates[0]?.parsed ?? null;
+
+  const decimalsInfo = extractDecimalsAndFieldType(firstParsed ?? fetchedMetadata?.metadata ?? balanceEntryMetadata ?? null);
+
+  const primaryMetadata = firstParsed ?? fetchedMetadata?.metadata ?? balanceEntryMetadata ?? null;
+
+  const nameCandidates: Array<string | null | undefined> = [
+    getTokenDisplayName(primaryMetadata) || null,
+    fetchedMetadata?.name ?? null,
+    infoDescription ?? null,
+    infoName ?? null,
+    infoDescriptionFallback ?? null,
+    infoNameFallback ?? null,
+  ];
+
+  const tickerCandidates: Array<string | null | undefined> = [
+    getTokenTicker(primaryMetadata) || null,
+    fetchedMetadata?.symbol ?? fetchedMetadata?.ticker ?? null,
+    infoSymbol ?? null,
+  ];
+
+  const resolvedName = nameCandidates.find((value) => typeof value === 'string' && value.trim().length > 0) ?? null;
+  const resolvedTicker = tickerCandidates.find((value) => typeof value === 'string' && value.trim().length > 0) ?? null;
+
+  const fallbackName = `${TOKEN_NAME_FALLBACK_PREFIX} ${tokenAddress.slice(-8)}`;
+  const fallbackTicker = tokenAddress.slice(-TOKEN_TICKER_FALLBACK_LENGTH).toUpperCase();
+
+  const name = resolvedName ?? (isBaseToken ? 'Keeta Token' : fallbackName);
+  const ticker = resolvedTicker ?? (isBaseToken ? 'KTA' : fallbackTicker);
+
+  const isMalformed = !resolvedName && !resolvedTicker && !isBaseToken;
+
+  return {
+    decimals: decimalsInfo.decimals,
+    fieldType: decimalsInfo.fieldType,
+    displayDecimals: decimalsInfo.displayDecimals,
+    name,
+    ticker,
+    metadata: primaryMetadata,
+    isBaseToken,
+    isMalformed,
+  };
+}
+
 export async function processTokenForDisplay(
   tokenAddress: string,
   balance: string | number | bigint,
-  metadata: string | null | undefined,
+  metadata: unknown,
   baseTokenAddress: string | null | undefined,
   price?: number,
+  options?: {
+    infoName?: string | null;
+    infoDescription?: string | null;
+    infoSymbol?: string | null;
+    fetchMetadata?: TokenMetadataFetcher;
+  },
 ): Promise<ProcessedToken> {
-  const isBaseToken = Boolean(baseTokenAddress && tokenAddress === baseTokenAddress);
+  const metadataSummary = summariseMetadataForDebug(metadata);
+  const parsedMetadata = metadata ? parseMetadata(metadata) : null;
+  const metadataName = metadata ? getTokenDisplayName(metadata) : '';
+  const metadataTicker = metadata ? getTokenTicker(metadata) : '';
 
-  const metadataName = metadata ? getTokenDisplayName(metadata) : "";
-  const metadataTicker = metadata ? getTokenTicker(metadata) : "";
-  const decimalInfo = extractDecimalsAndFieldType(metadata);
+  try {
+    console.debug('[TOKENS] processTokenForDisplay:input', {
+      tokenAddress,
+      hasMetadata: Boolean(metadata),
+      metadataName,
+      metadataTicker,
+      metadataSummary,
+      parsedMetadata: parsedMetadata
+        ? {
+            name: parsedMetadata.name ?? undefined,
+            symbol: parsedMetadata.symbol ?? undefined,
+            ticker: parsedMetadata.ticker ?? undefined,
+            hasKis: typeof parsedMetadata.kis === 'object' && parsedMetadata.kis !== null,
+            decimalPlaces: parsedMetadata.decimalPlaces ?? undefined,
+            decimals: parsedMetadata.decimals ?? undefined,
+          }
+        : null,
+      decimalsFromMetadata: parsedMetadata?.decimals ?? null,
+      fieldTypeFromMetadata: parsedMetadata?.decimalPlaces ? 'decimalPlaces' : parsedMetadata?.decimals ? 'decimals' : null,
+      displayDecimalsFromMetadata: parsedMetadata?.decimalPlaces ?? parsedMetadata?.decimals ?? null,
+      isBaseToken: Boolean(baseTokenAddress && tokenAddress === baseTokenAddress),
+      rawBalance: typeof balance === 'bigint' ? balance.toString() : String(balance),
+    });
+  } catch {}
 
-  let decimals = decimalInfo.decimals;
-  let fieldType: TokenFieldType = decimalInfo.fieldType;
-  let displayDecimals = decimalInfo.displayDecimals;
+  const resolvedMetadata = await resolveTokenMetadata({
+    tokenAddress,
+    baseTokenAddress,
+    balanceEntryMetadata: metadata,
+    fetchMetadata: options?.fetchMetadata,
+    infoDescription: options?.infoDescription ?? null,
+    infoName: options?.infoName ?? null,
+    infoSymbol: options?.infoSymbol ?? null,
+    infoDescriptionFallback: options?.infoDescription ?? options?.infoName ?? null,
+    infoNameFallback: options?.infoName ?? options?.infoDescription ?? null,
+  });
+
+  let { decimals, fieldType, displayDecimals, name, ticker, isBaseToken } = resolvedMetadata;
 
   if (decimals <= 0) {
     if (isBaseToken) {
@@ -676,23 +984,6 @@ export async function processTokenForDisplay(
     }
   }
 
-  let name = metadataName || (isBaseToken ? "Keeta Token" : "");
-  let ticker = metadataTicker ? metadataTicker.trim().toUpperCase() : (isBaseToken ? "KTA" : "");
-
-  try {
-    console.debug('[TOKENS] processTokenForDisplay:input', {
-      tokenAddress,
-      hasMetadata: Boolean(metadata),
-      metadataName,
-      metadataTicker,
-      decimalsFromMetadata: decimalInfo.decimals,
-      fieldTypeFromMetadata: decimalInfo.fieldType,
-      displayDecimalsFromMetadata: decimalInfo.displayDecimals,
-      isBaseToken,
-      rawBalance: typeof balance === 'bigint' ? balance.toString() : String(balance),
-    });
-  } catch {}
-
   const formattedAmount = formatTokenAmount(balance, decimals, fieldType, displayDecimals);
   const displayAmount = formatAmountWithCommas(formattedAmount);
   let formattedUsdValue: string | undefined;
@@ -704,7 +995,7 @@ export async function processTokenForDisplay(
     }
   }
 
-  const iconFromMetadata = metadata ? getTokenIconFromMetadata(metadata) : null;
+  const iconFromMetadata = resolvedMetadata.metadata ? getTokenIconFromMetadata(resolvedMetadata.metadata) : null;
   let iconDataUrl = iconFromMetadata ? getTokenIconDataUrl(iconFromMetadata) : "";
   let fallbackIcon: TokenIcon | null = null;
 
@@ -731,6 +1022,9 @@ export async function processTokenForDisplay(
       formattedAmount: displayAmount,
       hasIcon: Boolean(iconDataUrl),
       hasFallbackIcon: Boolean(fallbackIcon),
+      finalDecimals: decimals,
+      finalFieldType: fieldType,
+      finalDisplayDecimals: displayDecimals,
     });
   } catch {}
 
@@ -746,6 +1040,6 @@ export async function processTokenForDisplay(
     isBaseToken,
     icon: iconDataUrl,
     fallbackIcon,
-    hasMetadata: Boolean(metadata && (metadataName || metadataTicker || iconFromMetadata)),
+    hasMetadata: Boolean(resolvedMetadata.metadata),
   };
 }

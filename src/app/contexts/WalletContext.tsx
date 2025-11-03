@@ -25,7 +25,7 @@ import {
   extractBlockHash,
 } from "../lib/storage-account-manager";
 import { decodeFromBase64 } from "../lib/encoding";
-import { getReadClient, getAccountState } from "@/lib/explorer/sdk-read-client";
+import { getReadClient, getAccountState, getTokenMetadataRecord } from "@/lib/explorer/sdk-read-client";
 import type {
   RFQStorageAccountDetails,
   RFQStorageCreationResult,
@@ -323,7 +323,22 @@ export function WalletProvider({ children }: WalletProviderProps) {
               entry.token,
               entry.balance,
               entry.metadata,
-              baseTokenAddress
+              baseTokenAddress,
+              undefined,
+              {
+                fetchMetadata: async (addr) => {
+                  const rec = await getTokenMetadataRecord(addr);
+                  if (!rec) return null;
+                  return {
+                    decimals: typeof rec.decimals === 'number' ? rec.decimals : 0,
+                    fieldType: rec.fieldType === 'decimalPlaces' || rec.fieldType === 'decimals' ? rec.fieldType : 'decimals',
+                    name: rec.name ?? null,
+                    symbol: rec.ticker ?? null,
+                    ticker: rec.ticker ?? null,
+                    metadata: rec.metadata ?? null,
+                  };
+                },
+              }
             );
           })
         );

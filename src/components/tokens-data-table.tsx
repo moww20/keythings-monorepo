@@ -21,7 +21,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
-import { ChevronDown, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, CircleCheck, MoreVertical, GripVertical, Columns3, Plus, TrendingUp, TrendingDown, Coins, Send, Download } from "lucide-react"
+import { ChevronDown, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, CircleCheck, MoreVertical, GripVertical, Columns3, Plus, Coins, Send, Download } from "lucide-react"
 import {
   ColumnDef,
   ColumnFiltersState,
@@ -194,7 +194,8 @@ const columns: ColumnDef<z.infer<typeof schema>>[] = [
     header: "Balance",
     cell: ({ row }) => (
       <span className="font-mono">
-        {row.original.balance} {row.original.symbol}
+        {row.original.balance} {" "}
+        <span className="text-muted-foreground">{row.original.symbol}</span>
       </span>
     ),
     meta: {
@@ -218,15 +219,21 @@ const columns: ColumnDef<z.infer<typeof schema>>[] = [
     header: "24H Change",
     cell: ({ row }) => {
       const change = row.original.change24h
-      const isPositive = change.startsWith('+')
-      const isNegative = change.startsWith('-')
+      const trimmed = change.trim()
+      const isNull = trimmed === '--'
+      const isPositive = !isNull && trimmed.startsWith('+')
+      const isNegative = !isNull && trimmed.startsWith('-')
       
       return (
-        <div className={`flex items-center justify-end gap-1 ${
-          isPositive ? 'text-green-600' : isNegative ? 'text-red-600' : 'text-gray-600'
+        <div className={`flex items-center justify-end ${
+          isNull
+            ? 'text-muted-foreground'
+            : isPositive
+              ? 'text-green-600'
+              : isNegative
+                ? 'text-red-600'
+                : 'text-muted-foreground'
         }`}>
-          {isPositive && <TrendingUp className="size-3" />}
-          {isNegative && <TrendingDown className="size-3" />}
           {change}
         </div>
       )

@@ -55,7 +55,7 @@ function mapTokensToTable(
       id: index + 1,
       name: token.name || token.ticker,
       symbol: token.ticker,
-      balance: `${token.formattedAmount} ${token.ticker}`,
+      balance: `${token.formattedAmount}`,
       value: formatUsd(derivedUsd ?? usdFromProp ?? null),
       change24h:
         isBase && ktaPriceData && typeof ktaPriceData.usd_24h_change === "number"

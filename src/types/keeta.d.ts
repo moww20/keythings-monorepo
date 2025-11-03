@@ -1,7 +1,7 @@
 export interface KeetaBalanceEntry {
   token: string;
   balance: string | number | bigint;
-  metadata?: string | null;
+  metadata?: unknown;
 }
 
 export interface KeetaNetworkInfo {
