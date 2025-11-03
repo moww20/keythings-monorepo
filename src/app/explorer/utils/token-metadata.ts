@@ -102,15 +102,18 @@ export function formatTokenAmount(
   fieldType: 'decimalPlaces' | 'decimals',
   ticker: string
 ): string {
-  const divisor = BigInt(10 ** decimals);
-  const wholePart = amount / divisor;
-  const fractionalPart = amount % divisor;
-  
+  const safeDecimals = Number.isFinite(decimals) ? Math.max(0, Math.floor(decimals)) : 0;
+  const divisor = 10n ** BigInt(safeDecimals);
+  const wholePart = divisor === 0n ? amount : amount / divisor;
+  const fractionalPart = divisor === 0n ? 0n : amount % divisor;
+
   if (fractionalPart === BigInt(0)) {
     return `${wholePart.toString()} ${ticker}`;
   }
-  
-  const fractionalStr = fractionalPart.toString().padStart(decimals, '0');
+
+  const fractionalStr = fractionalPart
+    .toString()
+    .padStart(safeDecimals, '0');
   const trimmedFractional = fractionalStr.replace(/0+$/, '');
   
   if (trimmedFractional === '') {
