@@ -30,6 +30,7 @@ interface ExplorerOperationsTableProps {
   emptyLabel?: string;
   participantsMode?: 'both' | 'smart';
   loading?: boolean;
+  pageSize?: number;
 }
 
 const MAX_TOKEN_IDENTIFIER_DEPTH = 4;
@@ -141,11 +142,15 @@ function resolveLink(
   };
 }
 
-export default function ExplorerOperationsTable(
-  { operations, emptyLabel = "No operations available.", participantsMode = 'both', loading = false }: ExplorerOperationsTableProps,
-): React.JSX.Element {
+export default function ExplorerOperationsTable({
+  operations,
+  emptyLabel = "No operations available.",
+  participantsMode = 'both',
+  loading = false,
+  pageSize: pageSizeProp = 5,
+}: ExplorerOperationsTableProps): React.JSX.Element {
   const [pageIndex, setPageIndex] = useState(0);
-  const pageSize = 5;
+  const pageSize = Math.max(1, pageSizeProp);
   // Stable sort by block date desc, then hash to avoid jitter between renders
   const sortedOperations = useMemo(() => {
     const copy = operations.slice();
@@ -183,7 +188,7 @@ export default function ExplorerOperationsTable(
               </TableRow>
             </TableHeader>
             <TableBody>
-              {Array.from({ length: 5 }).map((_, i) => (
+              {Array.from({ length: pageSize }).map((_, i) => (
                 <TableRow key={`sk-${i}`} className="border-hairline">
                   <TableCell className="px-6 py-4 w-[220px]">
                     <div className="flex flex-col gap-2">

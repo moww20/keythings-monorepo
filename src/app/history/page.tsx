@@ -873,7 +873,8 @@ export default function HistoryPage(): React.JSX.Element {
                         operations={groupedOperations}
                         participantsMode="smart"
                         loading={tableLoading}
-                        emptyLabel={"No history found."}
+                        emptyLabel="No history found."
+                        pageSize={10}
                       />
                     </div>
                     {hasNextPage && (
