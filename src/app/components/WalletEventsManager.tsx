@@ -4,10 +4,12 @@ import { useEffect, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 
 import type { KeetaProvider } from "@/types/keeta";
-
-const WALLET_QUERY_KEY = ["wallet"] as const;
-const TOKEN_QUERY_KEY = ["wallet", "tokens"] as const;
-const HISTORY_QUERY_KEY = (account?: string | null) => ["history", account ?? ""] as const;
+import {
+  explorerNetworkStatsQueryKey,
+  historyQueryKey,
+  walletQueryKey,
+  walletTokensQueryKey,
+} from "@/lib/react-query/keys";
 
 function getWalletProvider(): KeetaProvider | null {
   if (typeof window === "undefined") {
@@ -37,13 +39,13 @@ export default function WalletEventsManager(): null {
     } catch {}
 
     const invalidateWalletAndTokens = () => {
-      void queryClient.invalidateQueries({ queryKey: WALLET_QUERY_KEY });
-      void queryClient.invalidateQueries({ queryKey: TOKEN_QUERY_KEY });
+      void queryClient.invalidateQueries({ queryKey: walletQueryKey });
+      void queryClient.invalidateQueries({ queryKey: walletTokensQueryKey });
     };
 
     const invalidateHistoryForCurrent = () => {
       const current = (window as any).keeta?.selectedAddress ?? null;
-      void queryClient.invalidateQueries({ queryKey: HISTORY_QUERY_KEY(current) });
+      void queryClient.invalidateQueries({ queryKey: historyQueryKey(current) });
     };
 
     const handleAccountsChanged = (accounts?: unknown) => {
@@ -63,6 +65,7 @@ export default function WalletEventsManager(): null {
         } catch {}
       }
       invalidateWalletAndTokens();
+      void queryClient.invalidateQueries({ queryKey: explorerNetworkStatsQueryKey });
     };
     const handleChainChanged = (chainId?: unknown) => {
       const next = typeof chainId === 'string' && chainId.length > 0 ? chainId : ((window as any).keeta?.chainId ?? null);
@@ -71,8 +74,13 @@ export default function WalletEventsManager(): null {
         invalidateHistoryForCurrent();
       }
       invalidateWalletAndTokens();
+      void queryClient.invalidateQueries({ queryKey: explorerNetworkStatsQueryKey });
     };
-    const handleDisconnect = () => { invalidateWalletAndTokens(); /* keep history cache */ };
+    const handleDisconnect = () => {
+      invalidateWalletAndTokens();
+      void queryClient.invalidateQueries({ queryKey: explorerNetworkStatsQueryKey });
+      /* keep history cache */
+    };
     const handleConnect = () => {
       const curAny = (window as any).keeta as any;
       const acct = typeof curAny?.selectedAddress === 'string' ? curAny.selectedAddress : null;
@@ -82,16 +90,19 @@ export default function WalletEventsManager(): null {
       if (chain !== lastChainRef.current) { lastChainRef.current = chain; changed = true; }
       if (changed) invalidateHistoryForCurrent();
       invalidateWalletAndTokens();
+      void queryClient.invalidateQueries({ queryKey: explorerNetworkStatsQueryKey });
     };
     const handleLocked = () => {
       console.debug("Wallet locked event received");
       // Do not invalidate history on lock state changes to preserve cache
       invalidateWalletAndTokens();
+      void queryClient.invalidateQueries({ queryKey: explorerNetworkStatsQueryKey });
     };
     const handleUnlocked = () => {
       console.debug("Wallet unlocked event received");
       // Do not invalidate history on lock state changes to preserve cache
       invalidateWalletAndTokens();
+      void queryClient.invalidateQueries({ queryKey: explorerNetworkStatsQueryKey });
     };
     const handleLockChanged = (_locked: unknown) => invalidateWalletAndTokens();
 

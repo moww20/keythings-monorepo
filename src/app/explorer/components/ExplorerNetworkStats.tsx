@@ -1,50 +1,31 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { fetchNetworkStats } from "@/lib/explorer/client";
+import { explorerNetworkStatsQueryKey } from "@/lib/react-query/keys";
 
 type NetworkStats = Awaited<ReturnType<typeof fetchNetworkStats>>;
 
 const numberFormatter = new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 });
+const REFRESH_INTERVAL_MS = 60_000;
 
 export default function ExplorerNetworkStats(): React.JSX.Element {
-  const [stats, setStats] = useState<NetworkStats | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { data, error, isPending, isFetching } = useQuery({
+    queryKey: explorerNetworkStatsQueryKey,
+    queryFn: () => fetchNetworkStats({ forceRefresh: true }),
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
+    refetchInterval: REFRESH_INTERVAL_MS,
+    refetchIntervalInBackground: true,
+    placeholderData: keepPreviousData,
+    staleTime: 30_000,
+  });
 
-  useEffect(() => {
-    let cancelled = false;
-
-    async function load() {
-      try {
-        setLoading(true);
-        const result = await fetchNetworkStats();
-        if (!cancelled) {
-          setStats(result);
-          setError(null);
-        }
-      } catch (err) {
-        if (!cancelled) {
-          console.error("[EXPLORER] Failed to load network stats", err);
-          setStats(null);
-          setError("Connect your Keeta wallet to retrieve live network metrics.");
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
-      }
-    }
-
-    load();
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  const stats = data ?? null;
 
   const metrics = useMemo(() => {
     if (!stats) {
@@ -78,6 +59,17 @@ export default function ExplorerNetworkStats(): React.JSX.Element {
     return date.toLocaleString();
   }, [stats]);
 
+  const showSkeleton = !stats && isPending;
+  const statusMessage = (() => {
+    if (error) {
+      return "Connect your Keeta wallet to retrieve live network metrics.";
+    }
+    if (isFetching) {
+      return "Refreshing metrics...";
+    }
+    return "Metrics ready for review.";
+  })();
+
   return (
     <section>
       <div className="mb-4 flex flex-col gap-1">
@@ -96,7 +88,7 @@ export default function ExplorerNetworkStats(): React.JSX.Element {
               </CardTitle>
             </CardHeader>
             <CardContent className="px-6 pb-6">
-              {loading ? (
+              {showSkeleton ? (
                 <Skeleton className="h-8 w-24 rounded-md bg-[color:color-mix(in_oklab,var(--foreground)_12%,transparent)]" />
               ) : (
                 <p className="text-2xl font-semibold text-foreground">{metric.value}</p>
@@ -106,7 +98,7 @@ export default function ExplorerNetworkStats(): React.JSX.Element {
         ))}
       </div>
       <div className="mt-3 flex items-center justify-between text-xs text-subtle">
-        <span>{error ?? "Metrics ready for review."}</span>
+        <span>{statusMessage}</span>
         {lastUpdated ? <span>Last updated {lastUpdated}</span> : null}
       </div>
     </section>
