@@ -20,6 +20,7 @@ export type CachedTokenMeta = {
 export interface NormalizedHistoryResult {
   operations: ExplorerOperation[];
   tokensToFetch: string[];
+  blocksToFetch: string[];
 }
 
 const ProviderHistoryResponseSchema = z
@@ -246,11 +247,12 @@ export function normalizeHistoryRecords(
   tokenMetadata: Record<string, CachedTokenMeta>,
 ): NormalizedHistoryResult {
   if (!records.length) {
-    return { operations: [], tokensToFetch: [] };
+    return { operations: [], tokensToFetch: [], blocksToFetch: [] };
   }
 
   const operations: ExplorerOperation[] = [];
   const tokensToFetch = new Set<string>();
+  const blocksToFetch = new Set<string>();
   const seenKeys = new Set<string>();
   const accountKey = typeof account === "string" ? account : "";
 
@@ -294,22 +296,32 @@ export function normalizeHistoryRecords(
 
     const blockAccountValue =
       sx(op.account) ?? sx(record?.account) ?? sx(record?.from) ?? accountKey;
-    let block = {
+    const resolvedBlockDate = resolveDate(
+      op.date,
+      op.block?.date,
+      (op.block as any)?.createdAt,
+      record?.date,
+      record?.createdAt,
+      record?.timestamp,
+      (record?.block as any)?.date,
+      (record?.block as any)?.createdAt,
+    );
+
+    const normalizedBlockDate =
+      typeof resolvedBlockDate === "string" && resolvedBlockDate.trim().length > 0
+        ? resolvedBlockDate
+        : undefined;
+
+    const fallbackDate = normalizedBlockDate ?? new Date().toISOString();
+
+    const block = {
       $hash: blockHash,
-      date: resolveDate(
-        op.date,
-        op.block?.date,
-        (op.block as any)?.createdAt,
-        record?.date,
-        record?.createdAt,
-        record?.timestamp,
-        (record?.block as any)?.date,
-        (record?.block as any)?.createdAt,
-      ),
+      date: fallbackDate,
       account: blockAccountValue,
     };
-    if (!block.date || (typeof block.date === "string" && block.date.trim().length === 0)) {
-      block = { ...block, date: new Date().toISOString() };
+
+    if (!normalizedBlockDate) {
+      blocksToFetch.add(blockHash);
     }
 
     const operationPayload: Record<string, any> = {
@@ -377,20 +389,51 @@ export function normalizeHistoryRecords(
     }
 
     const parsed = parseExplorerOperation(operationPayload);
-    if (!parsed || isFeeLike(parsed)) {
+    if (!parsed) {
+      try {
+        console.debug("[provider-history] parse failure, using fallback", {
+          blockHash,
+          normalizedType,
+          keys: Object.keys(operationPayload),
+        });
+      } catch {}
+    }
+
+    const baseOperation: ExplorerOperation = parsed ?? {
+      type: normalizedType,
+      voteStapleHash: sx(record?.voteStaple?.hash) ?? blockHash,
+      block,
+      operation: operationPayload.operation,
+      operationSend: operationPayload.operationSend,
+      operationReceive: operationPayload.operationReceive,
+      operationForward: operationPayload.operationForward,
+      amount: fallbackAmount ?? "0",
+      rawAmount: fallbackAmount ?? "0",
+      formattedAmount: operationPayload.formattedAmount ?? fallbackFormatted ?? fallbackAmount ?? "0",
+      token: operationPayload.token,
+      tokenAddress: operationPayload.tokenAddress,
+      tokenTicker: operationPayload.tokenTicker,
+      tokenDecimals: operationPayload.tokenDecimals,
+      tokenMetadata: operationPayload.tokenMetadata,
+      from: fallbackFrom ?? (operationPayload.from as string | undefined) ?? "",
+      to: fallbackTo ?? (operationPayload.to as string | undefined) ?? "",
+      operationType: operationPayload.operationType ?? normalizedType,
+    } as ExplorerOperation;
+
+    if (isFeeLike(baseOperation)) {
       return;
     }
 
     const fromValue =
-      (parsed.from as string | undefined) ??
-      ((parsed.operation as any)?.from as string | undefined) ??
+      (baseOperation.from as string | undefined) ??
+      ((baseOperation.operation as any)?.from as string | undefined) ??
       "";
     const toValue =
-      (parsed.to as string | undefined) ??
-      ((parsed.operation as any)?.to as string | undefined) ??
+      (baseOperation.to as string | undefined) ??
+      ((baseOperation.operation as any)?.to as string | undefined) ??
       "";
 
-    let finalType = parsed.type;
+    let finalType = baseOperation.type;
     if (accountKey) {
       if (fromValue && fromValue === accountKey && (!toValue || toValue !== accountKey)) {
         finalType = "SEND";
@@ -399,14 +442,14 @@ export function normalizeHistoryRecords(
       }
     }
 
-    const rawAmountValue = sx((parsed as any).rawAmount ?? (parsed as any).amount) ?? "";
+    const rawAmountValue = sx((baseOperation as any).rawAmount ?? (baseOperation as any).amount) ?? "";
 
     const primaryTokenId = fallbackToken ?? undefined;
     const tokenLookupId =
       primaryTokenId ||
-      (parsed.token as string | undefined) ||
-      (parsed.tokenAddress as string | undefined) ||
-      ((parsed.operation as any)?.token as string | undefined) ||
+      (baseOperation.token as string | undefined) ||
+      (baseOperation.tokenAddress as string | undefined) ||
+      ((baseOperation.operation as any)?.token as string | undefined) ||
       "";
 
     const dedupeKey = `${blockHash}|${fromValue}|${toValue}|${tokenLookupId}|${rawAmountValue}`;
@@ -415,7 +458,7 @@ export function normalizeHistoryRecords(
     }
     seenKeys.add(dedupeKey);
 
-    const enriched: ExplorerOperation = { ...parsed, type: finalType };
+    const enriched: ExplorerOperation = { ...baseOperation, type: finalType };
     const cachedMeta = tokenLookupId ? tokenMetadata[tokenLookupId] : undefined;
     const mergedMeta = mergeTokenMetadata(enriched.tokenMetadata, [metadataFromRecord, cachedMeta]);
     if (mergedMeta) {
@@ -517,7 +560,11 @@ export function normalizeHistoryRecords(
     }
   }
 
-  return { operations, tokensToFetch: Array.from(tokensToFetch) };
+  return {
+    operations,
+    tokensToFetch: Array.from(tokensToFetch),
+    blocksToFetch: Array.from(blocksToFetch),
+  };
 }
 
 export function groupOperationsByBlock(baseOperations: ExplorerOperation[]): ExplorerOperation[] {

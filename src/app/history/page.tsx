@@ -20,6 +20,7 @@ import {
   type CachedTokenMeta,
   type ProviderHistoryPage,
 } from "@/lib/history/provider-history";
+import { getBlock } from "@/lib/explorer/sdk-read-client";
 import { getTokenMeta } from "@/lib/tokens/metadata-service";
 
 const HISTORY_DEPTH = 50;
@@ -41,6 +42,7 @@ export default function HistoryPage(): JSX.Element {
   const { publicKey, wallet } = useWallet();
   const [isClient, setIsClient] = useState(false);
   const [tokenMetadata, setTokenMetadata] = useState<Record<string, CachedTokenMeta>>({});
+  const [blockTimestamps, setBlockTimestamps] = useState<Map<string, string>>(() => new Map());
   const fetchingTokenMeta = useRef<Set<string>>(new Set());
 
   useEffect(() => {
@@ -210,9 +212,10 @@ export default function HistoryPage(): JSX.Element {
         records: allRecords.length,
         operations: normalized.operations.length,
         tokensToFetch: normalized.tokensToFetch.length,
+        blocksToFetch: normalized.blocksToFetch.length,
       });
     } catch {}
-  }, [allRecords.length, normalized.operations.length, normalized.tokensToFetch.length]);
+  }, [allRecords.length, normalized.operations.length, normalized.tokensToFetch.length, normalized.blocksToFetch.length]);
 
   useEffect(() => {
     if (!normalized.tokensToFetch.length) {
@@ -286,10 +289,89 @@ export default function HistoryPage(): JSX.Element {
     }
   }, [normalized.tokensToFetch, tokenMetadata]);
 
-  const groupedOperations = useMemo(
-    () => groupOperationsByBlock(normalized.operations),
-    [normalized.operations],
-  );
+  useEffect(() => {
+    const pending = normalized.blocksToFetch.filter((hash) => hash && !blockTimestamps.has(hash));
+    if (pending.length === 0) {
+      return;
+    }
+
+    let cancelled = false;
+
+    void (async () => {
+      const updates = new Map<string, string>();
+
+      for (const hash of pending) {
+        if (!hash) continue;
+        try {
+          const blockData = await getBlock(hash);
+          const timestampCandidate =
+            (blockData as any)?.timestamp ??
+            (blockData as any)?.createdAt ??
+            (blockData as any)?.date ??
+            (blockData as any)?.block?.timestamp ??
+            (blockData as any)?.block?.createdAt;
+          if (timestampCandidate) {
+            const parsed = new Date(timestampCandidate);
+            if (!Number.isNaN(parsed.getTime())) {
+              updates.set(hash, parsed.toISOString());
+            }
+          }
+        } catch (error) {
+          console.debug("[HistoryPage] failed to fetch block timestamp", { hash, error });
+        }
+      }
+
+      if (cancelled || updates.size === 0) {
+        return;
+      }
+
+      setBlockTimestamps((prev) => {
+        const next = new Map(prev);
+        for (const [hash, iso] of updates.entries()) {
+          if (!next.has(hash)) {
+            next.set(hash, iso);
+          }
+        }
+        return next;
+      });
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [normalized.blocksToFetch, blockTimestamps]);
+
+  const hydratedOperations = useMemo(() => {
+    if (!blockTimestamps.size) {
+      return normalized.operations;
+    }
+
+    return normalized.operations.map((operation) => {
+      if (operation.block?.date) {
+        return operation;
+      }
+
+      const blockHash = operation.block?.$hash;
+      if (!blockHash) {
+        return operation;
+      }
+
+      const replacementDate = blockTimestamps.get(blockHash);
+      if (!replacementDate) {
+        return operation;
+      }
+
+      return {
+        ...operation,
+        block: {
+          ...(operation.block ?? {}),
+          date: replacementDate,
+        },
+      };
+    });
+  }, [normalized.operations, blockTimestamps]);
+
+  const groupedOperations = useMemo(() => groupOperationsByBlock(hydratedOperations), [hydratedOperations]);
 
   useEffect(() => {
     try {
