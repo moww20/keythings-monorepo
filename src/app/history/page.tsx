@@ -304,17 +304,55 @@ export default function HistoryPage(): JSX.Element {
         if (!hash) continue;
         try {
           const blockData = await getBlock(hash);
-          const timestampCandidate =
-            (blockData as any)?.timestamp ??
-            (blockData as any)?.createdAt ??
-            (blockData as any)?.date ??
-            (blockData as any)?.block?.timestamp ??
-            (blockData as any)?.block?.createdAt;
+          try {
+            const keys =
+              blockData && typeof blockData === "object"
+                ? Object.keys(blockData as Record<string, unknown>).slice(0, 12)
+                : null;
+            console.debug("[HistoryPage] fetched block", { hash, hasData: Boolean(blockData), keys });
+          } catch {}
+
+          const timestampCandidates = [
+            (blockData as any)?.timestamp,
+            (blockData as any)?.createdAt,
+            (blockData as any)?.date,
+            (blockData as any)?.time,
+            (blockData as any)?.moment,
+            (blockData as any)?.header?.timestamp,
+            (blockData as any)?.header?.createdAt,
+            (blockData as any)?.block?.timestamp,
+            (blockData as any)?.block?.createdAt,
+            (blockData as any)?.block?.date,
+            (blockData as any)?.info?.timestamp,
+            (blockData as any)?.info?.createdAt,
+            Array.isArray((blockData as any)?.blocks)
+              ? (blockData as any)?.blocks?.[0]?.timestamp
+              : undefined,
+            Array.isArray((blockData as any)?.blocks)
+              ? (blockData as any)?.blocks?.[0]?.createdAt
+              : undefined,
+          ];
+
+          const timestampCandidate = timestampCandidates.find(
+            (value) => value !== undefined && value !== null,
+          );
+
+          if (typeof window !== "undefined") {
+            const storeObj = ((window as any).__HISTORY_DEBUG_BLOCKS__ ??= {});
+            if (storeObj && typeof storeObj === "object") {
+              (storeObj as Record<string, unknown>)[hash] = blockData;
+            }
+          }
+
           if (timestampCandidate) {
             const parsed = new Date(timestampCandidate);
             if (!Number.isNaN(parsed.getTime())) {
               updates.set(hash, parsed.toISOString());
             }
+          } else {
+            try {
+              console.debug("[HistoryPage] block timestamp not found", { hash });
+            } catch {}
           }
         } catch (error) {
           console.debug("[HistoryPage] failed to fetch block timestamp", { hash, error });
@@ -347,12 +385,24 @@ export default function HistoryPage(): JSX.Element {
     }
 
     return normalized.operations.map((operation) => {
-      if (operation.block?.date) {
+      const block = operation.block;
+      if (!block) {
         return operation;
       }
 
-      const blockHash = operation.block?.$hash;
+      const blockHash = block.$hash;
       if (!blockHash) {
+        return operation;
+      }
+
+      const isPlaceholder = (block as any)?.placeholderDate === true;
+      const hasValidDate = (() => {
+        if (!block.date) return false;
+        const parsed = new Date(block.date as string);
+        return !Number.isNaN(parsed.getTime());
+      })();
+
+      if (!isPlaceholder && hasValidDate) {
         return operation;
       }
 
@@ -364,8 +414,9 @@ export default function HistoryPage(): JSX.Element {
       return {
         ...operation,
         block: {
-          ...(operation.block ?? {}),
+          ...block,
           date: replacementDate,
+          placeholderDate: false,
         },
       };
     });

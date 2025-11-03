@@ -312,15 +312,17 @@ export function normalizeHistoryRecords(
         ? resolvedBlockDate
         : undefined;
 
-    const fallbackDate = normalizedBlockDate ?? new Date().toISOString();
+    const isPlaceholderDate = normalizedBlockDate === undefined;
+    const fallbackDate = isPlaceholderDate ? new Date().toISOString() : normalizedBlockDate;
 
     const block = {
       $hash: blockHash,
       date: fallbackDate,
       account: blockAccountValue,
+      placeholderDate: isPlaceholderDate,
     };
 
-    if (!normalizedBlockDate) {
+    if (isPlaceholderDate) {
       blocksToFetch.add(blockHash);
     }
 
