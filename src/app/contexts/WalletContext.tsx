@@ -1416,6 +1416,8 @@ export function WalletProvider({ children }: WalletProviderProps) {
       withdrawFromStorage,
     };
   }, [
+    connectWalletFromData,
+    fetchWalletStateFromData,
     signMessage,
     walletData,
     tokenBalances,

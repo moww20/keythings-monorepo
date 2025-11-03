@@ -1,6 +1,7 @@
 import React from "react";
 
 import ExplorerQuickSearch from "./components/ExplorerQuickSearch";
+import ExplorerNetworkStats from "./components/ExplorerNetworkStats";
 import {
   Card,
   CardContent,
@@ -8,11 +9,28 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { HydrationBoundary } from "@tanstack/react-query";
+
+import { createServerQueryClient, dehydrate } from "@/lib/react-query/server";
+import { explorerNetworkStatsQueryKey } from "@/lib/react-query/keys";
+import { fetchNetworkStats } from "@/lib/explorer/client-reads-ssr";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 export default async function ExplorerHome(): Promise<React.JSX.Element> {
+  const queryClient = createServerQueryClient();
+
+  try {
+    await queryClient.prefetchQuery({
+      queryKey: explorerNetworkStatsQueryKey,
+      queryFn: () => fetchNetworkStats(),
+    });
+  } catch (error) {
+    console.error("[EXPLORER] Failed to prefetch network stats", error);
+  }
+
+  const dehydratedState = dehydrate(queryClient);
 
   return (
     <div className="flex flex-1 flex-col overflow-y-auto">
@@ -32,6 +50,9 @@ export default async function ExplorerHome(): Promise<React.JSX.Element> {
               <ExplorerQuickSearch />
             </CardContent>
           </Card>
+          <HydrationBoundary state={dehydratedState}>
+            <ExplorerNetworkStats />
+          </HydrationBoundary>
         </div>
       </div>
     </div>

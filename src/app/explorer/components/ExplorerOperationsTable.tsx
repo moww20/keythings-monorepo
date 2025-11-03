@@ -171,7 +171,7 @@ export default function ExplorerOperationsTable({
   const pageRows = useMemo(() => {
     const start = pageIndex * pageSize;
     return sortedOperations.slice(start, start + pageSize);
-  }, [sortedOperations, pageIndex]);
+  }, [sortedOperations, pageIndex, pageSize]);
   if (loading && !operations.length) {
     // Render table shell with skeleton rows
     return (

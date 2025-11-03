@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/command";
 import Toast from "@/app/components/Toast";
 
+import { useExplorerSearchHistory } from "../hooks/useExplorerSearchHistory";
 import { resolveExplorerTarget, truncateIdentifier } from "../utils/resolveExplorerPath";
 
 export default function ExplorerQuickSearch(): React.JSX.Element {
@@ -30,25 +31,7 @@ export default function ExplorerQuickSearch(): React.JSX.Element {
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
-  const [history, setHistory] = useState<string[]>([]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") {
-      return;
-    }
-    try {
-      const raw = window.localStorage.getItem("explorer-search-history");
-      if (!raw) {
-        return;
-      }
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) {
-        setHistory(parsed.slice(0, 3));
-      }
-    } catch {
-      // ignore storage retrieval failures
-    }
-  }, []);
+  const { history, addEntry: addHistoryEntry } = useExplorerSearchHistory();
 
   const resolvedTarget = useMemo(() => {
     const trimmed = inputValue.trim();
@@ -58,31 +41,12 @@ export default function ExplorerQuickSearch(): React.JSX.Element {
     return resolveExplorerTarget(trimmed);
   }, [inputValue]);
 
-  const persistHistory = useCallback((next: string[]) => {
-    try {
-      window.localStorage.setItem("explorer-search-history", JSON.stringify(next.slice(0, 3)));
-    } catch {
-      // ignore storage failures
-    }
-  }, []);
-
-  const pushHistory = useCallback(
-    (entry: string) => {
-      setHistory((prev) => {
-        const next = [entry, ...prev.filter((item) => item !== entry)];
-        persistHistory(next);
-        return next.slice(0, 3);
-      });
-    },
-    [persistHistory],
-  );
-
   const handleNavigate = useCallback(
     (path: string, historyEntry?: string) => {
       if (!path) return;
       setError(null);
       if (historyEntry) {
-        pushHistory(historyEntry);
+        addHistoryEntry(historyEntry);
       }
       try {
         void router.prefetch(path);
@@ -91,7 +55,7 @@ export default function ExplorerQuickSearch(): React.JSX.Element {
       }
       router.push(path);
     },
-    [router, pushHistory],
+    [router, addHistoryEntry],
   );
 
   const refineAccountDestination = useCallback(
