@@ -118,23 +118,17 @@ const transactionsSchema = z.object({
   stapleOperations: z.array(explorerOperationSchema),
 });
 
-const networkStatsSchema = z.object({
-  stats: z.object({
-    blockCount: z.number(),
-    transactionCount: z.number(),
-    representativeCount: z.number(),
-    queryTime: z.number(),
-    time: z.string().or(z.date()),
-  }),
+const walletNetworkStatsSchema = z.object({
+  blockCount: z.number(),
+  transactionCount: z.number(),
+  representativeCount: z.number(),
+  queryTime: z.number(),
+  time: z.union([z.string(), z.date()]).transform((value) =>
+    value instanceof Date ? value.toISOString() : value,
+  ),
 });
 
-type NetworkStats = {
-  blockCount: number;
-  transactionCount: number;
-  representativeCount: number;
-  queryTime: number;
-  time: string;
-};
+type NetworkStats = z.infer<typeof walletNetworkStatsSchema>;
 
 const networkStatsCache = createTimedCache<string, NetworkStats>(30_000);
 
@@ -213,18 +207,61 @@ export type ExplorerVoteStapleResponse = z.infer<typeof voteStapleSchema>;
 export type ExplorerToken = z.infer<typeof tokenSchema>["token"];
 export type ExplorerCertificate = z.infer<typeof accountCertificateSchema>["certificate"];
 
-async function resolveNetworkStats(): Promise<NetworkStats> {
-  try {
-    if (typeof window !== 'undefined' && window.keeta) {
-      console.log('[CLIENT] Using wallet extension for network stats');
-      return await fetchNetworkStatsFromWallet();
-    }
+const PreferredNetworkSchema = z.enum(["test", "main"]);
 
-    console.log('[CLIENT] Wallet extension not available, using fallback stats');
-  } catch (error) {
-    console.error('Error fetching network stats:', error);
+function readPreferredNetworkFromStorage(): "test" | "main" | null {
+  try {
+    if (typeof window === "undefined" || !("localStorage" in window)) {
+      return null;
+    }
+    const raw = window.localStorage.getItem("keeta.network");
+    const parsed = PreferredNetworkSchema.safeParse(raw);
+    return parsed.success ? parsed.data : null;
+  } catch {
+    return null;
+  }
+}
+
+function resolvePreferredNetwork(): "test" | "main" {
+  const fromStorage = readPreferredNetworkFromStorage();
+  if (fromStorage) {
+    return fromStorage;
   }
 
+  const envValue =
+    (typeof process !== "undefined" && process.env?.NEXT_PUBLIC_KEETA_NETWORK) || undefined;
+  const parsed = PreferredNetworkSchema.safeParse(envValue);
+  return parsed.success ? parsed.data : "test";
+}
+
+type SdkNetworkClientCache = {
+  client: unknown;
+  network: "test" | "main";
+};
+
+let cachedSdkNetworkClient: SdkNetworkClientCache | null = null;
+
+async function resolveNetworkStats(): Promise<NetworkStats> {
+  try {
+    if (typeof window !== "undefined") {
+      try {
+        console.log("[CLIENT] Using SDK read client for network stats");
+        return await fetchNetworkStatsFromSdk();
+      } catch (sdkError) {
+        console.warn("[CLIENT] SDK network stats fetch failed", sdkError);
+        if (window.keeta) {
+          return await fetchNetworkStatsFromWallet();
+        }
+        console.log("[CLIENT] Wallet extension not available, using fallback stats");
+      }
+    } else {
+      console.log("[CLIENT] resolveNetworkStats running on server; SDK not available");
+    }
+  } catch (error) {
+    console.error("Error fetching network stats:", error);
+  }
+
+  console.warn("[CLIENT] Returning fallback network stats (wallet unavailable or failed)");
   return {
     blockCount: 0,
     transactionCount: 0,
@@ -238,6 +275,112 @@ export async function fetchNetworkStats(options: { forceRefresh?: boolean } = {}
   return networkStatsCache.get('default', () => resolveNetworkStats(), {
     forceRefresh: options.forceRefresh,
   });
+}
+
+async function getSdkNetworkClient(): Promise<any> {
+  if (typeof window === "undefined") {
+    throw new Error("Keeta SDK client unavailable on server");
+  }
+
+  const preferredNetwork = resolvePreferredNetwork();
+  console.log(`[CLIENT] Resolving SDK UserClient for network: ${preferredNetwork}`);
+  if (cachedSdkNetworkClient && cachedSdkNetworkClient.network === preferredNetwork) {
+    return cachedSdkNetworkClient.client;
+  }
+
+  const sdkModule = await import("@keetanetwork/keetanet-client");
+  const { UserClient, lib } = sdkModule as { UserClient?: any; lib?: any };
+  if (!UserClient || !lib) {
+    throw new Error("Keeta SDK UserClient not available");
+  }
+
+  const seed = lib.Account.generateRandomSeed({ asString: true });
+  const account = lib.Account.fromSeed(seed, 0);
+
+  let clientCandidate =
+    typeof UserClient.fromNetwork === "function"
+      ? UserClient.fromNetwork(preferredNetwork, account)
+      : new UserClient({ network: preferredNetwork, account });
+
+  clientCandidate = await Promise.resolve(clientCandidate);
+
+  cachedSdkNetworkClient = {
+    client: clientCandidate,
+    network: preferredNetwork,
+  };
+
+  console.log('[CLIENT] SDK UserClient initialized');
+  return clientCandidate;
+}
+
+async function fetchNetworkStatsFromSdk(): Promise<NetworkStats> {
+  const userClient = await getSdkNetworkClient();
+  const lowClient = (userClient as any)?.client;
+  if (!lowClient) {
+    console.warn('[CLIENT] SDK low-level client not available on UserClient');
+    return {
+      blockCount: 0,
+      transactionCount: 0,
+      representativeCount: 0,
+      queryTime: 0,
+      time: new Date().toISOString(),
+    } satisfies NetworkStats;
+  }
+
+  const now = typeof performance !== 'undefined' && performance.now ? () => performance.now() : () => Date.now();
+  const t0 = now();
+
+  // Prefer getNodeStats; fall back to getNetworkStatus if needed
+  let ledgerStats: any | null = null;
+  try {
+    if (typeof lowClient.getNodeStats === 'function') {
+      const nodeStats = await lowClient.getNodeStats();
+      ledgerStats = nodeStats?.ledger ?? null;
+      console.debug('[CLIENT] SDK getNodeStats().ledger:', ledgerStats);
+    } else if (typeof lowClient.getNetworkStatus === 'function') {
+      const status = await lowClient.getNetworkStatus(2000);
+      const firstOnline = Array.isArray(status) ? status.find((s: any) => s?.online) : null;
+      ledgerStats = firstOnline?.ledger ?? null;
+      console.debug('[CLIENT] SDK getNetworkStatus() -> ledger (first online):', ledgerStats);
+    } else {
+      console.warn('[CLIENT] Neither getNodeStats nor getNetworkStatus available on SDK Client');
+    }
+  } catch (err) {
+    console.warn('[CLIENT] Error invoking SDK network stats methods:', err);
+  }
+
+  const t1 = now();
+  const result = ledgerStats && typeof ledgerStats === 'object'
+    ? {
+        blockCount: Number(ledgerStats.blockCount ?? 0),
+        transactionCount: Number(ledgerStats.transactionCount ?? 0),
+        representativeCount: Number(ledgerStats.representativeCount ?? 0),
+        queryTime: Math.max(0, Math.round(t1 - t0)),
+        time: String(ledgerStats.moment ?? new Date().toISOString()),
+      }
+    : {
+        blockCount: 0,
+        transactionCount: 0,
+        representativeCount: 0,
+        queryTime: Math.max(0, Math.round(t1 - t0)),
+        time: new Date().toISOString(),
+      };
+
+  console.debug('[CLIENT] Mapped SDK network stats:', result);
+
+  const parsed = walletNetworkStatsSchema.safeParse(result);
+  if (!parsed.success) {
+    console.error('[CLIENT] SDK network stats schema validation failed:', parsed.error);
+    return {
+      blockCount: 0,
+      transactionCount: 0,
+      representativeCount: 0,
+      queryTime: result.queryTime,
+      time: result.time,
+    } satisfies NetworkStats;
+  }
+
+  return parsed.data;
 }
 
 export async function fetchVoteStaple(blockhash: string) {
@@ -390,37 +533,98 @@ export async function fetchAccount(publicKey: string): Promise<ExplorerAccount |
   }
 }
 
-async function fetchNetworkStatsFromWallet() {
+async function fetchNetworkStatsFromWallet(): Promise<NetworkStats> {
   try {
-    console.log('[CLIENT] Fetching network stats from wallet extension');
-    
+    console.log('[CLIENT] Fetching network stats via wallet UserClient');
+
     // Get user client for network operations
     if (!window.keeta) {
       throw new Error('Wallet extension not available');
     }
-    const userClient = await window.keeta.getUserClient!();
+    const userClient = await window.keeta.getUserClient?.();
     if (!userClient) {
-      throw new Error('User client not available');
+      throw new Error('Wallet getUserClient() returned null/undefined');
     }
-    
-    // For now, return basic stats since the wallet extension doesn't expose network stats directly
-    // In the future, we could add network stats to the wallet extension
-    return {
-      blockCount: 0,
-      transactionCount: 0,
-      representativeCount: 0,
-      queryTime: Date.now(),
-      time: new Date().toISOString(),
-    };
+
+    const lowClient = (userClient as any)?.client;
+    if (!lowClient) {
+      console.warn('[CLIENT] Wallet UserClient.client is not available');
+      return {
+        blockCount: 0,
+        transactionCount: 0,
+        representativeCount: 0,
+        queryTime: 0,
+        time: new Date().toISOString(),
+      } satisfies NetworkStats;
+    }
+
+    const now = typeof performance !== 'undefined' && performance.now ? () => performance.now() : () => Date.now();
+    const t0 = now();
+
+    let ledgerStats: any | null = null;
+    try {
+      if (typeof lowClient.getNodeStats === 'function') {
+        const nodeStats = await lowClient.getNodeStats();
+        ledgerStats = nodeStats?.ledger ?? null;
+        console.debug('[CLIENT] Wallet lowClient.getNodeStats().ledger:', ledgerStats);
+      } else if (typeof lowClient.getNetworkStatus === 'function') {
+        const status = await lowClient.getNetworkStatus(2000);
+        const firstOnline = Array.isArray(status) ? status.find((s: any) => s?.online) : null;
+        ledgerStats = firstOnline?.ledger ?? null;
+        console.debug('[CLIENT] Wallet lowClient.getNetworkStatus() -> ledger (first online):', ledgerStats);
+      } else {
+        console.warn('[CLIENT] Wallet low-level client lacks getNodeStats/getNetworkStatus');
+      }
+    } catch (inner) {
+      console.warn('[CLIENT] Error calling wallet low-level network stats:', inner);
+    }
+
+    const t1 = now();
+    const result = ledgerStats && typeof ledgerStats === 'object'
+      ? {
+          blockCount: Number(ledgerStats.blockCount ?? 0),
+          transactionCount: Number(ledgerStats.transactionCount ?? 0),
+          representativeCount: Number(ledgerStats.representativeCount ?? 0),
+          queryTime: Math.max(0, Math.round(t1 - t0)),
+          time: String(ledgerStats.moment ?? new Date().toISOString()),
+        }
+      : {
+          blockCount: 0,
+          transactionCount: 0,
+          representativeCount: 0,
+          queryTime: Math.max(0, Math.round(t1 - t0)),
+          time: new Date().toISOString(),
+        };
+
+    console.debug('[CLIENT] Mapped wallet network stats:', result);
+
+    const parsed = walletNetworkStatsSchema.safeParse(result);
+    if (!parsed.success) {
+      console.error('[CLIENT] Wallet network stats schema validation failed:', parsed.error);
+      return {
+        blockCount: 0,
+        transactionCount: 0,
+        representativeCount: 0,
+        queryTime: result.queryTime,
+        time: result.time,
+      } satisfies NetworkStats;
+    }
+
+    if (parsed.data.blockCount === 0 && parsed.data.transactionCount === 0 && parsed.data.representativeCount === 0) {
+      console.warn('[CLIENT] Wallet network stats are zeroed; representatives may be unreachable');
+    }
+
+    return parsed.data;
   } catch (error) {
     console.error('[CLIENT] Error fetching network stats from wallet:', error);
+    console.warn('[CLIENT] Falling back to zeroed network stats due to error');
     return {
       blockCount: 0,
       transactionCount: 0,
       representativeCount: 0,
       queryTime: 0,
       time: new Date().toISOString(),
-    };
+    } satisfies NetworkStats;
   }
 }
 

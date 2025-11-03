@@ -36,6 +36,9 @@ export default async function ExplorerHome(): Promise<React.JSX.Element> {
     <div className="flex flex-1 flex-col overflow-y-auto">
       <div className="px-4 py-6 lg:px-6">
         <div className="flex flex-col gap-6">
+          <HydrationBoundary state={dehydratedState}>
+            <ExplorerNetworkStats />
+          </HydrationBoundary>
           <Card
             data-slot="card"
             className="border border-hairline bg-gradient-to-t from-primary/5 to-card shadow-[0_18px_50px_rgba(5,6,11,0.45)] @container/card"
@@ -50,9 +53,6 @@ export default async function ExplorerHome(): Promise<React.JSX.Element> {
               <ExplorerQuickSearch />
             </CardContent>
           </Card>
-          <HydrationBoundary state={dehydratedState}>
-            <ExplorerNetworkStats />
-          </HydrationBoundary>
         </div>
       </div>
     </div>

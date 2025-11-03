@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -22,30 +22,46 @@ export default function ExplorerNetworkStats(): React.JSX.Element {
     refetchInterval: REFRESH_INTERVAL_MS,
     refetchIntervalInBackground: true,
     placeholderData: keepPreviousData,
-    staleTime: 30_000,
+    refetchOnMount: "always",
+    staleTime: 0,
   });
 
   const stats = data ?? null;
 
+  useEffect(() => {
+    console.debug('[ExplorerNetworkStats] Query state', {
+      hasStats: !!stats,
+      stats,
+      isPending,
+      isFetching,
+      error,
+    });
+  }, [stats, isPending, isFetching, error]);
+
   const metrics = useMemo(() => {
+    const formatCount = (value: number | null | undefined) =>
+      typeof value === "number" && value > 0 ? numberFormatter.format(value) : " - ";
+
     if (!stats) {
       return [
-        { label: "Blocks", value: "—" },
-        { label: "Transactions", value: "—" },
-        { label: "Representatives", value: "—" },
-        { label: "Query Time", value: "—" },
+        { label: "Blocks", value: " - " },
+        { label: "Transactions", value: " - " },
+        { label: "Representatives", value: " - " },
+        { label: "Query Time", value: " - " },
       ];
     }
 
-    return [
-      { label: "Blocks", value: numberFormatter.format(stats.blockCount ?? 0) },
-      { label: "Transactions", value: numberFormatter.format(stats.transactionCount ?? 0) },
-      { label: "Representatives", value: numberFormatter.format(stats.representativeCount ?? 0) },
+    const computed = [
+      { label: "Blocks", value: formatCount(stats.blockCount) },
+      { label: "Transactions", value: formatCount(stats.transactionCount) },
+      { label: "Representatives", value: formatCount(stats.representativeCount) },
       {
         label: "Query Time",
-        value: stats.queryTime ? `${stats.queryTime} ms` : "—",
+        value: typeof stats.queryTime === "number" && stats.queryTime > 0 ? `${stats.queryTime} ms` : " - ",
       },
     ];
+    console.debug('[ExplorerNetworkStats] Computed metrics', { computed, raw: stats });
+    return computed;
   }, [stats]);
 
   const lastUpdated = useMemo(() => {
