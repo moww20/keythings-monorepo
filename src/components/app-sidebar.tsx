@@ -82,11 +82,6 @@ const data = {
       url: "/settings",
       icon: Settings,
     },
-    {
-      title: "About Us",
-      url: "/about",
-      icon: HelpCircle,
-    },
   ],
   documents: [
     {

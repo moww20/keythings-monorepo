@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useCallback, useContext, useMemo } from "react";
+import { createContext, useCallback, useContext, useMemo, useRef } from "react";
 import type { ReactNode } from "react";
 
 import { useEffect, useState } from "react";
@@ -25,7 +25,8 @@ import {
   extractBlockHash,
 } from "../lib/storage-account-manager";
 import { decodeFromBase64 } from "../lib/encoding";
-import { getReadClient, getAccountState, getTokenMetadataRecord } from "@/lib/explorer/sdk-read-client";
+import { getReadClient, getAccountState, getTokenMetadataRecord, setPreferredNetwork, getPreferredNetwork } from "@/lib/explorer/sdk-read-client";
+import Toast from "@/app/components/Toast";
 import type {
   RFQStorageAccountDetails,
   RFQStorageCreationResult,
@@ -111,6 +112,8 @@ interface WalletContextValue {
   hasTransactionPermissions: boolean;
   refreshWallet: () => Promise<void>;
   fetchWalletState: () => Promise<void>;
+  switchNetwork: (network: 'test' | 'main') => Promise<boolean>;
+  activeNetwork: 'test' | 'main';
   
   // Derived state indicators
   isDisconnected: boolean;
@@ -185,6 +188,7 @@ export function WalletProvider({ children }: WalletProviderProps) {
   // Determine if we should fetch token balances
   const shouldFetchTokens = walletData.wallet.connected && !walletData.wallet.isLocked;
   const tokenBalances = useTokenBalances(shouldFetchTokens, walletData.wallet.accounts?.[0]);
+  const fetchTokenBalances = tokenBalances.fetchTokenBalances;
   
   // Process raw token balances into ProcessedToken[] format
   const [processedTokens, setProcessedTokens] = useState<ProcessedToken[]>([]);
@@ -192,6 +196,10 @@ export function WalletProvider({ children }: WalletProviderProps) {
   // Capability state & Keeta SDK client
   const [hasTransactionPermissions, setHasTransactionPermissions] = useState(false);
   const [userClient, setUserClient] = useState<KeetaUserClient | null>(null);
+  const [activeNetwork, setActiveNetwork] = useState<'test' | 'main'>(() => getPreferredNetwork());
+  const isSwitchingNetworkRef = useRef(false);
+
+  const { connectWallet: connectWalletFromData, fetchWalletState: fetchWalletStateFromData, wallet: walletState } = walletData;
 
   // Trading state
   const [isTradingEnabled, setIsTradingEnabled] = useState(false);
@@ -640,6 +648,94 @@ export function WalletProvider({ children }: WalletProviderProps) {
       return false;
     }
   }, [walletData]);
+
+  const switchNetwork = useCallback(
+    async (network: 'test' | 'main'): Promise<boolean> => {
+      if (isSwitchingNetworkRef.current) {
+        return false;
+      }
+      isSwitchingNetworkRef.current = true;
+      try {
+        if (network === activeNetwork) {
+          return true;
+        }
+
+        if (!walletState.connected) {
+          await connectWalletFromData(true);
+        }
+
+        if (typeof window === 'undefined') {
+          throw new Error('Window not available');
+        }
+
+        const provider = window.keeta;
+        if (!provider) {
+          throw new Error('Keeta wallet not found');
+        }
+
+        const ensureNetworkCapability = async (): Promise<void> => {
+          if (typeof provider.requestCapabilities !== 'function') {
+            return;
+          }
+
+          try {
+            const tokens = await provider.requestCapabilities(['network']);
+            const hasCapability = Array.isArray(tokens)
+              ? tokens.some((entry) => {
+                  if (!entry) return false;
+                  if (typeof entry === 'string') {
+                    return entry.toLowerCase() === 'network';
+                  }
+                  if (typeof entry === 'object') {
+                    const record = entry as Record<string, unknown>;
+                    const capability = typeof record.capability === 'string' ? record.capability.toLowerCase() : undefined;
+                    if (capability === 'network') return true;
+                    const caps = Array.isArray(record.capabilities) ? record.capabilities : [];
+                    return caps.some((cap) => typeof cap === 'string' && cap.toLowerCase() === 'network');
+                  }
+                  return false;
+                })
+              : false;
+
+            if (!hasCapability) {
+              throw new Error('Network capability was not granted by the wallet');
+            }
+          } catch (err) {
+            throw err instanceof Error ? err : new Error('Failed to request network capability');
+          }
+        };
+
+        await ensureNetworkCapability();
+
+        if (typeof provider.switchNetwork === 'function') {
+          await provider.switchNetwork(network);
+        } else if (typeof provider.request === 'function') {
+          await provider.request({ method: 'keeta_switchNetwork', params: [network] });
+        } else {
+          throw new Error('Keeta provider does not support network switching');
+        }
+
+        setPreferredNetwork(network);
+        setActiveNetwork(network);
+
+        await fetchWalletStateFromData(true);
+        await fetchTokenBalances?.();
+        setUserClient(null);
+        setHasTransactionPermissions(false);
+        Toast.success(network === 'main' ? 'Switched to Keeta Mainnet' : 'Switched to Keeta Testnet');
+        return true;
+      } catch (error) {
+        console.error('[WalletContext] Failed to switch network', error);
+        setPreferredNetwork(activeNetwork);
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        Toast.error(`Network switch failed: ${message}`);
+        return false;
+      } finally {
+        isSwitchingNetworkRef.current = false;
+      }
+    },
+    [activeNetwork, fetchTokenBalances, connectWalletFromData, fetchWalletStateFromData, walletState.connected],
+  );
 
   const walletAddress = walletData.wallet.accounts?.[0] ?? '';
 
@@ -1183,9 +1279,11 @@ export function WalletProvider({ children }: WalletProviderProps) {
       wallet,
       error: walletData.error,
       isLoading: walletData.isLoading,
-      connectWallet: (requestCapabilities = true) => walletData.connectWallet(requestCapabilities),
+      connectWallet: (requestCapabilities = true) => connectWalletFromData(requestCapabilities),
       refreshWallet: walletData.refreshWallet,
-      fetchWalletState: walletData.fetchWalletState,
+      fetchWalletState: fetchWalletStateFromData,
+      switchNetwork,
+      activeNetwork,
 
       // Derived state indicators
       isDisconnected,
@@ -1330,6 +1428,8 @@ export function WalletProvider({ children }: WalletProviderProps) {
     requestTransactionPermissions,
     hasTransactionPermissions,
     userClient,
+    switchNetwork,
+    activeNetwork,
     // createRFQStorageAccount removed
     fillRFQOrder,
     cancelRFQOrder,

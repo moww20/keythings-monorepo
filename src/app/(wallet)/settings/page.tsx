@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState, type CSSProperties } from 'react';
+import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react';
 import Link from 'next/link';
 import { Bell, Globe, Clock, Zap } from 'lucide-react';
 
@@ -9,7 +9,6 @@ import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar';
 
 import { useWallet } from '../../contexts/WalletContext';
 import ThemeToggle from '@/app/components/ThemeToggle';
-import { getPreferredNetwork, setPreferredNetwork } from '@/lib/explorer/sdk-read-client';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 export default function SettingsPage() {
@@ -17,16 +16,39 @@ export default function SettingsPage() {
     walletError,
     connectWallet,
     isDisconnected,
+    switchNetwork,
+    activeNetwork,
   } = useWallet();
 
   const [isConnecting, setIsConnecting] = useState(false);
-  const [network, setNetwork] = useState<'test' | 'main'>(() => {
-    try {
-      return getPreferredNetwork();
-    } catch {
-      return 'test';
-    }
-  });
+  const [isSwitchingNetwork, setIsSwitchingNetwork] = useState(false);
+  const [network, setNetwork] = useState<'test' | 'main'>(activeNetwork);
+
+  useEffect(() => {
+    setNetwork(activeNetwork);
+  }, [activeNetwork]);
+
+  const networkOptions = useMemo(() => ({
+    test: 'Testnet',
+    main: 'Mainnet',
+  }), []);
+
+  const handleNetworkChange = useCallback(
+    async (value: 'test' | 'main') => {
+      if (value === network && activeNetwork === value) {
+        return;
+      }
+
+      setIsSwitchingNetwork(true);
+      setNetwork(value);
+      const success = await switchNetwork(value);
+      if (!success) {
+        setNetwork(activeNetwork);
+      }
+      setIsSwitchingNetwork(false);
+    },
+    [activeNetwork, network, switchNetwork],
+  );
 
   const handleConnectWallet = useCallback(async () => {
     if (isConnecting) {
@@ -109,60 +131,6 @@ export default function SettingsPage() {
         <p className="text-muted">Manage your profile, notifications, and preferences.</p>
       </div>
 
-      {/* Notifications Section */}
-      <div className="glass rounded-lg border border-hairline shadow-[0_20px_60px_rgba(6,7,10,0.45)]">
-        <div className="border-b border-hairline p-6">
-          <h2 className="text-xl font-bold text-foreground">Notifications</h2>
-        </div>
-
-        <div className="space-y-6 p-6">
-          {/* Notification Language */}
-          <div className="flex items-center justify-between gap-6">
-            <div className="flex-1">
-              <h3 className="mb-2 text-lg font-semibold text-foreground">Notification Language</h3>
-              <p className="mb-4 text-sm text-muted">This will affect the language settings of E-mail and App push.</p>
-              <div className="flex items-center gap-2">
-                <Globe className="h-4 w-4 text-muted" />
-                <span className="text-foreground">English</span>
-              </div>
-            </div>
-            <button className="inline-flex min-w-[120px] items-center justify-center gap-2 rounded-md border border-hairline bg-surface px-6 py-2.5 font-medium text-foreground transition-colors hover:bg-surface-strong">
-              Edit
-            </button>
-          </div>
-
-          {/* Notification Preferences */}
-          <div className="flex items-center justify-between gap-6">
-            <div className="flex-1">
-              <h3 className="mb-2 text-lg font-semibold text-foreground">Notification Preferences</h3>
-              <p className="mb-4 text-sm text-muted">Once configured, you will receive relevant on-site inbox notifications within the app and website.</p>
-              <div className="flex items-center gap-2">
-                <Bell className="h-4 w-4 text-muted" />
-                <span className="text-sm text-foreground">Activities, Trade Notification, Binance News, System Messages</span>
-              </div>
-            </div>
-            <button className="inline-flex min-w-[120px] items-center justify-center gap-2 rounded-md border border-hairline bg-surface px-6 py-2.5 font-medium text-foreground transition-colors hover:bg-surface-strong">
-              Manage
-            </button>
-          </div>
-
-          {/* Auto Price Alert */}
-          <div className="flex items-center justify-between gap-6">
-            <div className="flex-1">
-              <h3 className="mb-2 text-lg font-semibold text-foreground">Auto Price Alert</h3>
-              <p className="mb-4 text-sm text-muted">Once configured, you will receive alerts on the price changes of major and holding cryptos.</p>
-              <div className="flex items-center gap-2">
-                <Zap className="h-4 w-4 text-muted" />
-                <span className="text-foreground">Notification On, Sound On</span>
-              </div>
-            </div>
-            <button className="inline-flex min-w-[120px] items-center justify-center gap-2 rounded-md border border-hairline bg-surface px-6 py-2.5 font-medium text-foreground transition-colors hover:bg-surface-strong">
-              Manage
-            </button>
-          </div>
-        </div>
-      </div>
-
       {/* Preferences Section */}
       <div className="glass rounded-lg border border-hairline shadow-[0_20px_60px_rgba(6,7,10,0.45)]">
         <div className="border-b border-hairline p-6">
@@ -173,8 +141,10 @@ export default function SettingsPage() {
           {/* Appearance (Theme) */}
           <div className="flex items-center justify-between gap-6">
             <div className="flex-1">
-              <h3 className="mb-2 text-lg font-semibold text-foreground">Appearance</h3>
-              <p className="mb-4 text-sm text-muted">Switch between light and dark modes.</p>
+              <h3 className="text-lg font-semibold text-foreground">Appearance</h3>
+              <p className="text-sm text-muted">Switch between light and dark modes.</p>
+            </div>
+            <div className="flex-shrink-0 flex justify-end">
               <ThemeToggle />
             </div>
           </div>
@@ -182,57 +152,53 @@ export default function SettingsPage() {
           {/* Network Selection */}
           <div className="flex items-center justify-between gap-6">
             <div className="flex-1">
-              <h3 className="mb-2 text-lg font-semibold text-foreground">Network</h3>
-              <p className="mb-4 text-sm text-muted">Choose which Keeta network to interact with.</p>
-              <div className="w-[220px]">
-                <Select
-                  value={network}
-                  onValueChange={(val) => {
-                    const v = (val === 'main' ? 'main' : 'test') as 'test' | 'main';
-                    setNetwork(v);
-                    setPreferredNetwork(v);
-                  }}
-                >
-                  <SelectTrigger className="bg-surface border-hairline text-foreground">
-                    <SelectValue placeholder="Select network" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="test">Testnet</SelectItem>
-                    <SelectItem value="main">Mainnet</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+              <h3 className="text-lg font-semibold text-foreground">Network</h3>
+              <p className="text-sm text-muted">Choose which Keeta network to interact with.</p>
+            </div>
+            <div className="flex-shrink-0 w-[220px] flex justify-end">
+              <Select
+                value={network}
+                disabled={isSwitchingNetwork}
+                onValueChange={(val) => {
+                  const v = val === 'main' ? 'main' : 'test';
+                  void handleNetworkChange(v);
+                }}
+              >
+                <SelectTrigger className="bg-surface border-hairline text-foreground">
+                  <SelectValue placeholder="Select network">
+                    {networkOptions[network]}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="test">Testnet</SelectItem>
+                  <SelectItem value="main">Mainnet</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           </div>
 
           {/* Language */}
           <div className="flex items-center justify-between gap-6">
             <div className="flex-1">
-              <h3 className="mb-2 text-lg font-semibold text-foreground">Language</h3>
-              <p className="mb-4 text-sm text-muted">Choose your preferred language for the interface.</p>
-              <div className="flex items-center gap-2">
-                <Globe className="h-4 w-4 text-muted" />
-                <span className="text-foreground">English</span>
-              </div>
+              <h3 className="text-lg font-semibold text-foreground">Language</h3>
+              <p className="text-sm text-muted">Choose your preferred language for the interface.</p>
             </div>
-            <button className="inline-flex min-w-[120px] items-center justify-center gap-2 rounded-md border border-hairline bg-surface px-6 py-2.5 font-medium text-foreground transition-colors hover:bg-surface-strong">
-              Edit
-            </button>
+            <div className="flex-shrink-0 inline-flex items-center gap-2 text-sm text-foreground justify-end">
+              <Globe className="h-4 w-4 text-muted" />
+              <span>English</span>
+            </div>
           </div>
 
           {/* UTC Time Zone */}
           <div className="flex items-center justify-between gap-6">
             <div className="flex-1">
-              <h3 className="mb-2 text-lg font-semibold text-foreground">UTC Time Zone</h3>
-              <p className="mb-4 text-sm text-muted">Set your timezone for accurate time display.</p>
-              <div className="flex items-center gap-2">
-                <Clock className="h-4 w-4 text-muted" />
-                <span className="text-foreground">Last 24 hours</span>
-              </div>
+              <h3 className="text-lg font-semibold text-foreground">UTC Time Zone</h3>
+              <p className="text-sm text-muted">Set your timezone for accurate time display.</p>
             </div>
-            <button className="inline-flex min-w-[120px] items-center justify-center gap-2 rounded-md border border-hairline bg-surface px-6 py-2.5 font-medium text-foreground transition-colors hover:bg-surface-strong">
-              Edit
-            </button>
+            <div className="flex-shrink-0 inline-flex items-center gap-2 text-sm text-foreground justify-end">
+              <Clock className="h-4 w-4 text-muted" />
+              <span>Last 24 hours</span>
+            </div>
           </div>
         </div>
       </div>

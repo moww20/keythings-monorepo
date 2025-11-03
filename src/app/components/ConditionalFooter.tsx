@@ -18,7 +18,6 @@ export default function ConditionalFooter(): React.JSX.Element | null {
     "/profile",
     "/send",
     "/history",
-    "/about",
     // Add other dashboard/admin pages here if needed
   ];
 

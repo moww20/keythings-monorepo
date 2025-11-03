@@ -14,4 +14,9 @@
 - **Stale-while-refresh account view:** The account page only falls back to the skeleton when no data is present, allowing existing content to remain visible while background refetches run.【F:src/app/explorer/account/[publicKey]/page.tsx†L188-L205】
 - **On-demand storage metrics:** Storage counts update once the tab loads, showing a placeholder (`—`) until the deferred fetch completes to avoid competing with initial account hydration.【F:src/app/explorer/account/[publicKey]/page.tsx†L188-L440】
 
+## Network Switching UX Notes
+
+- `useWallet().switchNetwork` now ensures the wallet prompts for the `network` capability, performs the network transition, and raises toasts on success (`Switched to Keeta Mainnet/Testnet`) or failure (`Network switch failed: …`).【F:src/app/contexts/WalletContext.tsx†L648-L734】
+- The Settings page dropdown (`Settings > Preferences > Network`) delegates to `switchNetwork`, disables itself while awaiting the wallet response, and reverts the selection if the wallet rejects the switch.【F:src/app/(wallet)/settings/page.tsx†L14-L231】
+
 These changes shrink the address lookup critical path, reuse expensive metadata across the explorer, and keep UI sections responsive while slower data streams continue to populate.
