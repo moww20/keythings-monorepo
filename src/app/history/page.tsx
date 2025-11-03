@@ -20,8 +20,7 @@ import {
   type CachedTokenMeta,
   type ProviderHistoryPage,
 } from "@/lib/history/provider-history";
-import { getBlock } from "@/lib/explorer/sdk-read-client";
-import { getTokenMeta } from "@/lib/tokens/metadata-service";
+import { getBlock, getTokenMetadataRecord } from "@/lib/explorer/sdk-read-client";
 
 const HISTORY_DEPTH = 50;
 const FALLBACK_MESSAGE = "Connect your Keeta wallet to pull on-chain activity.";
@@ -231,7 +230,7 @@ export default function HistoryPage(): JSX.Element {
 
       void (async () => {
         try {
-          const rawMeta = await getTokenMeta(tokenId);
+          const rawMeta = await getTokenMetadataRecord(tokenId);
           const parsed = TokenMetadataSchema.safeParse(rawMeta);
           if (!parsed.success) {
             return;
