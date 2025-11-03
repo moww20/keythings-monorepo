@@ -3,11 +3,14 @@ import { z } from "zod";
 import { coerceString as sx, resolveDate } from "@/lib/explorer/mappers";
 import { parseExplorerOperation } from "@/lib/explorer/client";
 import { parseTokenMetadata, formatTokenAmount } from "@/app/explorer/utils/token-metadata";
+import { getCachedTokenMetadata as getGlobalCachedTokenMetadata } from "@/lib/tokens/metadata-service";
 import type { ExplorerOperation } from "@/lib/explorer/client";
 import type { WalletHistoryRecord } from "@/app/lib/wallet-history";
 import type { KeetaProvider } from "@/types/keeta";
 
 export const BASE_TOKEN_TICKER = "KTA";
+const BASE_TOKEN_DECIMALS = 9;
+const BASE_TOKEN_FIELD_TYPE = "decimalPlaces";
 
 export type CachedTokenMeta = {
   name?: string | null;
@@ -50,13 +53,16 @@ export async function fetchProviderHistory(
     return { records: [], cursor: null, hasMore: false };
   }
 
-  const requestPayload: { depth: number; cursor?: string } = {
+  const requestPayload: { depth: number; cursor?: string; includeOperations?: boolean; includeTokenMetadata?: boolean } = {
     depth: Math.max(1, options.depth),
+    includeOperations: true,
+    includeTokenMetadata: true,
   };
   if (options.cursor) {
     requestPayload.cursor = options.cursor;
   }
 
+  try { console.debug("[provider-history] request", requestPayload); } catch {}
   const response = await provider.history(requestPayload);
   const parsed = ProviderHistoryResponseSchema.safeParse(response);
   if (!parsed.success) {
@@ -79,6 +85,7 @@ export async function fetchProviderHistory(
   }
 
   const { records, cursor, hasMore } = parsed.data;
+  try { console.debug("[provider-history] response", { records: Array.isArray(records) ? records.length : 0, hasMore: Boolean(hasMore), cursor: cursor ?? null }); } catch {}
   return {
     records,
     cursor: cursor ?? null,
@@ -383,6 +390,7 @@ export function normalizeHistoryRecords(
       blocksToFetch.add(blockHash);
     }
 
+    const decimalFormattedCandidate = Boolean(amountCandidate && amountCandidate.includes("."));
     const operationPayload: Record<string, any> = {
       type: normalizedType,
       voteStapleHash: sx(record?.voteStaple?.hash) ?? blockHash,
@@ -390,7 +398,7 @@ export function normalizeHistoryRecords(
       operation: { ...op },
       amount: amountCandidate ?? coerceAmountString(op.amount),
       rawAmount: normalizedRawAmount,
-      formattedAmount: fallbackFormatted ?? sx(op.formattedAmount) ?? (amountCandidate && amountCandidate.includes(".") ? amountCandidate : undefined),
+      formattedAmount: fallbackFormatted ?? sx(op.formattedAmount) ?? (decimalFormattedCandidate ? amountCandidate : undefined),
       token: fallbackToken ?? sx(op.token),
       tokenAddress: fallbackToken ?? sx(op.tokenAddress),
       tokenTicker: fallbackTicker ?? sx(op.tokenTicker),
@@ -410,7 +418,36 @@ export function normalizeHistoryRecords(
       operationPayload.tokenTicker = BASE_TOKEN_TICKER;
     }
 
-    const metadataFromRecord = normalizeMetadataCandidate(fallbackMetadata);
+    let metadataFromRecord = normalizeMetadataCandidate(fallbackMetadata);
+
+    const normalizedTickerCandidate = (operationPayload.tokenTicker ?? fallbackTicker ?? "").toUpperCase();
+    if (normalizedTickerCandidate === BASE_TOKEN_TICKER) {
+      if (!metadataFromRecord) {
+        metadataFromRecord = {
+          ticker: BASE_TOKEN_TICKER,
+          decimals: BASE_TOKEN_DECIMALS,
+          fieldType: BASE_TOKEN_FIELD_TYPE,
+        } satisfies CachedTokenMeta;
+      } else {
+        if (!metadataFromRecord.ticker) {
+          metadataFromRecord.ticker = BASE_TOKEN_TICKER;
+        }
+        if (typeof metadataFromRecord.decimals !== "number" || !Number.isFinite(metadataFromRecord.decimals)) {
+          metadataFromRecord.decimals = BASE_TOKEN_DECIMALS;
+        }
+        if (!metadataFromRecord.fieldType) {
+          metadataFromRecord.fieldType = BASE_TOKEN_FIELD_TYPE;
+        }
+      }
+
+      if (typeof operationPayload.tokenDecimals !== "number" || !Number.isFinite(operationPayload.tokenDecimals)) {
+        operationPayload.tokenDecimals = BASE_TOKEN_DECIMALS;
+      }
+      if (!operationPayload.tokenTicker) {
+        operationPayload.tokenTicker = BASE_TOKEN_TICKER;
+      }
+    }
+
     if (metadataFromRecord) {
       const mergedMeta = mergeTokenMetadata(operationPayload.tokenMetadata, [metadataFromRecord]);
       if (mergedMeta) {
@@ -427,22 +464,47 @@ export function normalizeHistoryRecords(
       }
     }
 
-    if (
-      !operationPayload.formattedAmount &&
+    const shouldReformat = (
+      (!operationPayload.formattedAmount || decimalFormattedCandidate) &&
       operationPayload.rawAmount &&
       operationPayload.tokenDecimals !== undefined
-    ) {
+    );
+    if (shouldReformat) {
       try {
         const amt = BigInt(operationPayload.rawAmount as string);
         const ticker = operationPayload.tokenTicker || metadataFromRecord?.ticker || "UNKNOWN";
-        const fieldType = metadataFromRecord?.fieldType === "decimalPlaces" ? "decimalPlaces" : "decimals";
+        const resolvedFieldTypeInner = (operationPayload.tokenMetadata as CachedTokenMeta | undefined)?.fieldType ??
+          metadataFromRecord?.fieldType ??
+          fallbackFieldType ??
+          "decimals";
+        const fieldType = resolvedFieldTypeInner === "decimalPlaces" ? "decimalPlaces" : "decimals";
+
+        try {
+          console.debug("[history] format amount", {
+            where: "pre-parseExplorerOperation",
+            voteStapleHash: sx(record?.voteStaple?.hash) ?? blockHash,
+            blockHash,
+            rawAmount: String(operationPayload.rawAmount),
+            tokenDecimals: operationPayload.tokenDecimals,
+            fieldType,
+            ticker,
+            hasMeta: Boolean(operationPayload.tokenMetadata),
+            metaDecimals: (operationPayload.tokenMetadata as any)?.decimals,
+            metaFieldType: (operationPayload.tokenMetadata as any)?.fieldType,
+            fallbackDecimals,
+            fallbackFieldType,
+            decimalFormattedCandidate,
+          });
+        } catch {}
+
         operationPayload.formattedAmount = formatTokenAmount(
           amt,
           operationPayload.tokenDecimals,
           fieldType,
           ticker,
         );
-      } catch {
+      } catch (e) {
+        try { console.warn("[history] format amount failed", { error: (e as Error)?.message }); } catch {}
         // ignore formatting errors
       }
     }
@@ -503,12 +565,16 @@ export function normalizeHistoryRecords(
       coerceAmountString((baseOperation as any).rawAmount ?? normalizedRawAmount ?? amountCandidate) ?? "";
 
     const primaryTokenId = fallbackToken ?? undefined;
-    const tokenLookupId =
+    let tokenLookupId =
       primaryTokenId ||
       (baseOperation.token as string | undefined) ||
       (baseOperation.tokenAddress as string | undefined) ||
       ((baseOperation.operation as any)?.token as string | undefined) ||
       "";
+
+    if (!tokenLookupId && normalizedTickerCandidate === BASE_TOKEN_TICKER) {
+      tokenLookupId = "base";
+    }
 
     if (!tokenLookupId) {
       try {
@@ -537,7 +603,38 @@ export function normalizeHistoryRecords(
     seenKeys.add(dedupeKey);
 
     const enriched: ExplorerOperation = { ...baseOperation, type: finalType };
-    const cachedMeta = tokenLookupId ? tokenMetadata[tokenLookupId] : undefined;
+
+    // Additional debug payload to inspect normalization when amounts look unnormalized
+    try {
+      const debugFmt = {
+        voteStapleHash: sx(record?.voteStaple?.hash) ?? blockHash,
+        blockHash,
+        type: enriched.type,
+        token: enriched.token || enriched.tokenAddress || (enriched.operation as any)?.token || null,
+        tokenTicker: enriched.tokenTicker,
+        tokenDecimals: enriched.tokenDecimals,
+        hasFormattedAmount: typeof enriched.formattedAmount === "string" && enriched.formattedAmount.length > 0,
+        formattedAmount: enriched.formattedAmount,
+        rawAmountValue,
+        amountCandidate,
+        normalizedRawAmount,
+      };
+      console.debug("[history] enriched operation", debugFmt);
+    } catch {}
+    // Prefer page cache, fall back to global cache managed by metadata-service
+    let cachedMeta = tokenLookupId ? tokenMetadata[tokenLookupId] : undefined;
+    if (!cachedMeta && tokenLookupId) {
+      const globalMeta = getGlobalCachedTokenMetadata(tokenLookupId);
+      if (globalMeta) {
+        cachedMeta = {
+          name: globalMeta.name,
+          ticker: globalMeta.ticker,
+          decimals: globalMeta.decimals,
+          fieldType: globalMeta.fieldType,
+          metadataBase64: globalMeta.metadataBase64,
+        };
+      }
+    }
     const mergedMeta = mergeTokenMetadata(enriched.tokenMetadata, [metadataFromRecord, cachedMeta]);
     if (mergedMeta) {
       enriched.tokenMetadata = mergedMeta;
@@ -567,7 +664,16 @@ export function normalizeHistoryRecords(
 
     const hasTokenDecimals = typeof enriched.tokenDecimals === "number";
     const resolvedFieldType = mergedMeta?.fieldType ?? metadataFromRecord?.fieldType ?? fallbackFieldType;
-    if (!hasTokenDecimals || !resolvedFieldType) {
+
+    // If a metadata fetch is pending for this token and we are missing data, skip noisy logs.
+    const pendingFetch =
+      tokenLookupId &&
+      !shouldSkipTokenLookup(tokenLookupId, enriched.tokenTicker) &&
+      !tokenMetadata[tokenLookupId];
+    const pendingHasTicker = Boolean(enriched.tokenTicker || mergedMeta?.ticker);
+    const pendingHasDecimals = typeof (enriched.tokenDecimals ?? mergedMeta?.decimals) === "number";
+
+    if ((!hasTokenDecimals || !resolvedFieldType) && !(pendingFetch && (!pendingHasTicker || !pendingHasDecimals))) {
       const debugPayload = {
         tokenLookupId,
         tokenTicker: enriched.tokenTicker ?? mergedMeta?.ticker ?? operationPayload.tokenTicker,

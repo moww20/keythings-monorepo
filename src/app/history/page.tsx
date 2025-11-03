@@ -6,7 +6,6 @@ import { useInfiniteQuery, type InfiniteData } from "@tanstack/react-query";
 import { z } from "zod";
 
 import ExplorerOperationsTable from "@/app/explorer/components/ExplorerOperationsTable";
-import { parseTokenMetadata } from "@/app/explorer/utils/token-metadata";
 import { useWallet } from "@/app/contexts/WalletContext";
 import { useCapabilityRequest } from "@/app/hooks/useCapabilityRequest";
 import { AppSidebar } from "@/components/app-sidebar";
@@ -19,13 +18,18 @@ import {
   type CachedTokenMeta,
   type ProviderHistoryPage,
 } from "@/lib/history/provider-history";
-import { getBlock, getTokenMetadataRecord } from "@/lib/explorer/sdk-read-client";
+import { getBlock } from "@/lib/explorer/sdk-read-client";
+import {
+  getTokenMetadata,
+  getCachedTokenMetadata,
+  type TokenMetadataEntry,
+} from "@/lib/tokens/metadata-service";
 
 const HISTORY_DEPTH = 50;
 const FALLBACK_MESSAGE = "Connect your Keeta wallet to pull on-chain activity.";
 const GRANT_HISTORY_MESSAGE = "Grant history access in the Keeta wallet to view activity.";
 
-const TokenMetadataSchema = z
+const TokenMetadataSchema = z // retained for backward compatibility in case of legacy usage
   .object({
     name: z.string().optional(),
     ticker: z.string().optional(),
@@ -35,6 +39,16 @@ const TokenMetadataSchema = z
     metadataBase64: z.string().optional(),
   })
   .passthrough();
+
+function toCachedTokenMeta(entry: TokenMetadataEntry): CachedTokenMeta {
+  return {
+    name: entry.name ?? undefined,
+    ticker: entry.ticker ?? undefined,
+    decimals: typeof entry.decimals === "number" ? entry.decimals : undefined,
+    fieldType: entry.fieldType,
+    metadataBase64: entry.metadataBase64 ?? undefined,
+  } satisfies CachedTokenMeta;
+}
 
 export default function HistoryPage(): JSX.Element {
   const { publicKey, wallet } = useWallet();
@@ -191,60 +205,33 @@ export default function HistoryPage(): JSX.Element {
     for (const tokenId of normalized.tokensToFetch) {
       if (!tokenId) continue;
       if (tokenMetadata[tokenId]) continue;
-      if (fetchingTokenMeta.current.has(tokenId)) continue;
 
+      const cachedEntry = getCachedTokenMetadata(tokenId);
+      if (cachedEntry) {
+        setTokenMetadata((prev) => {
+          if (prev[tokenId]) {
+            return prev;
+          }
+          return { ...prev, [tokenId]: toCachedTokenMeta(cachedEntry) };
+        });
+        continue;
+      }
+
+      if (fetchingTokenMeta.current.has(tokenId)) continue;
       fetchingTokenMeta.current.add(tokenId);
 
       void (async () => {
         try {
-          const rawMeta = await getTokenMetadataRecord(tokenId);
-          const parsed = TokenMetadataSchema.safeParse(rawMeta);
-          if (!parsed.success) {
+          const entry = await getTokenMetadata(tokenId);
+          if (!entry) {
             return;
-          }
-
-          const normalizedMeta: CachedTokenMeta = {
-            name: typeof parsed.data.name === "string" ? parsed.data.name : undefined,
-            ticker:
-              typeof parsed.data.ticker === "string"
-                ? parsed.data.ticker
-                : typeof parsed.data.symbol === "string"
-                  ? parsed.data.symbol
-                  : undefined,
-            decimals: typeof parsed.data.decimals === "number" ? parsed.data.decimals : undefined,
-            metadataBase64:
-              typeof parsed.data.metadataBase64 === "string"
-                ? parsed.data.metadataBase64
-                : typeof parsed.data.metadata === "string"
-                  ? parsed.data.metadata
-                  : undefined,
-          };
-
-          if (normalizedMeta.metadataBase64) {
-            const decoded = parseTokenMetadata(normalizedMeta.metadataBase64);
-            if (decoded?.fieldType === "decimalPlaces" || decoded?.fieldType === "decimals") {
-              normalizedMeta.fieldType = decoded.fieldType;
-            }
-            if (typeof decoded?.decimals === "number" && normalizedMeta.decimals === undefined) {
-              normalizedMeta.decimals = decoded.decimals;
-            }
-            if (!normalizedMeta.ticker && typeof decoded?.ticker === "string") {
-              normalizedMeta.ticker = decoded.ticker;
-            }
-            if (!normalizedMeta.name && typeof decoded?.name === "string") {
-              normalizedMeta.name = decoded.name;
-            }
-          }
-
-          if (!normalizedMeta.fieldType && typeof normalizedMeta.decimals === "number") {
-            normalizedMeta.fieldType = "decimals";
           }
 
           setTokenMetadata((prev) => {
             if (prev[tokenId]) {
               return prev;
             }
-            return { ...prev, [tokenId]: normalizedMeta };
+            return { ...prev, [tokenId]: toCachedTokenMeta(entry) };
           });
         } catch {
           // ignore token metadata failures

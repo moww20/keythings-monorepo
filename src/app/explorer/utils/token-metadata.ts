@@ -27,25 +27,66 @@ export function createDefaultTokenInfo(tokenAddress?: string): TokenInfo {
 
 // Parse base64 metadata like wallet extension does
 export function parseTokenMetadata(metadataBase64?: string | null): Partial<TokenInfo> | null {
-  if (!metadataBase64) {
+  if (!metadataBase64 || typeof metadataBase64 !== 'string') {
     return null;
   }
 
+  const inputPreview = metadataBase64.slice(0, 32);
+  let parsed: any | null = null;
+  let decodePath: 'atob' | 'buffer' | 'json' | 'failed' = 'failed';
+
+  // Try base64 decode using atob (browser) first
   try {
-    const decoded = atob(metadataBase64);
-    const parsed = JSON.parse(decoded);
-    
-    return {
-      ticker: parsed.ticker || parsed.symbol,
-      decimals: parsed.decimals || parsed.decimalPlaces,
-      fieldType: parsed.decimalPlaces ? 'decimalPlaces' : 'decimals',
-      name: parsed.name || parsed.displayName,
-      metadata: metadataBase64,
-    };
-  } catch (error) {
-    console.warn('Failed to parse token metadata:', error);
+    if (typeof (globalThis as any).atob === 'function') {
+      const decoded = (globalThis as any).atob(metadataBase64);
+      parsed = JSON.parse(decoded);
+      decodePath = 'atob';
+    }
+  } catch {}
+
+  // Fallback to Buffer (Node/SSR)
+  if (!parsed) {
+    try {
+      if (typeof (globalThis as any).Buffer !== 'undefined') {
+        const decoded = (globalThis as any).Buffer.from(metadataBase64, 'base64').toString('utf8');
+        parsed = JSON.parse(decoded);
+        decodePath = 'buffer';
+      }
+    } catch {}
+  }
+
+  // Finally, some providers may already give JSON string (not base64)
+  if (!parsed) {
+    try {
+      parsed = JSON.parse(metadataBase64);
+      decodePath = 'json';
+    } catch {}
+  }
+
+  if (!parsed || typeof parsed !== 'object') {
+    try { console.warn('[token-metadata] parseTokenMetadata failed', { inputPreview, length: metadataBase64.length }); } catch {}
     return null;
   }
+
+  const out: Partial<TokenInfo> = {
+    ticker: parsed.ticker || parsed.symbol,
+    decimals: parsed.decimals ?? parsed.decimalPlaces,
+    fieldType: parsed.decimalPlaces != null ? 'decimalPlaces' : 'decimals',
+    name: parsed.name || parsed.displayName,
+    metadata: metadataBase64,
+  };
+
+  try {
+    console.debug('[token-metadata] parseTokenMetadata ok', {
+      path: decodePath,
+      hasTicker: Boolean(out.ticker),
+      decimals: out.decimals,
+      fieldType: out.fieldType,
+      hasName: Boolean(out.name),
+    });
+  } catch {}
+
+  return out;
 }
 
 // Process token metadata with caching
@@ -103,17 +144,17 @@ export function formatTokenAmount(
   ticker: string
 ): string {
   const safeDecimals = Number.isFinite(decimals) ? Math.max(0, Math.floor(decimals)) : 0;
-  const divisor = 10n ** BigInt(safeDecimals);
-  const wholePart = divisor === 0n ? amount : amount / divisor;
-  const fractionalPart = divisor === 0n ? 0n : amount % divisor;
+  const bigIntBase = BigInt(10);
+  const zero = BigInt(0);
+  const divisor = bigIntBase ** BigInt(safeDecimals);
+  const wholePart = divisor === zero ? amount : amount / divisor;
+  const fractionalPart = divisor === zero ? zero : amount % divisor;
 
-  if (fractionalPart === BigInt(0)) {
+  if (fractionalPart === zero) {
     return `${wholePart.toString()} ${ticker}`;
   }
 
-  const fractionalStr = fractionalPart
-    .toString()
-    .padStart(safeDecimals, '0');
+  const fractionalStr = fractionalPart.toString().padStart(safeDecimals, '0');
   const trimmedFractional = fractionalStr.replace(/0+$/, '');
   
   if (trimmedFractional === '') {

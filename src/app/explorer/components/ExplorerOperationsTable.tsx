@@ -24,6 +24,7 @@ import {
   resolveExplorerPath,
   truncateIdentifier,
 } from "../utils/resolveExplorerPath";
+import { formatTokenAmount as formatTokenAmountPlain } from "@/app/lib/token-utils";
 
 interface ExplorerOperationsTableProps {
   operations: ExplorerOperation[];
@@ -316,10 +317,35 @@ export default function ExplorerOperationsTable({
               const amountWithoutTicker = enrichedFormattedAmount
                 ? enrichedFormattedAmount.replace(/\s+[A-Z]{2,10}$/u, '').trim()
                 : null;
+              // Prefer client-side normalized amount if we have rawAmount + decimals
+              const rawForCompute: string | null =
+                (typeof operationAny.rawAmount === "string" && operationAny.rawAmount.trim().length > 0)
+                  ? operationAny.rawAmount.trim()
+                  : (resolvedAmount ?? null);
+              const decimalsForCompute: number | undefined =
+                typeof operationAny.tokenDecimals === "number"
+                  ? operationAny.tokenDecimals
+                  : (typeof operationAny.tokenMetadata?.decimals === "number"
+                      ? operationAny.tokenMetadata.decimals
+                      : undefined);
+              const fieldTypeForCompute: 'decimalPlaces' | 'decimals' =
+                operationAny.tokenMetadata?.fieldType === 'decimalPlaces' ? 'decimalPlaces' : 'decimals';
+              let normalizedAmountClient: string | null = null;
+              if (rawForCompute && typeof decimalsForCompute === 'number') {
+                try {
+                  normalizedAmountClient = formatTokenAmountPlain(rawForCompute, decimalsForCompute, fieldTypeForCompute, decimalsForCompute);
+                  try { console.debug('[ExplorerTable] normalized client amount', { rawForCompute, decimalsForCompute, fieldTypeForCompute, out: normalizedAmountClient }); } catch {}
+                } catch (e) {
+                  try { console.warn('[ExplorerTable] normalize failed', { error: (e as Error)?.message }); } catch {}
+                  normalizedAmountClient = null;
+                }
+              }
               const amountDisplay =
-                (amountWithoutTicker && amountWithoutTicker.length > 0
-                  ? amountWithoutTicker
-                  : resolvedAmount ?? null);
+                (normalizedAmountClient && normalizedAmountClient.length > 0
+                  ? normalizedAmountClient
+                  : (amountWithoutTicker && amountWithoutTicker.length > 0
+                      ? amountWithoutTicker
+                      : resolvedAmount ?? null));
 
               // Enhanced token candidate extraction with better debugging
               const tokenCandidates = [
