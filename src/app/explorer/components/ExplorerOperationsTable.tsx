@@ -156,8 +156,14 @@ export default function ExplorerOperationsTable({
   const sortedOperations = useMemo(() => {
     const copy = operations.slice();
     copy.sort((a, b) => {
-      const ad = parseExplorerDate(a.block.date)?.getTime() ?? 0;
-      const bd = parseExplorerDate(b.block.date)?.getTime() ?? 0;
+      const at = typeof (a as any).blockTimestamp === 'number'
+        ? (a as any).blockTimestamp as number
+        : (parseExplorerDate(a.block.date)?.getTime() ?? 0);
+      const bt = typeof (b as any).blockTimestamp === 'number'
+        ? (b as any).blockTimestamp as number
+        : (parseExplorerDate(b.block.date)?.getTime() ?? 0);
+      const ad = at;
+      const bd = bt;
       if (bd !== ad) return bd - ad;
       const ah = (a.block.$hash || '').toString();
       const bh = (b.block.$hash || '').toString();
@@ -272,6 +278,7 @@ export default function ExplorerOperationsTable({
               const showOnlyFrom = false;
               const relative = formatRelativeTime(summary.timestamp) ?? "—";
               const absolute = summary.timestamp ? summary.timestamp.toISOString() : null;
+              const rowKey = (operation as any).rowId ?? `${operation.block.$hash}:${idx}`;
 
               const primaryOp = operation.operation ?? {};
               const sendOp = operation.operationSend ?? {};
@@ -414,7 +421,7 @@ export default function ExplorerOperationsTable({
 
               return (
                 <TableRow
-                  key={`${operation.block.$hash}-${operation.type}-${operation.from ?? ''}-${operation.to ?? ''}-${operation.amount ?? ''}`}
+                  key={rowKey}
                   className="border-hairline text-sm text-foreground"
                 >
                   <TableCell className="px-6 py-4 w-[220px] align-top">

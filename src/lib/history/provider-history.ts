@@ -289,6 +289,7 @@ export function normalizeHistoryRecords(
   const blocksToFetch = new Set<string>();
   const seenKeys = new Set<string>();
   const accountKey = typeof account === "string" ? account : "";
+  const blockCounters = new Map<string, number>();
 
   const isFeeLike = (op: any): boolean => {
     const t1 = typeof op?.operationType === "string" ? op.operationType.toUpperCase() : "";
@@ -614,7 +615,14 @@ export function normalizeHistoryRecords(
     }
     seenKeys.add(dedupeKey);
 
+    const currentIndex = (blockCounters.get(blockHash) ?? 0) + 1;
+    blockCounters.set(blockHash, currentIndex);
+    const rowId = `${blockHash}:${currentIndex}`;
+
     const enriched: ExplorerOperation = { ...baseOperation, type: finalType };
+    (enriched as any).rowId = rowId;
+    (enriched as any).blockTimestamp = typeof blockTimestampMs === "number" ? blockTimestampMs : (enriched as any).blockTimestamp;
+    (enriched as any).tokenLookupId = tokenLookupId || undefined;
 
     // Additional debug payload to inspect normalization when amounts look unnormalized
     try {

@@ -2,7 +2,7 @@
 
 import type { CSSProperties, JSX } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useInfiniteQuery, type InfiniteData } from "@tanstack/react-query";
+import { useInfiniteQuery, useQueryClient, type InfiniteData } from "@tanstack/react-query";
 import { z } from "zod";
 
 import ExplorerOperationsTable from "@/app/explorer/components/ExplorerOperationsTable";
@@ -52,7 +52,9 @@ function toCachedTokenMeta(entry: TokenMetadataEntry): CachedTokenMeta {
 }
 
 export default function HistoryPage(): JSX.Element {
+  const queryClient = useQueryClient();
   const { publicKey, wallet } = useWallet();
+
   const [isClient, setIsClient] = useState(false);
   const [tokenMetadata, setTokenMetadata] = useState<Record<string, CachedTokenMeta>>({});
   const [blockTimestamps, setBlockTimestamps] = useState<Map<string, string>>(() => new Map());
@@ -60,6 +62,7 @@ export default function HistoryPage(): JSX.Element {
   const fetchingBlocks = useRef<Set<string>>(new Set());
   const blockAttempts = useRef<Map<string, number>>(new Map());
   const [retryTick, setRetryTick] = useState(0);
+  const [gateActive, setGateActive] = useState(true);
 
   useEffect(() => {
     setIsClient(true);
@@ -73,8 +76,18 @@ export default function HistoryPage(): JSX.Element {
   }, [accountKey]);
 
   useEffect(() => {
+    if (!isClient) return;
+    if (!accountKey) return;
+    queryClient.removeQueries({ queryKey: ["history", accountKey] });
+  }, [queryClient, isClient, accountKey]);
+
+  useEffect(() => {
     setBlockTimestamps(new Map());
     fetchingBlocks.current.clear();
+  }, [accountKey]);
+
+  useEffect(() => {
+    setGateActive(true);
   }, [accountKey]);
 
   const capabilityProvider = useMemo(() => {
@@ -153,6 +166,10 @@ export default function HistoryPage(): JSX.Element {
         : (hasHistoryCapability && !capabilityLoading)
     );
 
+  useEffect(() => {
+    if (enableHistoryQuery) setGateActive(true);
+  }, [enableHistoryQuery]);
+
   const historyQuery = useInfiniteQuery<
     ProviderHistoryPage,
     Error,
@@ -173,14 +190,16 @@ export default function HistoryPage(): JSX.Element {
     getNextPageParam: (lastPage) => (lastPage.hasMore ? lastPage.cursor : undefined),
     staleTime: 15_000,
     gcTime: 5 * 60 * 1000,
-    refetchOnMount: "always",
-    refetchOnWindowFocus: "always",
-    refetchOnReconnect: "always",
+    refetchOnMount: (q) => !q.state.data,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
   });
 
   const { data, fetchNextPage, hasNextPage = false, isFetchingNextPage, isLoading, isError } = historyQuery;
 
   const pages = useMemo(() => data?.pages ?? [], [data]);
+
+  
 
   const allRecords = useMemo(
     () =>
@@ -407,6 +426,55 @@ export default function HistoryPage(): JSX.Element {
     });
   }, [normalized.operations, blockTimestamps]);
 
+  const firstPageReady = useMemo(() => {
+    const sortTime = (op: any): number =>
+      typeof (op as any)?.blockTimestamp === "number"
+        ? (op as any).blockTimestamp as number
+        : ((op as any)?.block?.date ? new Date((op as any).block.date as string).getTime() : 0) || 0;
+    const sorted = hydratedOperations.slice().sort((a: any, b: any) => sortTime(b) - sortTime(a));
+    const page = sorted.slice(0, 10);
+    for (const op of page) {
+      const hasTs = typeof (op as any)?.blockTimestamp === "number"
+        || (((op as any)?.block?.placeholderDate !== true)
+          && (op as any)?.block?.date
+          && !Number.isNaN(new Date((op as any).block.date as string).getTime()));
+      const tokenId = (op as any)?.tokenLookupId as string | undefined;
+      let hasMeta = true;
+      if (tokenId && tokenId !== "base") {
+        const dec = typeof (op as any)?.tokenDecimals === "number"
+          || typeof ((op as any)?.tokenMetadata?.decimals) === "number";
+        const ft = (op as any)?.tokenMetadata?.fieldType;
+        const hasFieldType = ft === "decimalPlaces" || ft === "decimals";
+        hasMeta = dec && hasFieldType;
+      }
+      if (!hasTs || !hasMeta) return false;
+    }
+    return true;
+  }, [hydratedOperations]);
+
+  useEffect(() => {
+    let timer: number | undefined;
+    const busy = historyQuery.fetchStatus === "fetching"
+      || historyQuery.isRefetching
+      || capabilityLoading
+      || hydratedOperations.length === 0
+      || !firstPageReady;
+    if (busy) {
+      setGateActive(true);
+    } else {
+      if (typeof window !== "undefined") {
+        timer = window.setTimeout(() => setGateActive(false), 200);
+      } else {
+        setGateActive(false);
+      }
+    }
+    return () => {
+      if (typeof window !== "undefined" && timer) {
+        window.clearTimeout(timer);
+      }
+    };
+  }, [historyQuery.fetchStatus, historyQuery.isRefetching, capabilityLoading, hydratedOperations.length, firstPageReady]);
+
   useEffect(() => {
     if (!blockTimestamps.size) {
       return;
@@ -458,7 +526,8 @@ export default function HistoryPage(): JSX.Element {
   }, [requestHistoryCapability]);
 
   const tableLoading =
-    !awaitingWallet && hasHistoryCapability && (isLoading || capabilityLoading) && hydratedOperations.length === 0;
+    (!awaitingWallet && hasHistoryCapability && (isLoading || capabilityLoading) && hydratedOperations.length === 0)
+    || gateActive;
 
   const statusContent = (() => {
     if (awaitingWallet) {
@@ -507,7 +576,7 @@ export default function HistoryPage(): JSX.Element {
               </header>
 
               <div className="flex flex-1 flex-col overflow-hidden">
-                {statusContent ? (
+                {(!gateActive && statusContent) ? (
                   <div className="flex h-full items-center justify-center rounded-xl border border-hairline bg-[color:color-mix(in_oklab,var(--foreground)_6%,transparent)] px-6 py-8 text-sm text-muted">
                     {statusContent}
                   </div>
@@ -515,7 +584,7 @@ export default function HistoryPage(): JSX.Element {
                   <div className="flex flex-1 flex-col gap-4 overflow-hidden">
                     <div className="shrink-0">
                       <ExplorerOperationsTable
-                        operations={hydratedOperations}
+                        operations={gateActive ? [] : hydratedOperations}
                         participantsMode="smart"
                         loading={tableLoading}
                         emptyLabel="No history found."
