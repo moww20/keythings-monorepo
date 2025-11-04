@@ -12,10 +12,10 @@ interface RFQUnifiedPanelProps {
 
 export function RFQUnifiedPanel({ mode, onModeChange, onPairChange }: RFQUnifiedPanelProps): React.JSX.Element {
   return (
-    <div className="flex h-full flex-col rounded-lg border border-hairline bg-surface">
+    <div className="flex h-full flex-col glass rounded-lg border border-hairline bg-surface">
       {/* Unified Sticky Tab Navigation */}
       <div className="sticky top-0 z-10 border-b border-hairline bg-surface/95 backdrop-blur">
-        <div className="flex items-center gap-0 px-4">
+        <div className="flex items-center gap-0 px-4 md:px-6">
           <button
             type="button"
             onClick={() => onModeChange('rfq_taker')}
@@ -56,7 +56,7 @@ export function RFQUnifiedPanel({ mode, onModeChange, onPairChange }: RFQUnified
       </div>
 
       {/* Content Area */}
-      <div className="flex-1 overflow-y-auto p-4">
+      <div className="flex-1 overflow-y-auto p-4 md:p-6">
         {mode === 'rfq_taker' && (
           <RFQTakerPanel mode={mode} onModeChange={onModeChange} onPairChange={onPairChange} hideInternalTabs />
         )}

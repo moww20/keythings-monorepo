@@ -57,7 +57,7 @@ export function RFQDepthChart(): React.JSX.Element {
   const maxCumulative = useMemo(() => Math.max(...rows.map((row) => row.cumulative), 1), [rows]);
 
   return (
-    <div className="rounded-lg border border-hairline bg-surface p-4">
+    <div className="glass rounded-lg border border-hairline p-4 md:p-6">
       <h2 className="text-lg font-semibold text-foreground">Depth Snapshot</h2>
       <p className="text-xs text-muted">Aggregated RFQ size by price level.</p>
       <div className="mt-4 space-y-2 text-xs text-muted">

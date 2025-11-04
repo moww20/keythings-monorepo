@@ -4,6 +4,43 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 
 export type TradingViewTimeframe = '1s' | '15m' | '1H' | '4H' | '1D' | '1W';
 
+type ChartTimeframe = '1D' | '7D' | '30D' | '90D';
+
+interface ChartCandle {
+  time: number;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+}
+
+interface ChartResponse {
+  pair: string;
+  timeframe: ChartTimeframe;
+  granularitySeconds: number;
+  updatedAt: string;
+  source: string;
+  candles: ChartCandle[];
+}
+
+interface TradingViewBar {
+  time: number;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+}
+
+interface CachedChart {
+  timeframe: ChartTimeframe;
+  fetchedAt: number;
+  bars: TradingViewBar[];
+  granularityMs: number;
+  ttlMs: number;
+}
+
 export interface TradingViewChartProps {
   pair: string;
   timeframe?: TradingViewTimeframe;
@@ -21,6 +58,17 @@ declare global {
     TradingView: any;
   }
 }
+
+const timeframeMap: Record<TradingViewTimeframe, ChartTimeframe> = {
+  '1s': '1D',
+  '15m': '1D',
+  '1H': '7D',
+  '4H': '30D',
+  '1D': '30D',
+  '1W': '90D',
+};
+
+const DEFAULT_REFRESH_MS = 60_000;
 
 function getTradingViewInterval(timeframe: TradingViewTimeframe): string {
   switch (timeframe) {
@@ -40,6 +88,20 @@ function getTradingViewInterval(timeframe: TradingViewTimeframe): string {
   }
 }
 
+async function fetchChartData(timeframe: ChartTimeframe): Promise<ChartResponse> {
+  const params = new URLSearchParams({ timeframe });
+  const response = await fetch(`/api/market-data/kta-usdt?${params.toString()}`, {
+    cache: 'no-store',
+  });
+
+  if (!response.ok) {
+    throw new Error(`Chart data request failed with status ${response.status}`);
+  }
+
+  const payload = (await response.json()) as ChartResponse;
+  return payload;
+}
+
 export function TradingViewChart({
   pair,
   timeframe = '1D',
@@ -49,10 +111,18 @@ export function TradingViewChart({
   const containerRef = useRef<HTMLDivElement>(null);
   const widgetRef = useRef<TradingViewWidget | null>(null);
   const retryCountRef = useRef(0);
+  const chartCacheRef = useRef<CachedChart | null>(null);
+  const inflightRef = useRef<Promise<CachedChart> | null>(null);
+  const lastEmittedRef = useRef<TradingViewBar | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isMounted, setIsMounted] = useState(false);
   const symbol = useMemo(() => pair.replace('/', ''), [pair]);
+  const containerId = useMemo(
+    () => `tv-chart-${symbol.toLowerCase()}-${Math.random().toString(36).slice(2, 8)}`,
+    [symbol],
+  );
+  const queryTimeframe = useMemo(() => timeframeMap[timeframe] ?? '1D', [timeframe]);
 
   useEffect(() => {
     setIsMounted(true);
@@ -161,10 +231,62 @@ export function TradingViewChart({
           return;
         }
 
+        const toTradingViewBars = (candles: ChartCandle[]): TradingViewBar[] =>
+          candles.map((candle) => ({
+            time: candle.time,
+            open: candle.open,
+            high: candle.high,
+            low: candle.low,
+            close: candle.close,
+            volume: candle.volume,
+          }));
+
+        const loadBars = async (): Promise<CachedChart> => {
+          const now = Date.now();
+          const cached = chartCacheRef.current;
+          if (cached && cached.timeframe === queryTimeframe && now - cached.fetchedAt < cached.ttlMs) {
+            return cached;
+          }
+
+          if (inflightRef.current) {
+            try {
+              const inflight = await inflightRef.current;
+              if (inflight.timeframe === queryTimeframe) {
+                return inflight;
+              }
+            } catch (inflightError) {
+              console.warn('TradingViewChart: inflight request failed, refetching', inflightError);
+            }
+          }
+
+          const request = fetchChartData(queryTimeframe)
+            .then((chart) => {
+              const bars = toTradingViewBars(chart.candles);
+              const granularityMs = Math.max(chart.granularitySeconds * 1000, DEFAULT_REFRESH_MS);
+              const ttlMs = Math.max(granularityMs, 45_000);
+              const cachedChart: CachedChart = {
+                timeframe: queryTimeframe,
+                fetchedAt: Date.now(),
+                bars,
+                granularityMs,
+                ttlMs,
+              };
+              chartCacheRef.current = cachedChart;
+              setError(null);
+              return cachedChart;
+            })
+            .finally(() => {
+              inflightRef.current = null;
+            });
+
+          inflightRef.current = request;
+          return request;
+        };
+
         const widget = new window.TradingView.widget({
           symbol,
           interval: getTradingViewInterval(timeframe),
-          container,
+          container_id: containerId,
           autosize: true,
           locale: 'en',
           theme: 'dark',
@@ -229,33 +351,25 @@ export function TradingViewChart({
             getBars: (
               _symbolInfo: any,
               _resolution: string,
-              periodParams: any,
+              _periodParams: any,
               onHistoryCallback: any,
               onErrorCallback: any,
             ) => {
-              try {
-                const { from, to } = periodParams ?? {};
-                const bars = [] as Array<{ time: number; open: number; high: number; low: number; close: number; volume: number }>;
-                const now = Date.now();
-                const start = typeof from === 'number' ? from * 1000 : now - 1000 * 60 * 60 * 24;
-                const end = typeof to === 'number' ? to * 1000 : now;
-                const step = Math.max(Math.floor((end - start) / 50), 60_000);
-
-                for (let t = start; t <= end; t += step) {
-                  const base = Math.sin(t / 1000000) * 5 + 50;
-                  const open = base + Math.random();
-                  const close = open + (Math.random() - 0.5) * 2;
-                  const high = Math.max(open, close) + Math.random() * 2;
-                  const low = Math.min(open, close) - Math.random() * 2;
-                  const volume = Math.abs(Math.random() * 1000);
-                  bars.push({ time: Math.floor(t / 1000), open, high, low, close, volume });
-                }
-
-                onHistoryCallback(bars, { noData: false });
-              } catch (barsError) {
-                console.error('Failed to generate mock bars', barsError);
-                onErrorCallback?.(barsError);
-              }
+              loadBars()
+                .then((cachedChart) => {
+                  const { bars } = cachedChart;
+                  if (bars.length === 0) {
+                    onHistoryCallback([], { noData: true });
+                    return;
+                  }
+                  lastEmittedRef.current = bars[bars.length - 1];
+                  onHistoryCallback(bars, { noData: false });
+                })
+                .catch((barsError) => {
+                  console.error('Failed to load chart data', barsError);
+                  setError('Failed to load chart data');
+                  onErrorCallback?.(barsError);
+                });
             },
             subscribeBars: (
               _symbolInfo: any,
@@ -264,16 +378,39 @@ export function TradingViewChart({
               subscribeUID: string,
               _onResetCacheNeededCallback: any,
             ) => {
+              const scheduleMs = () => chartCacheRef.current?.granularityMs ?? DEFAULT_REFRESH_MS;
+
+              const tick = async () => {
+                try {
+                  const cachedChart = await loadBars();
+                  const { bars } = cachedChart;
+                  if (bars.length > 0) {
+                    const lastBar = bars[bars.length - 1];
+                    const previous = lastEmittedRef.current;
+                    const changed =
+                      !previous ||
+                      previous.time !== lastBar.time ||
+                      previous.open !== lastBar.open ||
+                      previous.high !== lastBar.high ||
+                      previous.low !== lastBar.low ||
+                      previous.close !== lastBar.close ||
+                      previous.volume !== lastBar.volume;
+
+                    if (changed) {
+                      lastEmittedRef.current = lastBar;
+                      onRealtimeCallback(lastBar);
+                    }
+                  }
+                } catch (tickError) {
+                  console.error('Failed to refresh chart data', tickError);
+                }
+              };
+
               const interval = window.setInterval(() => {
-                const time = Math.floor(Date.now() / 1000);
-                const base = Math.sin(Date.now() / 1000000) * 5 + 50;
-                const open = base + Math.random();
-                const close = open + (Math.random() - 0.5) * 2;
-                const high = Math.max(open, close) + Math.random() * 2;
-                const low = Math.min(open, close) - Math.random() * 2;
-                const volume = Math.abs(Math.random() * 1000);
-                onRealtimeCallback({ time, open, high, low, close, volume });
-              }, 5000);
+                void tick();
+              }, scheduleMs());
+
+              void tick();
 
               (widget as any)._intervals = (widget as any)._intervals || {};
               (widget as any)._intervals[subscribeUID] = interval;
@@ -333,7 +470,7 @@ export function TradingViewChart({
         widgetRef.current = null;
       }
     };
-  }, [error, isLoading, symbol, timeframe, isMounted]);
+  }, [error, isLoading, symbol, timeframe, queryTimeframe, isMounted]);
 
   if (isLoading) {
     return (
@@ -353,7 +490,7 @@ export function TradingViewChart({
 
   return (
     <div className={`${className} min-h-[400px]`}>
-      <div ref={containerRef} className="h-full w-full" />
+      <div id={containerId} ref={containerRef} className="h-full w-full" />
     </div>
   );
 }

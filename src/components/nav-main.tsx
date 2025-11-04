@@ -47,7 +47,7 @@ export function NavMain({
                   <div className="flex items-center gap-2">
                     {item.icon && <item.icon />}
                     <span>{item.title}</span>
-                    {item.title === "Network Analytics" && (
+                    {(item.title === "Network Analytics" || item.title === "Token Sniffer") && (
                       <span className="ml-1 rounded-full border border-hairline bg-surface px-1.5 py-0.5 text-[10px] font-medium text-muted">
                         soon
                       </span>

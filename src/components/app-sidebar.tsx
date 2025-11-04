@@ -50,6 +50,7 @@ const data = {
       title: "Token Sniffer",
       url: "/tokens",
       icon: Coins,
+      disabled: true,
     },
     {
       title: "Network Analytics",
@@ -70,10 +71,17 @@ const data = {
       url: "/receive",
       disabled: true,
     },
+  ],
+  navListings: [
     {
-      name: "Request for Quote",
-      icon: ArrowLeftRight,
+      title: "Browse Listings",
       url: "/trade",
+      icon: Coins,
+    },
+    {
+      title: "List a Token",
+      url: "/listings/new",
+      icon: ArrowLeftRight,
     },
   ],
   navSecondary: [
@@ -202,6 +210,10 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         <div className="px-2 py-1">
           <h2 className="mb-2 text-xs font-semibold text-muted tracking-wider">Network</h2>
           <NavMain items={data.navNetwork} />
+        </div>
+        <div className="px-2 py-1">
+          <h2 className="mb-2 text-xs font-semibold text-muted tracking-wider">Listings</h2>
+          <NavMain items={data.navListings} />
         </div>
         <div className="px-2 py-1">
           <h2 className="mb-2 text-xs font-semibold text-muted tracking-wider">Transactions</h2>
