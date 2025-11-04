@@ -69,6 +69,11 @@ export default function HistoryPage(): JSX.Element {
     fetchingTokenMeta.current.clear();
   }, [accountKey]);
 
+  useEffect(() => {
+    setBlockTimestamps(new Map());
+    fetchingBlocks.current.clear();
+  }, [accountKey]);
+
   const capabilityProvider = useMemo(() => {
     if (!isClient || !wallet.connected || wallet.isLocked) {
       return null;
@@ -163,10 +168,11 @@ export default function HistoryPage(): JSX.Element {
       });
     },
     getNextPageParam: (lastPage) => (lastPage.hasMore ? lastPage.cursor : undefined),
-    staleTime: Infinity,
-    gcTime: 24 * 60 * 60 * 1000,
-    refetchOnMount: false,
-    refetchOnWindowFocus: false,
+    staleTime: 15_000,
+    gcTime: 5 * 60 * 1000,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: "always",
+    refetchOnReconnect: "always",
   });
 
   const { data, fetchNextPage, hasNextPage = false, isFetchingNextPage, isLoading, isError } = historyQuery;
