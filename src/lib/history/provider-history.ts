@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { coerceString as sx, resolveDate } from "@/lib/explorer/mappers";
+import { coerceString as sx, resolveDate, resolveTimestampMs } from "@/lib/explorer/mappers";
 import { parseExplorerOperation } from "@/lib/explorer/client";
 import { parseTokenMetadata, formatTokenAmount } from "@/app/explorer/utils/token-metadata";
 import { getCachedTokenMetadata as getGlobalCachedTokenMetadata } from "@/lib/tokens/metadata-service";
@@ -379,6 +379,17 @@ export function normalizeHistoryRecords(
     const isPlaceholderDate = normalizedBlockDate === undefined;
     const fallbackDate = normalizedBlockDate ?? null;
 
+    const blockTimestampMs = resolveTimestampMs(
+      op.date,
+      op.block?.date,
+      (op.block as any)?.createdAt,
+      record?.timestamp,
+      record?.date,
+      record?.createdAt,
+      (record?.block as any)?.date,
+      (record?.block as any)?.createdAt,
+    );
+
     const block = {
       $hash: blockHash,
       date: fallbackDate,
@@ -395,6 +406,7 @@ export function normalizeHistoryRecords(
       type: normalizedType,
       voteStapleHash: sx(record?.voteStaple?.hash) ?? blockHash,
       block,
+      blockTimestamp: typeof blockTimestampMs === "number" ? blockTimestampMs : undefined,
       operation: { ...op },
       amount: amountCandidate ?? coerceAmountString(op.amount),
       rawAmount: normalizedRawAmount,

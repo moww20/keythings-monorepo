@@ -50,6 +50,31 @@ export function resolveDate(...candidates: unknown[]): string {
   return '';
 }
 
+export function resolveTimestampMs(...candidates: unknown[]): number | null {
+  for (const candidate of candidates) {
+    if (candidate instanceof Date && !Number.isNaN(candidate.getTime())) {
+      return candidate.getTime();
+    }
+    if (typeof candidate === 'number' && Number.isFinite(candidate)) {
+      const ms = candidate < 1_000_000_000_000 ? candidate * 1000 : candidate;
+      const d = new Date(ms);
+      if (!Number.isNaN(d.getTime())) return d.getTime();
+    }
+    if (typeof candidate === 'string') {
+      const trimmed = candidate.trim();
+      if (/^\d+$/.test(trimmed)) {
+        const n = Number(trimmed);
+        const ms = n < 1_000_000_000_000 ? n * 1000 : n;
+        const d = new Date(ms);
+        if (!Number.isNaN(d.getTime())) return d.getTime();
+      }
+      const parsed = new Date(trimmed);
+      if (!Number.isNaN(parsed.getTime())) return parsed.getTime();
+    }
+  }
+  return null;
+}
+
 export type TokenDisplayEntry = {
   publicKey: string;
   name: string | null;

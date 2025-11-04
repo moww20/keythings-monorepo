@@ -24,6 +24,7 @@ import {
   getCachedTokenMetadata,
   type TokenMetadataEntry,
 } from "@/lib/tokens/metadata-service";
+import { parseExplorerDate } from "@/app/explorer/utils/operation-format";
 
 const HISTORY_DEPTH = 50;
 const FALLBACK_MESSAGE = "Connect your Keeta wallet to pull on-chain activity.";
@@ -57,6 +58,8 @@ export default function HistoryPage(): JSX.Element {
   const [blockTimestamps, setBlockTimestamps] = useState<Map<string, string>>(() => new Map());
   const fetchingTokenMeta = useRef<Set<string>>(new Set());
   const fetchingBlocks = useRef<Set<string>>(new Set());
+  const blockAttempts = useRef<Map<string, number>>(new Map());
+  const [retryTick, setRetryTick] = useState(0);
 
   useEffect(() => {
     setIsClient(true);
@@ -255,13 +258,12 @@ export default function HistoryPage(): JSX.Element {
     }
 
     let cancelled = false;
+    let timer: number | undefined;
 
-    void (async () => {
-      const updates = new Map<string, string>();
-
-      for (const hash of pending) {
-        if (!hash) continue;
-        if (fetchingBlocks.current.has(hash)) continue;
+    const run = async () => {
+      const tasks = pending.map(async (hash) => {
+        if (!hash) return { hash: "", iso: null as string | null };
+        if (fetchingBlocks.current.has(hash)) return { hash, iso: null as string | null };
         fetchingBlocks.current.add(hash);
         try {
           const blockData = await getBlock(hash);
@@ -286,9 +288,14 @@ export default function HistoryPage(): JSX.Element {
               : undefined,
           ];
 
-          const timestampCandidate = timestampCandidates.find(
-            (value) => value !== undefined && value !== null,
-          );
+          let iso: string | null = null;
+          for (const candidate of timestampCandidates) {
+            const parsed = parseExplorerDate(candidate as unknown);
+            if (parsed) {
+              iso = parsed.toISOString();
+              break;
+            }
+          }
 
           if (typeof window !== "undefined") {
             const storeObj = ((window as any).__HISTORY_DEBUG_BLOCKS__ ??= {});
@@ -297,36 +304,65 @@ export default function HistoryPage(): JSX.Element {
             }
           }
 
-          if (timestampCandidate) {
-            const parsed = new Date(timestampCandidate);
-            if (!Number.isNaN(parsed.getTime())) {
-              updates.set(hash, parsed.toISOString());
+          return { hash, iso };
+        } catch {
+          return { hash, iso: null as string | null };
+        } finally {
+          fetchingBlocks.current.delete(hash);
+        }
+      });
+
+      const settled = await Promise.allSettled(tasks);
+      const updates = new Map<string, string>();
+      const unresolved: string[] = [];
+      for (const s of settled) {
+        if (s.status === "fulfilled") {
+          const r = s.value;
+          if (r && r.hash && r.iso) {
+            updates.set(r.hash, r.iso);
+          } else if (r && r.hash) {
+            unresolved.push(r.hash);
+          }
+        }
+      }
+
+      if (!cancelled && updates.size > 0) {
+        setBlockTimestamps((prev) => {
+          const next = new Map(prev);
+          for (const [hash, iso] of updates.entries()) {
+            if (!next.has(hash)) {
+              next.set(hash, iso);
             }
           }
-        } catch (error) {
-          // ignore block fetch errors
-        }
+          return next;
+        });
       }
 
-      if (cancelled || updates.size === 0) {
-        return;
-      }
-
-      setBlockTimestamps((prev) => {
-        const next = new Map(prev);
-        for (const [hash, iso] of updates.entries()) {
-          if (!next.has(hash)) {
-            next.set(hash, iso);
-          }
-        }
-        return next;
+      const retryable = unresolved.filter((h) => {
+        const count = blockAttempts.current.get(h) ?? 0;
+        return count < 3;
       });
-    })();
+      if (!cancelled && retryable.length > 0) {
+        retryable.forEach((h) => {
+          blockAttempts.current.set(h, (blockAttempts.current.get(h) ?? 0) + 1);
+        });
+        if (typeof window !== "undefined") {
+          timer = window.setTimeout(() => {
+            setRetryTick((t) => t + 1);
+          }, 1500);
+        }
+      }
+    };
+
+    void run();
 
     return () => {
       cancelled = true;
+      if (typeof window !== "undefined" && timer) {
+        window.clearTimeout(timer);
+      }
     };
-  }, [normalized.blocksToFetch, blockTimestamps]);
+  }, [normalized.blocksToFetch, blockTimestamps, retryTick]);
 
   const hydratedOperations = useMemo(() => {
     if (!blockTimestamps.size) {

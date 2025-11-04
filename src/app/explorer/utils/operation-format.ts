@@ -189,12 +189,12 @@ export function summarizeOperation(operation: ExplorerOperation): OperationSumma
     return null;
   };
   const timestamp = pickParsedDate(
+    (operation as any)?.blockTimestamp,
+    (operation as any)?.timestamp,
     (operation.block as any)?.date,
     (operation.block as any)?.createdAt,
-    (operation as any)?.timestamp,
     (operation as any)?.date,
     (operation as any)?.createdAt,
-    (operation as any)?.blockTimestamp,
     (operation.operation as any)?.date,
     (operation.operation as any)?.timestamp,
   );
