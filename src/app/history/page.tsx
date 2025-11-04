@@ -15,6 +15,7 @@ import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import {
   fetchProviderHistory,
   normalizeHistoryRecords,
+  groupOperationsByBlock,
   type CachedTokenMeta,
   type ProviderHistoryPage,
 } from "@/lib/history/provider-history";
@@ -384,46 +385,50 @@ export default function HistoryPage(): JSX.Element {
   }, [normalized.blocksToFetch, blockTimestamps, retryTick]);
 
   const hydratedOperations = useMemo(() => {
-    if (!blockTimestamps.size) {
-      return normalized.operations;
+    let operations = normalized.operations;
+
+    // Hydrate block timestamps
+    if (blockTimestamps.size > 0) {
+      operations = operations.map((operation) => {
+        const block = operation.block;
+        if (!block) {
+          return operation;
+        }
+
+        const blockHash = block.$hash;
+        if (!blockHash) {
+          return operation;
+        }
+
+        const isPlaceholder = (block as any)?.placeholderDate === true;
+        const hasValidDate = (() => {
+          if (!block.date) return false;
+          const parsed = new Date(block.date as string);
+          return !Number.isNaN(parsed.getTime());
+        })();
+
+        if (!isPlaceholder && hasValidDate) {
+          return operation;
+        }
+
+        const replacementDate = blockTimestamps.get(blockHash);
+        if (!replacementDate) {
+          return operation;
+        }
+
+        return {
+          ...operation,
+          block: {
+            ...block,
+            date: replacementDate,
+            placeholderDate: false,
+          },
+        };
+      });
     }
 
-    return normalized.operations.map((operation) => {
-      const block = operation.block;
-      if (!block) {
-        return operation;
-      }
-
-      const blockHash = block.$hash;
-      if (!blockHash) {
-        return operation;
-      }
-
-      const isPlaceholder = (block as any)?.placeholderDate === true;
-      const hasValidDate = (() => {
-        if (!block.date) return false;
-        const parsed = new Date(block.date as string);
-        return !Number.isNaN(parsed.getTime());
-      })();
-
-      if (!isPlaceholder && hasValidDate) {
-        return operation;
-      }
-
-      const replacementDate = blockTimestamps.get(blockHash);
-      if (!replacementDate) {
-        return operation;
-      }
-
-      return {
-        ...operation,
-        block: {
-          ...block,
-          date: replacementDate,
-          placeholderDate: false,
-        },
-      };
-    });
+    // Group operations by blockhash
+    return groupOperationsByBlock(operations);
   }, [normalized.operations, blockTimestamps]);
 
   const firstPageReady = useMemo(() => {

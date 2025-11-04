@@ -295,6 +295,11 @@ export default function ExplorerOperationsTable({
               const enrichedFormattedAmount = typeof operationAny.formattedAmount === "string" && operationAny.formattedAmount.trim().length > 0
                 ? operationAny.formattedAmount.trim()
                 : null;
+              // Detect grouped/combined rows and multi-token formatted output
+              const isGroupedCombined: boolean = operationAny.groupedCombined === true;
+              const isMultiToken: boolean = isGroupedCombined 
+                || (operationAny?.tokenMetadata?.name === 'Multiple tokens')
+                || (typeof enrichedFormattedAmount === 'string' && enrichedFormattedAmount.includes(' + '));
               
               // Extract ticker from multiple sources
               const enrichedTicker = typeof operationAny.tokenTicker === "string" && operationAny.tokenTicker.trim().length > 0
@@ -314,7 +319,7 @@ export default function ExplorerOperationsTable({
 
               // Try to extract ticker from formatted amount if no ticker found
               let extractedTicker = tickerLabel;
-              if (!extractedTicker && enrichedFormattedAmount) {
+              if (!extractedTicker && enrichedFormattedAmount && !isMultiToken) {
                 const match = enrichedFormattedAmount.match(/\s+([A-Z]{2,10})$/);
                 if (match) {
                   extractedTicker = match[1];
@@ -322,7 +327,7 @@ export default function ExplorerOperationsTable({
               }
               
               const amountWithoutTicker = enrichedFormattedAmount
-                ? enrichedFormattedAmount.replace(/\s+[A-Z]{2,10}$/u, '').trim()
+                ? (isMultiToken ? enrichedFormattedAmount : enrichedFormattedAmount.replace(/\s+[A-Z]{2,10}$/u, '').trim())
                 : null;
               // Prefer client-side normalized amount if we have rawAmount + decimals
               const rawForCompute: string | null =
@@ -338,7 +343,7 @@ export default function ExplorerOperationsTable({
               const fieldTypeForCompute: 'decimalPlaces' | 'decimals' =
                 operationAny.tokenMetadata?.fieldType === 'decimalPlaces' ? 'decimalPlaces' : 'decimals';
               let normalizedAmountClient: string | null = null;
-              if (rawForCompute && typeof decimalsForCompute === 'number') {
+              if (!isMultiToken && rawForCompute && typeof decimalsForCompute === 'number') {
                 try {
                   normalizedAmountClient = formatTokenAmountPlain(rawForCompute, decimalsForCompute, fieldTypeForCompute, decimalsForCompute);
                   try { console.debug('[ExplorerTable] normalized client amount', { rawForCompute, decimalsForCompute, fieldTypeForCompute, out: normalizedAmountClient }); } catch {}
@@ -347,8 +352,9 @@ export default function ExplorerOperationsTable({
                   normalizedAmountClient = null;
                 }
               }
-              const amountDisplay =
-                (normalizedAmountClient && normalizedAmountClient.length > 0
+              const amountDisplay = isMultiToken && enrichedFormattedAmount
+                ? enrichedFormattedAmount
+                : ((normalizedAmountClient && normalizedAmountClient.length > 0)
                   ? normalizedAmountClient
                   : (amountWithoutTicker && amountWithoutTicker.length > 0
                       ? amountWithoutTicker
@@ -413,7 +419,7 @@ export default function ExplorerOperationsTable({
               }
               
               // Enhanced logic for determining when to show "Unknown token"
-              const hasTokenMetadata = Boolean(metadataName || extractedTicker);
+              const hasTokenMetadata = Boolean(metadataName || extractedTicker || isMultiToken);
               const hasTokenIdentifier = Boolean(tokenLink || shortIdentifier);
               const hasValidTokenInfo = hasTokenMetadata || hasTokenIdentifier;
               

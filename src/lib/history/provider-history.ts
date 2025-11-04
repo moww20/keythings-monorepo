@@ -799,15 +799,59 @@ export function normalizeHistoryRecords(
   };
 }
 
+// Zod schema for validating operations before grouping
+const ExplorerOperationGroupingSchema = z.object({
+  type: z.string(),
+  block: z.object({
+    $hash: z.string(),
+    date: z.union([z.string(), z.date()]).optional(),
+    account: z.string().optional(),
+  }).passthrough().nullable().optional(),
+  rawAmount: z.union([z.string(), z.number(), z.bigint()]).optional(),
+  amount: z.union([z.string(), z.number(), z.bigint()]).optional(),
+  formattedAmount: z.string().optional(),
+  token: z.string().optional(),
+  tokenAddress: z.string().optional(),
+  tokenTicker: z.string().optional(),
+  tokenDecimals: z.number().optional(),
+  tokenMetadata: z.unknown().optional(),
+  from: z.string().optional(),
+  to: z.string().optional(),
+  operation: z.unknown().optional(),
+  blockTimestamp: z.number().optional(),
+  rowId: z.string().optional(),
+  tokenLookupId: z.string().optional(),
+}).passthrough();
+
 export function groupOperationsByBlock(baseOperations: ExplorerOperation[]): ExplorerOperation[] {
   if (baseOperations.length === 0) {
     return [];
   }
 
+  // Validate operations with Zod before grouping
+  const validatedOperations = baseOperations
+    .map((op) => {
+      const result = ExplorerOperationGroupingSchema.safeParse(op);
+      if (!result.success) {
+        return null;
+      }
+      // Additional validation: require either block.$hash or block to be null/undefined for orphans
+      if (!op.block || typeof op.block !== "object" || !op.block.$hash) {
+        // Orphan operation - allow it
+        return op;
+      }
+      // Must have block.$hash for grouping
+      if (typeof op.block.$hash !== "string" || op.block.$hash.length === 0) {
+        return null;
+      }
+      return op;
+    })
+    .filter((op): op is ExplorerOperation => op !== null);
+
   const byHash = new Map<string, ExplorerOperation[]>();
   const orphans: ExplorerOperation[] = [];
 
-  for (const op of baseOperations) {
+  for (const op of validatedOperations) {
     const hash =
       (op.block && typeof op.block.$hash === "string" ? op.block.$hash : undefined) ??
       ((op as any)?.hash as string | undefined);
@@ -845,6 +889,8 @@ export function groupOperationsByBlock(baseOperations: ExplorerOperation[]): Exp
     let net: bigint = BigInt(0);
     let firstSend: ExplorerOperation | null = null;
     let firstReceive: ExplorerOperation | null = null;
+    let latestTimestamp: number | undefined;
+    let firstRowId: string | undefined;
 
     for (const op of ops) {
       const t = (op.type || "").toUpperCase();
@@ -853,25 +899,70 @@ export function groupOperationsByBlock(baseOperations: ExplorerOperation[]): Exp
       const amt = raw * sign;
       net += amt;
 
-      const tokenKey =
-        (op as any).token ||
-        (op as any).tokenAddress ||
-        ((op as any).operation as any)?.token ||
-        (op as any).tokenTicker ||
-        BASE_TOKEN_TICKER;
+      // Preserve blockTimestamp (use latest for sorting)
+      const opTimestamp = (op as any).blockTimestamp;
+      if (typeof opTimestamp === "number") {
+        if (latestTimestamp === undefined || opTimestamp > latestTimestamp) {
+          latestTimestamp = opTimestamp;
+        }
+      }
+
+      // Preserve first rowId for React key
+      if (!firstRowId && typeof (op as any).rowId === "string") {
+        firstRowId = (op as any).rowId;
+      }
+
+      // Prefer a stable lookup id computed during normalization to ensure
+      // identical tokens are summed together even if fields differ per op
+      let tokenKey = (op as any).tokenLookupId as string | undefined;
+      
+      // Normalize empty string to undefined
+      if (tokenKey === "") {
+        tokenKey = undefined;
+      }
+      
+      const opTicker = (op as any).tokenTicker as string | undefined;
+      
+      // If tokenLookupId is not available, try to construct a consistent key
+      if (!tokenKey) {
+        // Try to get token address from various fields, normalize them
+        const tokenAddress = 
+          (op as any).tokenAddress ||
+          (op as any).token ||
+          ((op as any).operation as any)?.token;
+        
+        if (tokenAddress && typeof tokenAddress === "string" && tokenAddress.trim().length > 0) {
+          // Use the token address as key (normalize to lowercase for consistency)
+          tokenKey = tokenAddress.trim().toLowerCase();
+        } else if (opTicker && opTicker.toUpperCase() === BASE_TOKEN_TICKER) {
+          // Base token (KTA) always uses "base" as key
+          tokenKey = "base";
+        } else if (opTicker && opTicker.trim().length > 0) {
+          // Fallback to ticker-based key if no address available
+          tokenKey = `ticker:${opTicker.trim().toUpperCase()}`;
+        } else {
+          // Last resort: use "unknown" (shouldn't happen in normal flow)
+          tokenKey = "unknown";
+        }
+      }
+
       const metadata = (op as any).tokenMetadata as Record<string, unknown> | undefined;
-      const decimals = typeof (op as any).tokenDecimals === "number"
+      const inferredDecimals = typeof (op as any).tokenDecimals === "number"
         ? (op as any).tokenDecimals
         : typeof metadata?.decimals === "number"
           ? (metadata.decimals as number)
-          : 8;
+          : undefined;
+      const decimals =
+        typeof inferredDecimals === "number"
+          ? inferredDecimals
+          : (tokenKey === "base" ? BASE_TOKEN_DECIMALS : 8);
       const fieldType = (metadata?.fieldType === "decimalPlaces" || metadata?.fieldType === "decimals")
         ? (metadata.fieldType as "decimalPlaces" | "decimals")
         : "decimals";
       const ticker =
-        (op as any).tokenTicker ||
+        opTicker ||
         (metadata?.ticker as string | undefined) ||
-        BASE_TOKEN_TICKER;
+        (tokenKey === "base" ? BASE_TOKEN_TICKER : BASE_TOKEN_TICKER);
 
       const entry = sums.get(tokenKey) ?? { sum: BigInt(0), decimals, ticker, fieldType };
       entry.sum += amt;
@@ -901,12 +992,41 @@ export function groupOperationsByBlock(baseOperations: ExplorerOperation[]): Exp
         parts.push(`${abs.toString()} ${info.ticker || ""}`.trim());
       }
     }
-    const combined = parts.join(" + ");
+    const combined = parts.length > 0 
+      ? parts.join(" + ") 
+      : (() => {
+          // If all sums are zero, format as "0" with ticker if available
+          const firstToken = ops.find((op) => (op as any).tokenTicker);
+          const ticker = firstToken ? ((firstToken as any).tokenTicker || "UNKNOWN") : "UNKNOWN";
+          return `0 ${ticker}`;
+        })();
 
     const base = ops[0] as any;
     const synthetic: any = { ...base };
-    synthetic.type = net < BigInt(0) ? "SEND" : net > BigInt(0) ? "RECEIVE" : base.type || "Transaction";
+    // When net is zero, default to "Transaction" instead of using base.type
+    synthetic.type = net < BigInt(0) ? "SEND" : net > BigInt(0) ? "RECEIVE" : "Transaction";
     synthetic.formattedAmount = combined || base.formattedAmount || base.amount || base.rawAmount || "";
+
+    // Preserve blockTimestamp for sorting
+    if (latestTimestamp !== undefined) {
+      synthetic.blockTimestamp = latestTimestamp;
+    }
+
+    // Preserve rowId for React key (use blockhash-based id if not present)
+    if (firstRowId) {
+      synthetic.rowId = firstRowId;
+    } else {
+      const blockHash = base.block?.$hash;
+      if (blockHash) {
+        synthetic.rowId = `${blockHash}:grouped`;
+      }
+    }
+
+    // Mark this row as a grouped (combined) summary when there were multiple ops
+    if (ops.length > 1) {
+      synthetic.groupedCombined = true;
+      synthetic.groupedCount = ops.length;
+    }
 
     const pick = net < BigInt(0) ? firstSend : net > BigInt(0) ? firstReceive : ops[0];
     const fromPick = (pick as any)?.from ?? ((pick as any)?.operation as any)?.from;
@@ -934,8 +1054,17 @@ export function groupOperationsByBlock(baseOperations: ExplorerOperation[]): Exp
   }
 
   return [...orphans, ...result].sort((a, b) => {
-    const ta = (a as any)?.block?.date ? new Date((a as any).block.date as string).getTime() : 0;
-    const tb = (b as any)?.block?.date ? new Date((b as any).block.date as string).getTime() : 0;
-    return tb - ta;
+    // Prefer blockTimestamp for sorting if available
+    const at = typeof (a as any)?.blockTimestamp === "number"
+      ? (a as any).blockTimestamp
+      : ((a as any)?.block?.date ? new Date((a as any).block.date as string).getTime() : 0) || 0;
+    const bt = typeof (b as any)?.blockTimestamp === "number"
+      ? (b as any).blockTimestamp
+      : ((b as any)?.block?.date ? new Date((b as any).block.date as string).getTime() : 0) || 0;
+    if (bt !== at) return bt - at;
+    // Secondary sort by blockhash for stability (use optional chaining for orphans)
+    const ah = (a.block?.$hash || "").toString();
+    const bh = (b.block?.$hash || "").toString();
+    return bh.localeCompare(ah);
   });
 }
