@@ -1,12 +1,15 @@
 'use client';
 
-import { useEffect, useState, type CSSProperties } from 'react';
+import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import Link from 'next/link';
 import { AppSidebar } from '@/components/app-sidebar';
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar';
 import type { Listing } from '@/app/types/listing';
 import { ListingFilters } from '@/app/components/listings/ListingFilters';
 import { ListingTable } from '@/app/components/listings/ListingTable';
+import { TradingViewChart, type TradingViewTimeframe } from '@/app/components/TradingViewChart';
+
+const TIMEFRAME_OPTIONS: TradingViewTimeframe[] = ['1H', '4H', '1D', '1W'];
 
 export default function TradePage(): React.JSX.Element {
   const [listings, setListings] = useState<Listing[]>([]);
@@ -15,6 +18,9 @@ export default function TradePage(): React.JSX.Element {
   const [query, setQuery] = useState('');
   const [status, setStatus] = useState('all');
   const [sort, setSort] = useState('recent');
+  const [timeframe, setTimeframe] = useState<TradingViewTimeframe>('1D');
+
+  const chartPair = useMemo(() => 'KTA/USDT', []);
 
   useEffect(() => {
     let cancelled = false;
@@ -80,6 +86,35 @@ export default function TradePage(): React.JSX.Element {
                     </div>
                     <div className="flex items-center gap-2">
                       <Link href="/listings/new" className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white">List a Token</Link>
+                    </div>
+                  </div>
+                </section>
+
+                <section className="glass rounded-lg border border-hairline p-4 md:p-6">
+                  <div className="flex flex-col gap-3">
+                    <div className="flex flex-wrap items-center gap-2">
+                      {TIMEFRAME_OPTIONS.map((option) => {
+                        const isActive = option === timeframe;
+                        return (
+                          <button
+                            key={option}
+                            type="button"
+                            onClick={() => setTimeframe(option)}
+                            className={
+                              `rounded px-3 py-1 text-xs font-medium transition-colors ${
+                                isActive
+                                  ? 'bg-accent text-white shadow-[0_20px_50px_rgba(15,15,20,0.35)]'
+                                  : 'text-muted hover:bg-surface hover:text-foreground'
+                              }`
+                            }
+                          >
+                            {option}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <div className="min-h-[400px] rounded-lg border border-hairline bg-surface p-2 overflow-hidden">
+                      <TradingViewChart pair={chartPair} timeframe={timeframe} className="h-full w-full" />
                     </div>
                   </div>
                 </section>

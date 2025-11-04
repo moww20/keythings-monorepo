@@ -1,23 +1,14 @@
 'use client';
 
 import { useParams } from 'next/navigation';
-import { useMemo, useState, type CSSProperties } from 'react';
+import { type CSSProperties } from 'react';
 import Link from 'next/link';
 import { AppSidebar } from '@/components/app-sidebar';
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar';
-import { TradingViewChart, type TradingViewTimeframe } from '@/app/components/TradingViewChart';
-
-const TIMEFRAME_OPTIONS: TradingViewTimeframe[] = ['1H', '4H', '1D', '1W'];
 
 export default function TokenDetailPage(): React.JSX.Element {
   const params = useParams<{ address: string }>();
   const address = typeof params?.address === 'string' ? params.address : Array.isArray(params?.address) ? params?.address?.[0] : '';
-  const [timeframe, setTimeframe] = useState<TradingViewTimeframe>('1D');
-
-  const chartPair = useMemo(() => {
-    // For now we always chart KTA/USDT. Future iterations can look up pairs dynamically from listings metadata.
-    return 'KTA/USDT';
-  }, []);
 
   return (
     <div className="h-screen bg-background">
@@ -52,29 +43,12 @@ export default function TokenDetailPage(): React.JSX.Element {
                   <div className="grid grid-cols-12 gap-6">
                     <section className="col-span-12 lg:col-span-8">
                       <div className="glass rounded-lg border border-hairline p-4 md:p-6">
-                        <div className="mb-4 flex flex-wrap items-center gap-2">
-                          {TIMEFRAME_OPTIONS.map((option) => {
-                            const isActive = option === timeframe;
-                            return (
-                              <button
-                                key={option}
-                                type="button"
-                                onClick={() => setTimeframe(option)}
-                                className={
-                                  `rounded px-3 py-1 text-xs font-medium transition-colors ${
-                                    isActive
-                                      ? 'bg-accent text-white shadow-[0_20px_50px_rgba(15,15,20,0.35)]'
-                                      : 'text-muted hover:bg-surface hover:text-foreground'
-                                  }`
-                                }
-                              >
-                                {option}
-                              </button>
-                            );
-                          })}
-                        </div>
-                        <div className="h-[360px]">
-                          <TradingViewChart pair={chartPair} timeframe={timeframe} className="h-full w-full" />
+                        <div className="flex flex-col gap-2">
+                          <h2 className="text-sm font-semibold text-foreground">Token Metrics</h2>
+                          <p className="text-sm text-muted">
+                            Detailed market data and historical charts for this token will appear here in a future update.
+                            For now, use the RFQ actions on the right to start trading.
+                          </p>
                         </div>
                       </div>
                     </section>
