@@ -6,6 +6,15 @@
       "env": {
         "NODE_ENV": "development"
       }
+    },
+    "next-devtools-mcp": {
+      "command": "docker",
+      "args": [
+        "run",
+        "-i",
+        "--rm",
+        "mcp/next-devtools-mcp"
+      ]
     }
   }
 }
