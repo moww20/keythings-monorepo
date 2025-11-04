@@ -1,5 +1,7 @@
 import { z } from "zod";
 import { processTokenMetadata, formatTokenAmount, parseTokenMetadata, type TokenInfo } from './token-metadata';
+import { normalizeHistoryRecords, groupOperationsByBlock, type CachedTokenMeta } from "@/lib/history/provider-history";
+import type { ExplorerOperation } from "@/lib/explorer/client";
 
 // Define the operation types used in Keeta network
 export type ExplorerOperationType = 
@@ -1013,4 +1015,24 @@ export function testKeetaHistoryParsing() {
   }
   
   return result;
+}
+
+// New: reuse provider normalization to get ExplorerOperation[] directly
+export function extractOperationsFromSDKHistory(
+  historyData: unknown,
+  contextAccount?: string,
+): ExplorerOperation[] {
+  const records = Array.isArray(historyData) ? (historyData as unknown[]) : [];
+  if (records.length === 0) return [];
+  const normalized = normalizeHistoryRecords(records as any[], contextAccount ?? "", {} as Record<string, CachedTokenMeta>);
+  return groupOperationsByBlock(normalized.operations);
+}
+
+// New: convert raw provider history records to ExplorerOperation[]
+export function normalizeRecordsToOperations(
+  records: unknown[],
+  contextAccount?: string,
+): ExplorerOperation[] {
+  const normalized = normalizeHistoryRecords(records as any[], contextAccount ?? "", {} as Record<string, CachedTokenMeta>);
+  return groupOperationsByBlock(normalized.operations);
 }

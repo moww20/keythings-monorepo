@@ -26,6 +26,7 @@ import {
   type TokenMetadataEntry,
 } from "@/lib/tokens/metadata-service";
 import { parseExplorerDate } from "@/app/explorer/utils/operation-format";
+import { formatTokenAmount } from "@/app/explorer/utils/token-metadata";
 
 const HISTORY_DEPTH = 50;
 const FALLBACK_MESSAGE = "Connect your Keeta wallet to pull on-chain activity.";
@@ -210,13 +211,15 @@ export default function HistoryPage(): JSX.Element {
     [pages],
   );
 
+  // Normalize records without token metadata to avoid expensive re-computation
+  // every time token metadata arrives; we will hydrate metadata later.
   const normalized = useMemo(
-    () => normalizeHistoryRecords(allRecords, accountKey, tokenMetadata),
-    [allRecords, accountKey, tokenMetadata],
+    () => normalizeHistoryRecords(allRecords, accountKey, {}),
+    [allRecords, accountKey],
   );
 
   useEffect(() => {
-    if (typeof window !== "undefined") {
+    if (typeof window !== "undefined" && process.env.NODE_ENV !== "production") {
       (window as any).__HISTORY_DEBUG_PAGES__ = pages;
       (window as any).__HISTORY_DEBUG_NORMALIZED__ = normalized;
     }
@@ -231,44 +234,78 @@ export default function HistoryPage(): JSX.Element {
       return;
     }
 
+    let cancelled = false;
+
+    // Build batched updates from cache first
+    const updates: Record<string, CachedTokenMeta> = {};
+    const toFetch: string[] = [];
+
     for (const tokenId of normalized.tokensToFetch) {
       if (!tokenId) continue;
       if (tokenMetadata[tokenId]) continue;
 
       const cachedEntry = getCachedTokenMetadata(tokenId);
       if (cachedEntry) {
-        setTokenMetadata((prev) => {
-          if (prev[tokenId]) {
-            return prev;
-          }
-          return { ...prev, [tokenId]: toCachedTokenMeta(cachedEntry) };
-        });
+        updates[tokenId] = toCachedTokenMeta(cachedEntry);
         continue;
       }
 
-      if (fetchingTokenMeta.current.has(tokenId)) continue;
-      fetchingTokenMeta.current.add(tokenId);
-
-      void (async () => {
-        try {
-          const entry = await getTokenMetadata(tokenId);
-          if (!entry) {
-            return;
-          }
-
-          setTokenMetadata((prev) => {
-            if (prev[tokenId]) {
-              return prev;
-            }
-            return { ...prev, [tokenId]: toCachedTokenMeta(entry) };
-          });
-        } catch {
-          // ignore token metadata failures
-        } finally {
-          fetchingTokenMeta.current.delete(tokenId);
-        }
-      })();
+      if (!fetchingTokenMeta.current.has(tokenId)) {
+        fetchingTokenMeta.current.add(tokenId);
+        toFetch.push(tokenId);
+      }
     }
+
+    if (Object.keys(updates).length > 0) {
+      setTokenMetadata((prev) => {
+        // Avoid overwriting existing keys
+        const next = { ...prev } as Record<string, CachedTokenMeta>;
+        for (const [k, v] of Object.entries(updates)) {
+          if (!next[k]) next[k] = v;
+        }
+        return next;
+      });
+    }
+
+    if (toFetch.length === 0) {
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    void (async () => {
+      try {
+        const results = await Promise.allSettled(
+          toFetch.map(async (id) => ({ id, entry: await getTokenMetadata(id) })),
+        );
+
+        const fetched: Record<string, CachedTokenMeta> = {};
+        for (const r of results) {
+          if (r.status !== "fulfilled") continue;
+          const { id, entry } = r.value;
+          if (!entry) continue;
+          fetched[id] = toCachedTokenMeta(entry);
+        }
+
+        if (!cancelled && Object.keys(fetched).length > 0) {
+          setTokenMetadata((prev) => {
+            const next = { ...prev } as Record<string, CachedTokenMeta>;
+            for (const [k, v] of Object.entries(fetched)) {
+              if (!next[k]) next[k] = v;
+            }
+            return next;
+          });
+        }
+      } finally {
+        for (const id of toFetch) {
+          fetchingTokenMeta.current.delete(id);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
   }, [normalized.tokensToFetch, tokenMetadata]);
 
   useEffect(() => {
@@ -385,20 +422,16 @@ export default function HistoryPage(): JSX.Element {
   }, [normalized.blocksToFetch, blockTimestamps, retryTick]);
 
   const hydratedOperations = useMemo(() => {
+    // 1) Start with normalized operations
     let operations = normalized.operations;
 
-    // Hydrate block timestamps
+    // 2) Hydrate block timestamps
     if (blockTimestamps.size > 0) {
       operations = operations.map((operation) => {
         const block = operation.block;
-        if (!block) {
-          return operation;
-        }
-
+        if (!block) return operation;
         const blockHash = block.$hash;
-        if (!blockHash) {
-          return operation;
-        }
+        if (!blockHash) return operation;
 
         const isPlaceholder = (block as any)?.placeholderDate === true;
         const hasValidDate = (() => {
@@ -406,38 +439,55 @@ export default function HistoryPage(): JSX.Element {
           const parsed = new Date(block.date as string);
           return !Number.isNaN(parsed.getTime());
         })();
-
-        if (!isPlaceholder && hasValidDate) {
-          return operation;
-        }
+        if (!isPlaceholder && hasValidDate) return operation;
 
         const replacementDate = blockTimestamps.get(blockHash);
-        if (!replacementDate) {
-          return operation;
-        }
+        if (!replacementDate) return operation;
 
         return {
           ...operation,
-          block: {
-            ...block,
-            date: replacementDate,
-            placeholderDate: false,
-          },
+          block: { ...block, date: replacementDate, placeholderDate: false },
         };
       });
     }
 
-    // Group operations by blockhash
+    // 3) Hydrate token metadata and formattedAmount in a single pass
+    if (Object.keys(tokenMetadata).length > 0) {
+      operations = operations.map((op: any) => {
+        const tokenId: string | undefined = op.tokenLookupId || op.token || op.tokenAddress;
+        const meta: CachedTokenMeta | undefined = tokenId ? tokenMetadata[tokenId] : undefined;
+        if (!meta) return op;
+
+        const next: any = { ...op };
+        // Merge metadata
+        next.tokenMetadata = { ...(op.tokenMetadata || {}), ...meta };
+        if (next.tokenDecimals === undefined && typeof meta.decimals === "number") {
+          next.tokenDecimals = meta.decimals;
+        }
+        if (!next.tokenTicker && meta.ticker) {
+          next.tokenTicker = meta.ticker;
+        }
+
+        // Add formattedAmount if missing
+        if (!next.formattedAmount && next.rawAmount && typeof next.tokenDecimals === "number") {
+          try {
+            const amt = BigInt(String(next.rawAmount));
+            const fieldType = (next.tokenMetadata?.fieldType === "decimalPlaces") ? "decimalPlaces" : "decimals";
+            const ticker = next.tokenTicker || next.tokenMetadata?.ticker || "UNKNOWN";
+            next.formattedAmount = formatTokenAmount(amt, next.tokenDecimals, fieldType, ticker);
+          } catch {}
+        }
+        return next;
+      });
+    }
+
+    // 4) Group operations by blockhash (also sorts by timestamp)
     return groupOperationsByBlock(operations);
-  }, [normalized.operations, blockTimestamps]);
+  }, [normalized.operations, blockTimestamps, tokenMetadata]);
 
   const firstPageReady = useMemo(() => {
-    const sortTime = (op: any): number =>
-      typeof (op as any)?.blockTimestamp === "number"
-        ? (op as any).blockTimestamp as number
-        : ((op as any)?.block?.date ? new Date((op as any).block.date as string).getTime() : 0) || 0;
-    const sorted = hydratedOperations.slice().sort((a: any, b: any) => sortTime(b) - sortTime(a));
-    const page = sorted.slice(0, 10);
+    // hydratedOperations is already sorted by groupOperationsByBlock
+    const page = hydratedOperations.slice(0, 10);
     for (const op of page) {
       const hasTs = typeof (op as any)?.blockTimestamp === "number"
         || (((op as any)?.block?.placeholderDate !== true)
@@ -594,6 +644,7 @@ export default function HistoryPage(): JSX.Element {
                         loading={tableLoading}
                         emptyLabel="No history found."
                         pageSize={10}
+                        assumeSorted
                       />
                     </div>
                     {hasNextPage && (

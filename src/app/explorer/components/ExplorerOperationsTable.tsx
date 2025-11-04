@@ -32,6 +32,7 @@ interface ExplorerOperationsTableProps {
   participantsMode?: 'both' | 'smart';
   loading?: boolean;
   pageSize?: number;
+  assumeSorted?: boolean;
 }
 
 const MAX_TOKEN_IDENTIFIER_DEPTH = 4;
@@ -149,11 +150,13 @@ export default function ExplorerOperationsTable({
   participantsMode = 'both',
   loading = false,
   pageSize: pageSizeProp = 5,
+  assumeSorted = false,
 }: ExplorerOperationsTableProps): React.JSX.Element {
   const [pageIndex, setPageIndex] = useState(0);
   const pageSize = Math.max(1, pageSizeProp);
   // Stable sort by block date desc, then hash to avoid jitter between renders
   const sortedOperations = useMemo(() => {
+    if (assumeSorted) return operations;
     const copy = operations.slice();
     copy.sort((a, b) => {
       const at = typeof (a as any).blockTimestamp === 'number'

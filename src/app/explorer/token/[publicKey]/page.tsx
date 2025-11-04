@@ -39,7 +39,7 @@ import { formatAmountWithCommas, formatTokenAmount } from "@/app/lib/token-utils
 
 import ExplorerOperationsTable from "../../components/ExplorerOperationsTable";
 import { truncateIdentifier } from "../../utils/resolveExplorerPath";
-import { normalizeHistoryRecord, extractActivityFromSDKHistory, processKeetaHistoryWithFiltering } from "../../utils/history";
+import { normalizeHistoryRecord, extractActivityFromSDKHistory, processKeetaHistoryWithFiltering, extractOperationsFromSDKHistory, normalizeRecordsToOperations } from "../../utils/history";
 
 // Single source of truth: wallet provider (getAccountState) + useTokenMetadata
 
@@ -251,7 +251,7 @@ export default function TokenPage(): React.JSX.Element {
         setTokenOperations([]);
         let ops: ExplorerOperation[] = [];
 
-        // 1) Wallet history normalized by token match
+        // 1) Wallet history normalized by token match (provider records → operations)
         if (ops.length === 0 && typeof window !== 'undefined' && window.keeta?.history) {
           try {
             if (typeof window.keeta.requestCapabilities === 'function') {
@@ -261,86 +261,41 @@ export default function TokenPage(): React.JSX.Element {
           const result: any = await window.keeta.history({ depth: 50, cursor: null, includeOperations: true, includeTokenMetadata: true } as any);
           if (cancelled) return;
           const records: any[] = Array.isArray(result?.records) ? result.records : Array.isArray(result) ? result : [];
-          const resolveMaybeAddress = (candidate: any): string | null => {
-            if (!candidate) return null;
-            if (typeof candidate === 'string') return candidate;
-            try {
-              const pk = candidate?.publicKeyString ?? candidate?.publicKey ?? candidate?.address;
-              if (typeof pk === 'string' && pk) return pk;
-              if (pk && typeof pk.toString === 'function') {
-                const s = String(pk.toString());
-                if (s && s !== '[object Object]') return s;
-              }
-              if (typeof candidate.toString === 'function') {
-                const s = String(candidate.toString());
-                if (s && s !== '[object Object]') return s;
-              }
-            } catch {}
+          const allOps = normalizeRecordsToOperations(records);
+          const extractTokenId = (op: any): string | null => {
+            const candidates = [op.tokenLookupId, op.tokenAddress, op.token, op.operation?.token, op.operationSend?.token, op.operationReceive?.token];
+            for (const c of candidates) {
+              if (!c) continue;
+              if (typeof c === 'string' && c.length) return c;
+              try {
+                const pk = c?.publicKeyString ?? c?.publicKey ?? c?.address;
+                if (typeof pk === 'string' && pk) return pk;
+                if (pk && typeof pk.toString === 'function') {
+                  const s = String(pk.toString());
+                  if (s && s !== '[object Object]') return s;
+                }
+                if (typeof c.toString === 'function') {
+                  const s = String(c.toString());
+                  if (s && s !== '[object Object]') return s;
+                }
+              } catch {}
+            }
             return null;
           };
-          for (const r of records) {
-            const norm = normalizeHistoryRecord(r);
-            const tokenCandidates = [
-              norm?.token,
-              r?.token,
-              r?.tokenAddress,
-              r?.operation?.token,
-              r?.operationSend?.token,
-              r?.operationReceive?.token,
-              r?.operationForward?.token,
-              r?.operation?.account,
-              r?.operation?.target,
-            ];
-            const matches = tokenCandidates.some((c) => resolveMaybeAddress(c) === tokenPublicKey);
-            if (!matches) continue;
-            const base: any = {
-              type: String(norm?.type ?? r?.type ?? r?.operationType ?? 'UNKNOWN').toUpperCase(),
-              block: { $hash: norm?.block ?? (r?.block ?? r?.id ?? ''), date: norm?.timestamp ? new Date(norm.timestamp).toISOString() : (r?.timestamp ? new Date(r.timestamp).toISOString() : new Date().toISOString()), account: norm?.from ?? (r?.from ?? '') },
-              operation: { type: norm?.type ?? r?.type, from: norm?.from ?? r?.from, to: norm?.to ?? r?.to, amount: norm?.amount ?? r?.amount, token: tokenPublicKey },
-              amount: norm?.amount ?? r?.amount,
-              rawAmount: norm?.amount ?? r?.amount,
-              formattedAmount: norm?.formattedAmount ?? r?.formattedAmount,
-              token: tokenPublicKey,
-              tokenAddress: tokenPublicKey,
-              tokenTicker: norm?.tokenTicker ?? r?.tokenTicker ?? undefined,
-              tokenDecimals: typeof norm?.tokenDecimals === 'number' ? norm!.tokenDecimals : (typeof r?.tokenDecimals === 'number' ? r.tokenDecimals : undefined),
-              tokenMetadata: norm?.tokenMetadata ?? r?.tokenMetadata ?? undefined,
-              from: norm?.from ?? r?.from,
-              to: norm?.to ?? r?.to,
-            };
-            const parsed = parseExplorerOperation(base);
-            if (parsed) ops.push(parsed);
-          }
+          ops.push(...allOps.filter((op: any) => extractTokenId(op) === tokenPublicKey));
         }
 
-        // 2) Fallback: raw SDK history extraction
+        // 2) Fallback: raw SDK history extraction (staples → operations)
         if (ops.length === 0) {
           try {
             const sdkHistory: any = await sdkGetHistory({ depth: 50, cursor: null });
-            const items = extractActivityFromSDKHistory(sdkHistory);
-            for (const it of items) {
-              if (it.token !== tokenPublicKey) continue;
-              const base: any = {
-                type: String(it.type ?? 'UNKNOWN').toUpperCase(),
-                block: { $hash: it.block ?? '', date: it.timestamp ? new Date(it.timestamp).toISOString() : new Date().toISOString(), account: it.from ?? '' },
-                operation: { type: it.type, from: it.from, to: it.to, amount: it.amount, token: it.token ?? tokenPublicKey },
-                amount: it.amount,
-                rawAmount: it.amount,
-                token: it.token ?? tokenPublicKey,
-                tokenAddress: it.token ?? tokenPublicKey,
-                tokenTicker: it.tokenTicker ?? undefined,
-                tokenDecimals: typeof it.tokenDecimals === 'number' ? it.tokenDecimals : undefined,
-                tokenMetadata: it.tokenMetadata ?? undefined,
-                from: it.from,
-                to: it.to,
-              };
-              const parsed = parseExplorerOperation(base);
-              if (parsed) ops.push(parsed);
-            }
+            const allOps = extractOperationsFromSDKHistory(sdkHistory);
+            const byToken = allOps.filter((op: any) => (op.tokenLookupId || op.token || op.tokenAddress) === tokenPublicKey);
+            ops.push(...byToken);
           } catch {}
         }
 
-        // 3) Fallback: alternate parsing using processKeetaHistoryWithFiltering
+        // 3) Fallback: alternate parsing using processKeetaHistoryWithFiltering (legacy)
         if (ops.length === 0) {
           try {
             const sdkHistory: any = await sdkGetHistory({ depth: 50, cursor: null });

@@ -12,6 +12,9 @@ export const BASE_TOKEN_TICKER = "KTA";
 const BASE_TOKEN_DECIMALS = 9;
 const BASE_TOKEN_FIELD_TYPE = "decimalPlaces";
 
+// Development logging flag
+const __DEV__ = typeof process !== "undefined" && !!(process as any).env && (process as any).env.NODE_ENV !== "production";
+
 export type CachedTokenMeta = {
   name?: string | null;
   ticker?: string | null;
@@ -62,7 +65,7 @@ export async function fetchProviderHistory(
     requestPayload.cursor = options.cursor;
   }
 
-  try { console.debug("[provider-history] request", requestPayload); } catch {}
+  if (__DEV__) { try { console.debug("[provider-history] request", requestPayload); } catch {} }
   const response = await provider.history(requestPayload);
   const parsed = ProviderHistoryResponseSchema.safeParse(response);
   if (!parsed.success) {
@@ -85,7 +88,7 @@ export async function fetchProviderHistory(
   }
 
   const { records, cursor, hasMore } = parsed.data;
-  try { console.debug("[provider-history] response", { records: Array.isArray(records) ? records.length : 0, hasMore: Boolean(hasMore), cursor: cursor ?? null }); } catch {}
+  if (__DEV__) { try { console.debug("[provider-history] response", { records: Array.isArray(records) ? records.length : 0, hasMore: Boolean(hasMore), cursor: cursor ?? null }); } catch {} }
   return {
     records,
     cursor: cursor ?? null,
@@ -493,7 +496,7 @@ export function normalizeHistoryRecords(
         const fieldType = resolvedFieldTypeInner === "decimalPlaces" ? "decimalPlaces" : "decimals";
 
         try {
-          console.debug("[history] format amount", {
+          if (__DEV__) console.debug("[history] format amount", {
             where: "pre-parseExplorerOperation",
             voteStapleHash: sx(record?.voteStaple?.hash) ?? blockHash,
             blockHash,
@@ -591,7 +594,7 @@ export function normalizeHistoryRecords(
 
     if (!tokenLookupId) {
       try {
-        console.debug("[history] normalizeHistoryRecords missing tokenLookupId", {
+        if (__DEV__) console.debug("[history] normalizeHistoryRecords missing tokenLookupId", {
           operationType: normalizedType,
           voteStapleHash: sx(record?.voteStaple?.hash) ?? blockHash,
           blockHash,
@@ -626,7 +629,7 @@ export function normalizeHistoryRecords(
 
     // Additional debug payload to inspect normalization when amounts look unnormalized
     try {
-      const debugFmt = {
+      if (__DEV__) { const debugFmt = {
         voteStapleHash: sx(record?.voteStaple?.hash) ?? blockHash,
         blockHash,
         type: enriched.type,
@@ -638,8 +641,7 @@ export function normalizeHistoryRecords(
         rawAmountValue,
         amountCandidate,
         normalizedRawAmount,
-      };
-      console.debug("[history] enriched operation", debugFmt);
+      }; console.debug("[history] enriched operation", debugFmt); }
     } catch {}
     // Prefer page cache, fall back to global cache managed by metadata-service
     let cachedMeta = tokenLookupId ? tokenMetadata[tokenLookupId] : undefined;
@@ -710,12 +712,14 @@ export function normalizeHistoryRecords(
         operationType: enriched.type,
       };
 
-      if (!hasTokenDecimals) {
-        console.debug("[history] normalizeHistoryRecords missing tokenDecimals", debugPayload);
-      }
+      if (__DEV__) {
+        if (!hasTokenDecimals) {
+          console.debug("[history] normalizeHistoryRecords missing tokenDecimals", debugPayload);
+        }
 
-      if (!resolvedFieldType) {
-        console.debug("[history] normalizeHistoryRecords missing fieldType", debugPayload);
+        if (!resolvedFieldType) {
+          console.debug("[history] normalizeHistoryRecords missing fieldType", debugPayload);
+        }
       }
     }
 
