@@ -33,6 +33,9 @@ type StorageAclEntry = z.infer<typeof StorageAclEntrySchema>;
 const STORAGE_CACHE_TTL_MS = 30_000;
 const storageCache = new Map<string, { data: StorageAclEntry[]; fetchedAt: number }>();
 
+const STORAGE_DETAIL_TTL_MS = 60_000;
+const storageDetailCache = new Map<string, { data: { name?: string | null; description?: string | null }; fetchedAt: number }>();
+
 function buildStorageExplorerHref(publicKey: string): string {
   return `/explorer/storage/${encodeURIComponent(publicKey)}`;
 }
@@ -502,6 +505,11 @@ export function StorageList({
       for (const entry of storages) {
         const addr = entry.entity;
         if (!addr || details[addr]) continue;
+        const cached = storageDetailCache.get(addr);
+        if (cached && Date.now() - cached.fetchedAt < STORAGE_DETAIL_TTL_MS) {
+          next[addr] = cached.data;
+          continue;
+        }
         pending.push(
           (async () => {
             try {
@@ -510,9 +518,13 @@ export function StorageList({
               const infoObj = rec && typeof rec.info === 'object' ? (rec.info as Record<string, unknown>) : {};
               const name = typeof infoObj.name === 'string' && infoObj.name.trim().length > 0 ? infoObj.name : null;
               const description = typeof infoObj.description === 'string' && infoObj.description.trim().length > 0 ? infoObj.description : null;
-              next[addr] = { name, description };
+              const payload = { name, description };
+              next[addr] = payload;
+              storageDetailCache.set(addr, { data: payload, fetchedAt: Date.now() });
             } catch {
-              next[addr] = {};
+              const payload = {};
+              next[addr] = payload;
+              storageDetailCache.set(addr, { data: payload, fetchedAt: Date.now() });
             }
           })()
         );
