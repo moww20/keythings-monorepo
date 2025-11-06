@@ -13,7 +13,7 @@ import {
   getTokenMetadata,
   type TokenMetadataEntry,
 } from '@/lib/tokens/metadata-service';
-import { isHexTokenIdentifier, normalizeTokenAddress } from '@/lib/explorer/token-address';
+import { normalizeTokenAddress } from '@/lib/explorer/token-address';
 
 const hasExplorerApiBase = typeof process.env.NEXT_PUBLIC_API_URL === 'string'
   && process.env.NEXT_PUBLIC_API_URL.trim().length > 0;
@@ -608,32 +608,15 @@ async function fetchStorageFromChain(
       let tokenId = normalizeAccountAddress((entry as any)?.token ?? (entry as any)?.publicKey) ?? '';
       
       if (!tokenId) return null;
-      
-      console.log('[useApi] After normalizeAccountAddress:', {
-        tokenId,
-        isKeeta: tokenId.startsWith('keeta_'),
-        isHex: isHexTokenIdentifier(tokenId),
-        entryTokenType: typeof (entry as any)?.token,
-        entryToken: (entry as any)?.token
-      });
-      
-      // If we got a hex string (not keeta format), convert it using fromPublicKeyAndType
-      if (!tokenId.startsWith('keeta_') && isHexTokenIdentifier(tokenId)) {
-        console.log('[useApi] ⚠️ Hex format detected, attempting conversion to keeta address');
-        const converted = await normalizeTokenAddress(tokenId);
-        if (converted) {
-          tokenId = converted;
-          console.log('[useApi] ✅ Converted hex token identifier to keeta format:', tokenId);
-        } else {
-          console.warn('[useApi] ⚠️ Failed to convert hex to keeta format, using hex as-is');
+
+      // Convert hex addresses to keeta_ format for proper metadata lookup
+      // normalizeTokenAddress handles both hex and keeta_ format addresses
+      if (!tokenId.startsWith('keeta_')) {
+        const normalized = await normalizeTokenAddress(tokenId);
+        if (normalized) {
+          tokenId = normalized;
         }
       }
-
-      if (!tokenId) return null;
-
-      console.log('[useApi] Final Token ID format:', tokenId.startsWith('keeta_') ? 'keeta ✅' : 'hex ❌', tokenId);
-      console.log('[useApi] Raw entry.token type:', typeof entry.token);
-      console.log('[useApi] Raw entry.token:', entry.token);
 
       const inlineMetadata = parseTokenMetadata(entry.metadata);
 

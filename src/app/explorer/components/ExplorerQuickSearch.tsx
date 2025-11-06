@@ -76,7 +76,7 @@ export default function ExplorerQuickSearch(): React.JSX.Element {
           const account: any = info ?? {};
           const accountType = String(account?.type ?? account?.info?.type ?? "").toUpperCase();
           if (accountType === "STORAGE") {
-            return `/explorer/storage/${publicKey}`;
+            return `/explorer/account/${publicKey}`;
           }
           if (accountType === "TOKEN") {
             return `/explorer/token/${publicKey}`;
@@ -110,7 +110,7 @@ export default function ExplorerQuickSearch(): React.JSX.Element {
           }
 
           if (accountType === "STORAGE") {
-            return `/explorer/storage/${publicKey}`;
+            return `/explorer/account/${publicKey}`;
           }
           if (accountType === "TOKEN") {
             return `/explorer/token/${publicKey}`;

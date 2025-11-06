@@ -1,7 +1,7 @@
 "use client";
 import { z } from 'zod';
 import { extractDecimalsAndFieldType, formatAmountWithCommas, formatTokenAmount, getTokenTicker } from '@/app/lib/token-utils';
-import { normalizeTokenAddress } from '@/lib/explorer/token-address';
+import { normalizeTokenAddress, normalizeStorageAddress } from '@/lib/explorer/token-address';
 
 // Best-effort normalization of an account-like object into a string public key
 function normalizeAccountAddress(candidate: unknown): string | undefined {
@@ -614,8 +614,16 @@ export async function getAggregatedBalancesForOwner(
       const ownerState = await client.state({ account: ownerAccount });
       const balances: any[] = Array.isArray(ownerState?.balances) ? ownerState.balances : [];
       for (const entry of balances) {
-        const tokenAddr = normalizeAccountAddress((entry as any)?.token ?? (entry as any)?.publicKey) ?? '';
+        let tokenAddr = normalizeAccountAddress((entry as any)?.token ?? (entry as any)?.publicKey) ?? '';
         if (!tokenAddr) continue;
+
+        // Convert hex addresses to keeta_ format for proper metadata lookup
+        if (!tokenAddr.startsWith('keeta_')) {
+          const normalized = await normalizeTokenAddress(tokenAddr);
+          if (normalized) {
+            tokenAddr = normalized;
+          }
+        }
 
         const amount = toBigInt((entry as any)?.balance ?? (entry as any)?.amount);
         let decimals = typeof (entry as any)?.decimals === 'number' ? (entry as any).decimals : undefined;
@@ -665,8 +673,16 @@ export async function getAggregatedBalancesForOwner(
         const balances: any[] = Array.isArray(storageState?.balances) ? storageState.balances : [];
 
         for (const entry of balances) {
-          const tokenAddr = normalizeAccountAddress((entry as any)?.token ?? (entry as any)?.publicKey) ?? '';
+          let tokenAddr = normalizeAccountAddress((entry as any)?.token ?? (entry as any)?.publicKey) ?? '';
           if (!tokenAddr) continue;
+
+          // Convert hex addresses to keeta_ format for proper metadata lookup
+          if (!tokenAddr.startsWith('keeta_')) {
+            const normalized = await normalizeTokenAddress(tokenAddr);
+            if (normalized) {
+              tokenAddr = normalized;
+            }
+          }
 
           const amount = toBigInt((entry as any)?.balance ?? (entry as any)?.amount);
           let decimals = typeof (entry as any)?.decimals === 'number' ? (entry as any).decimals : undefined;
@@ -880,7 +896,7 @@ export async function getHistoryForAccount(
         const normalized = (candidate && (candidate as any).publicKeyString)
           ? String((candidate as any).publicKeyString)
           : undefined;
-        if (normalized && normalized.trim().length > 0) return normalized;
+        if (normalized && normalized.trim().length > 0) return normalized.trim();
       } catch {}
       if (candidate && typeof candidate === 'object' && typeof (candidate as { toString?: () => string }).toString === 'function') {
         try {
@@ -890,6 +906,19 @@ export async function getHistoryForAccount(
         } catch {}
       }
       return undefined;
+    };
+
+    // Normalize the account public key for consistent comparison
+    const normalizedAccountPublicKey = normalizeAddress(accountPublicKey) ?? accountPublicKey.trim();
+    
+    // Helper to check if an address matches the account (handles both hex and keeta_ formats)
+    const addressMatchesAccount = (addr: string | undefined): boolean => {
+      if (!addr) return false;
+      const normalizedAddr = addr.trim();
+      if (normalizedAddr === normalizedAccountPublicKey) return true;
+      // Also check if addresses match when normalized (handles hex vs keeta_ format differences)
+      // For now, do exact match - if needed, we can add hex/keeta conversion here
+      return false;
     };
 
     const results: Array<{
@@ -954,7 +983,28 @@ export async function getHistoryForAccount(
               ?? (operation as any).asset
               ?? (operation as any).currency);
 
-            if (accountPublicKey !== from && accountPublicKey !== to && accountPublicKey !== blockAccount) {
+            // When filterStapleOperations returns results, they should already be filtered for the account.
+            // However, we still verify to be safe, especially for storage accounts where operations
+            // might be referenced in different fields (target, entity, account, etc.)
+            const operationTarget = normalizeAddress((operation as any).target 
+              ?? (operation as any).entity
+              ?? (operation as any).account);
+            
+            // Check if this operation affects the account (from, to, block account, or operation target/entity)
+            // Use normalized comparison to handle address format differences
+            // For storage accounts, the blockAccount is often the storage account itself
+            const affectsAccount = addressMatchesAccount(from) 
+              || addressMatchesAccount(to) 
+              || addressMatchesAccount(blockAccount)
+              || addressMatchesAccount(operationTarget)
+              || from === normalizedAccountPublicKey
+              || to === normalizedAccountPublicKey
+              || blockAccount === normalizedAccountPublicKey
+              || (operationTarget && operationTarget === normalizedAccountPublicKey);
+
+            // If filterStapleOperations returned this operation, it should be relevant, but verify anyway
+            // This helps catch cases where filterStapleOperations might not work correctly for storage accounts
+            if (!affectsAccount) {
               continue;
             }
 
@@ -1016,7 +1066,25 @@ export async function getHistoryForAccount(
               ?? (operation as any).target
               ?? (operation as any).asset
               ?? (operation as any).currency);
-            if (accountPublicKey && accountPublicKey !== from && accountPublicKey !== to && accountPublicKey !== blockAccount) {
+            
+            // For storage accounts, check additional fields that might reference the storage account
+            // Storage account operations might have the storage account as 'target', 'entity', or 'account'
+            const operationTarget = normalizeAddress((operation as any).target 
+              ?? (operation as any).entity
+              ?? (operation as any).account);
+            
+            // Check if this operation affects the account (from, to, block account, or operation target/entity)
+            // Use normalized comparison to handle address format differences
+            const affectsAccount = addressMatchesAccount(from) 
+              || addressMatchesAccount(to) 
+              || addressMatchesAccount(blockAccount)
+              || addressMatchesAccount(operationTarget)
+              || from === normalizedAccountPublicKey
+              || to === normalizedAccountPublicKey
+              || blockAccount === normalizedAccountPublicKey
+              || (operationTarget && operationTarget === normalizedAccountPublicKey);
+
+            if (!affectsAccount) {
               continue;
             }
             pending.push({

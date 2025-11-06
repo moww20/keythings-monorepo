@@ -138,9 +138,55 @@ export function useExplorerData() {
         }
       }
 
+      // Determine account type - check multiple locations as per Keeta SDK structure
+      // 1. Check account.type (direct property)
+      // 2. Check account.info.type (nested in info object)
+      // 3. Try to determine from Account object if available (isStorage method, etc.)
+      let accountType: string | null = null;
+      
+      // First, try direct type property
+      if (account.type && typeof account.type === 'string') {
+        accountType = account.type.trim().toUpperCase();
+      }
+      
+      // If not found, check info.type
+      if (!accountType && account.info && typeof account.info === 'object') {
+        const infoType = (account.info as any).type;
+        if (infoType && typeof infoType === 'string') {
+          accountType = infoType.trim().toUpperCase();
+        }
+      }
+      
+      // If still not found, try to determine from Account object if available
+      // Storage accounts are generated identifiers, so we can check the account object itself
+      if (!accountType) {
+        try {
+          const KeetaNet = await import('@keetanetwork/keetanet-client');
+          const accountObj = KeetaNet.lib.Account.fromPublicKeyString(publicKey);
+          
+          // Check if account has type-related methods or properties
+          if (typeof (accountObj as any).isStorage === 'function') {
+            if ((accountObj as any).isStorage()) {
+              accountType = 'STORAGE';
+            }
+          } else if (typeof (accountObj as any).accountType === 'string') {
+            accountType = String((accountObj as any).accountType).trim().toUpperCase();
+          } else if (typeof (accountObj as any).type === 'string') {
+            accountType = String((accountObj as any).type).trim().toUpperCase();
+          }
+        } catch (accountTypeError) {
+          // If Account object creation fails, continue with fallback
+        }
+      }
+      
+      // Final fallback: default to 'account' if no type found
+      if (!accountType || accountType === '') {
+        accountType = 'account';
+      }
+
       const result = {
         publicKey,
-        type: account.type || 'account',
+        type: accountType,
         representative: account.representative || null,
         owner: account.owner || null,
         signers: account.signers || [],

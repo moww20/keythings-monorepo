@@ -37,7 +37,7 @@ const STORAGE_DETAIL_TTL_MS = 60_000;
 const storageDetailCache = new Map<string, { data: { name?: string | null; description?: string | null }; fetchedAt: number }>();
 
 function buildStorageExplorerHref(publicKey: string): string {
-  return `/explorer/storage/${encodeURIComponent(publicKey)}`;
+  return `/explorer/account/${encodeURIComponent(publicKey)}`;
 }
 
 function buildAccountExplorerHref(publicKey: string): string {
