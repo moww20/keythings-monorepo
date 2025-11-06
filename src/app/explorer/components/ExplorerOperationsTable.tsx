@@ -190,23 +190,26 @@ export default function ExplorerOperationsTable({
           <Table className="w-full table-fixed">
             <TableHeader className="bg-[color:color-mix(in_oklab,var(--foreground)_6%,transparent)] text-xs uppercase tracking-[0.3em] text-muted">
               <TableRow className="border-hairline text-muted">
+                <TableHead className="px-6 py-3 w-[160px] whitespace-nowrap">Age</TableHead>
                 <TableHead className="px-6 py-3 w-[220px] whitespace-nowrap">Block</TableHead>
-                <TableHead className="px-6 py-3 w-[140px] whitespace-nowrap">Type</TableHead>
-                <TableHead className="px-6 py-3 w-[280px]">Participants</TableHead>
-                <TableHead className="px-6 py-3 w-[320px]">Token</TableHead>
-                <TableHead className="px-6 py-3 w-[120px] whitespace-nowrap">Age</TableHead>
+                <TableHead className="px-6 py-3 w-[180px] whitespace-nowrap">Type</TableHead>
+                <TableHead className="px-6 py-3 w-[260px]">Participants</TableHead>
+                <TableHead className="px-6 py-3 w-[220px] text-right">Token</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {Array.from({ length: pageSize }).map((_, i) => (
                 <TableRow key={`sk-${i}`} className="border-hairline">
+                  <TableCell className="px-6 py-4 w-[160px]">
+                    <Skeleton className="h-4 w-16 bg-[color:color-mix(in_oklab,var(--foreground)_12%,transparent)]" />
+                  </TableCell>
                   <TableCell className="px-6 py-4 w-[220px]">
                     <div className="flex flex-col gap-2">
                       <Skeleton className="h-4 w-32 bg-[color:color-mix(in_oklab,var(--foreground)_12%,transparent)]" />
                       <Skeleton className="h-3 w-24 bg-[color:color-mix(in_oklab,var(--foreground)_12%,transparent)]" />
                     </div>
                   </TableCell>
-                  <TableCell className="px-6 py-4 w-[140px]">
+                  <TableCell className="px-6 py-4 w-[180px]">
                     <Skeleton className="h-4 w-20 bg-[color:color-mix(in_oklab,var(--foreground)_12%,transparent)]" />
                   </TableCell>
                   <TableCell className="px-6 py-4 w-[280px]">
@@ -215,14 +218,11 @@ export default function ExplorerOperationsTable({
                       <Skeleton className="h-3 w-36 bg-[color:color-mix(in_oklab,var(--foreground)_12%,transparent)]" />
                     </div>
                   </TableCell>
-                  <TableCell className="px-6 py-4 w-[320px]">
+                  <TableCell className="px-6 py-4 w-[220px] text-right">
                     <div className="flex flex-col gap-2">
                       <Skeleton className="h-4 w-44 bg-[color:color-mix(in_oklab,var(--foreground)_12%,transparent)]" />
                       <Skeleton className="h-3 w-40 bg-[color:color-mix(in_oklab,var(--foreground)_12%,transparent)]" />
                     </div>
-                  </TableCell>
-                  <TableCell className="px-6 py-4 w-[120px]">
-                    <Skeleton className="h-4 w-16 bg-[color:color-mix(in_oklab,var(--foreground)_12%,transparent)]" />
                   </TableCell>
                 </TableRow>
               ))}
@@ -239,11 +239,11 @@ export default function ExplorerOperationsTable({
           <Table className="w-full table-fixed">
             <TableHeader className="bg-[color:color-mix(in_oklab,var(--foreground)_6%,transparent)] text-xs uppercase tracking-[0.3em] text-muted">
               <TableRow className="border-hairline text-muted">
+                <TableHead className="px-6 py-3 w-[160px] whitespace-nowrap text-right">Age</TableHead>
                 <TableHead className="px-6 py-3 w-[220px] whitespace-nowrap">Block</TableHead>
-                <TableHead className="px-6 py-3 w-[140px] whitespace-nowrap">Type</TableHead>
-                <TableHead className="px-6 py-3 w-[280px]">Participants</TableHead>
-                <TableHead className="px-6 py-3 w-[320px]">Token</TableHead>
-                <TableHead className="px-6 py-3 w-[120px] whitespace-nowrap">Age</TableHead>
+                <TableHead className="px-6 py-3 w-[180px] whitespace-nowrap">Type</TableHead>
+                <TableHead className="px-6 py-3 w-[260px]">Participants</TableHead>
+                <TableHead className="px-6 py-3 w-[220px] text-right">Token</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -264,11 +264,11 @@ export default function ExplorerOperationsTable({
           <Table className="w-full table-fixed">
           <TableHeader className="bg-[color:color-mix(in_oklab,var(--foreground)_6%,transparent)] text-xs uppercase tracking-[0.3em] text-muted">
             <TableRow className="border-hairline text-muted">
+              <TableHead className="px-6 py-3 w-[160px] whitespace-nowrap">Age</TableHead>
               <TableHead className="px-6 py-3 w-[220px] whitespace-nowrap">Block</TableHead>
-              <TableHead className="px-6 py-3 w-[140px] whitespace-nowrap">Type</TableHead>
-              <TableHead className="px-6 py-3 w-[280px]">Participants</TableHead>
-              <TableHead className="px-6 py-3 w-[320px]">Token</TableHead>
-              <TableHead className="px-6 py-3 w-[120px] whitespace-nowrap">Age</TableHead>
+              <TableHead className="px-6 py-3 w-[180px] whitespace-nowrap">Type</TableHead>
+              <TableHead className="px-6 py-3 w-[260px]">Participants</TableHead>
+              <TableHead className="px-6 py-3 w-[220px] text-right">Token</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -318,10 +318,10 @@ export default function ExplorerOperationsTable({
                 (typeof (sendOp as any).tokenMetadata?.ticker === "string" && (sendOp as any).tokenMetadata.ticker.trim().length > 0 ? (sendOp as any).tokenMetadata.ticker.trim() : null) ||
                 (typeof (receiveOp as any).tokenMetadata?.ticker === "string" && (receiveOp as any).tokenMetadata.ticker.trim().length > 0 ? (receiveOp as any).tokenMetadata.ticker.trim() : null);
               
-              const tickerLabel = enrichedTicker ?? metadataTicker ?? nestedTicker ?? null;
+              const baseTickerLabel = enrichedTicker ?? metadataTicker ?? nestedTicker ?? null;
 
               // Try to extract ticker from formatted amount if no ticker found
-              let extractedTicker = tickerLabel;
+              let extractedTicker = baseTickerLabel;
               if (!extractedTicker && enrichedFormattedAmount && !isMultiToken) {
                 const match = enrichedFormattedAmount.match(/\s+([A-Z]{2,10})$/);
                 if (match) {
@@ -398,32 +398,50 @@ export default function ExplorerOperationsTable({
                   : rawTokenIdentifier
                 : null;
               const amountPart = amountDisplay && amountDisplay.length > 0 ? amountDisplay : null;
-              let primaryLine: string | null = null;
-              if (isMultiToken && enrichedFormattedAmount) {
-                primaryLine = enrichedFormattedAmount;
-              } else {
-                const pieces: string[] = [];
-                if (amountPart) pieces.push(amountPart);
-                if (displayTicker) pieces.push(displayTicker);
-                if (pieces.length > 0) {
-                  primaryLine = pieces.join(" ").trim();
-                }
+
+              const hasMultiTokenDisplay = Boolean(isMultiToken && enrichedFormattedAmount);
+              let amountLabel: string | null = hasMultiTokenDisplay ? enrichedFormattedAmount : amountPart;
+              let tokenTickerLabel: string | null = hasMultiTokenDisplay ? null : displayTicker;
+
+              if (!amountLabel || amountLabel.trim().length === 0) {
+                amountLabel = null;
               }
-              if (!primaryLine || primaryLine.length === 0) {
-                primaryLine = displayTicker ?? amountPart ?? (tokenLink ? tokenLink.label : null) ?? shortIdentifier ?? "Unknown token";
+              if (!tokenTickerLabel || tokenTickerLabel.trim().length === 0) {
+                tokenTickerLabel = null;
               }
-              const primaryLineText = primaryLine ?? "Unknown token";
+
+              if (!amountLabel && !tokenTickerLabel) {
+                const fallbackLabel = (tokenLink ? tokenLink.label : null) ?? shortIdentifier ?? "Unknown token";
+                amountLabel = fallbackLabel;
+              }
+
+              const tokenTitle = [amountLabel, tokenTickerLabel].filter(Boolean).join(" ") || undefined;
+              const tokenContent = (
+                <span className="flex items-baseline justify-end">
+                  {amountLabel ? (
+                    <span className={tokenLink ? "text-sm text-foreground group-hover:text-accent" : "text-sm text-foreground"}>
+                      {amountLabel}
+                    </span>
+                  ) : null}
+                  {tokenTickerLabel ? (
+                    <span className={`${amountLabel ? "ml-2 " : ""}text-sm text-muted`}> 
+                      {tokenTickerLabel}
+                    </span>
+                  ) : null}
+                </span>
+              );
+
               const tokenPrimaryNode = tokenLink ? (
                 <Link
                   href={tokenLink.href}
-                  className="block text-sm text-foreground hover:text-accent hover:underline truncate"
-                  title={primaryLineText}
+                  className="group block text-right hover:underline"
+                  title={tokenTitle}
                 >
-                  {primaryLineText}
+                  {tokenContent}
                 </Link>
               ) : (
-                <span className="text-sm text-foreground truncate" title={primaryLineText}>
-                  {primaryLineText}
+                <span className="block text-right" title={tokenTitle}>
+                  {tokenContent}
                 </span>
               );
 
@@ -432,6 +450,9 @@ export default function ExplorerOperationsTable({
                   key={rowKey}
                   className="border-hairline text-sm text-foreground"
                 >
+                  <TableCell className="px-6 py-4 w-[160px] text-sm text-muted align-top whitespace-nowrap" title={absolute ?? undefined}>
+                    {relative}
+                  </TableCell>
                   <TableCell className="px-6 py-4 w-[220px] align-top">
                     <div className="flex flex-col gap-1 overflow-hidden text-ellipsis">
                       <Link
@@ -442,7 +463,7 @@ export default function ExplorerOperationsTable({
                       </Link>
                     </div>
                   </TableCell>
-                  <TableCell className="px-6 py-4 w-[140px] text-xs font-semibold uppercase tracking-[0.3em] text-muted align-top">
+                  <TableCell className="px-6 py-4 w-[180px] text-xs font-semibold uppercase tracking-[0.3em] text-muted align-top">
                     {operation.type}
                   </TableCell>
                   <TableCell className="px-6 py-4 w-[280px] align-top">
@@ -473,13 +494,10 @@ export default function ExplorerOperationsTable({
                       )}
                     </div>
                   </TableCell>
-                  <TableCell className="px-6 py-4 w-[320px] text-sm text-subtle align-top">
-                    <div className="flex flex-col gap-1 overflow-hidden">
+                  <TableCell className="px-6 py-4 w-[220px] text-sm text-subtle align-top text-right">
+                    <div className="flex flex-col items-end gap-1 overflow-hidden text-right">
                       {tokenPrimaryNode}
                     </div>
-                  </TableCell>
-                  <TableCell className="px-6 py-4 w-[120px] text-sm text-muted align-top whitespace-nowrap" title={absolute ?? undefined}>
-                    {relative}
                   </TableCell>
                 </TableRow>
               );
