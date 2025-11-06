@@ -46,7 +46,7 @@ export default function AssetsPage() {
       if (permissionsGranted) {
         await refreshWallet();
       } else {
-        console.warn('Transaction permissions were not granted; wallet data may be limited.');
+
       }
     } catch (error) {
       console.error('Failed to connect wallet:', error);
@@ -67,17 +67,17 @@ export default function AssetsPage() {
 
   // Action handlers for EstimatedBalance component
   const handleReceive = useCallback(() => {
-    console.log('Receive clicked');
+
     // TODO: Implement receive functionality
   }, []);
 
   const handleSend = useCallback(() => {
-    console.log('Send clicked');
+
     // TODO: Implement send functionality
   }, []);
 
   const handleTransfer = useCallback(() => {
-    console.log('Transfer clicked');
+
     // TODO: Implement transfer functionality
   }, []);
 

@@ -93,13 +93,13 @@ export default function WalletEventsManager(): null {
       void queryClient.invalidateQueries({ queryKey: explorerNetworkStatsQueryKey });
     };
     const handleLocked = () => {
-      console.debug("Wallet locked event received");
+
       // Do not invalidate history on lock state changes to preserve cache
       invalidateWalletAndTokens();
       void queryClient.invalidateQueries({ queryKey: explorerNetworkStatsQueryKey });
     };
     const handleUnlocked = () => {
-      console.debug("Wallet unlocked event received");
+
       // Do not invalidate history on lock state changes to preserve cache
       invalidateWalletAndTokens();
       void queryClient.invalidateQueries({ queryKey: explorerNetworkStatsQueryKey });

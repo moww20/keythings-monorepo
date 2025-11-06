@@ -52,7 +52,6 @@ export function loadBackendOperatorConfig(): BackendOperatorConfig {
  *   const account = KeetaNet.lib.Account.fromSeed(config.seed, config.accountIndex);
  *   const publicKey = account.publicKeyString.toString();
  *   
- *   console.info('Using backend operator account', {
  *     publicKey,
  *     name: config.name,
  *     network: config.network,

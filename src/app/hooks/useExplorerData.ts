@@ -64,7 +64,6 @@ export function useExplorerData() {
   });
 
   const fetchAccountInfo = useCallback(async (publicKey: string): Promise<ExplorerAccount | null> => {
-    try { console.debug('[useExplorerData] fetchAccountInfo:start', { publicKey }); } catch {}
     // SDK-only path: do not use wallet provider endpoints
 
     try {
@@ -86,17 +85,15 @@ export function useExplorerData() {
           const base = await (window as any).keeta.getBaseToken();
           const addr = base && typeof base === 'object' && base !== null && 'address' in base ? (base as any).address : undefined;
           baseTokenAddress = typeof addr === 'string' && addr.trim().length ? addr.trim() : baseTokenAddress;
-          try { console.debug('[useExplorerData] baseTokenAddress(provider)', { baseTokenAddress }); } catch {}
         } catch {}
       }
-      try { console.debug('[useExplorerData] baseTokenAddress', { baseTokenAddress }); } catch {}
 
       const accountState: unknown = await accountStatePromise;
       try {
         const hasState = !!(accountState && typeof accountState === 'object');
         const balancesLen = hasState && Array.isArray((accountState as any)?.balances) ? (accountState as any).balances.length : 0;
         const tokensLen = hasState && Array.isArray((accountState as any)?.tokens) ? (accountState as any).tokens.length : 0;
-        console.debug('[useExplorerData] accountState:summary', { hasState, balancesLen, tokensLen });
+
       } catch {}
 
       const account = (accountState && typeof accountState === 'object') ? (accountState as any) : {};
@@ -110,9 +107,9 @@ export function useExplorerData() {
       if (aggregatedResult.status === 'fulfilled' && Array.isArray(aggregatedResult.value) && aggregatedResult.value.length) {
         try {
           tokens = await processBalancesEntries(aggregatedResult.value, baseTokenAddress);
-          try { console.debug('[useExplorerData] aggregatedBalances:processed', tokens); } catch {}
+
         } catch (processError) {
-          try { console.warn('[useExplorerData] aggregatedBalances:processError', processError); } catch {}
+
         }
       }
 
@@ -125,9 +122,9 @@ export function useExplorerData() {
         if (Array.isArray(candidate) && candidate.length) {
           try {
             tokens = await processBalancesEntries(candidate, baseTokenAddress);
-            try { console.debug('[useExplorerData] fallbackBalances:processed', tokens); } catch {}
+
           } catch (fallbackError) {
-            try { console.warn('[useExplorerData] fallbackBalances:processError', fallbackError); } catch {}
+
           }
         }
       }
@@ -137,7 +134,7 @@ export function useExplorerData() {
         try {
           activity = mapHistoryRecords(historyResult.value as any[]);
         } catch (mapError) {
-          try { console.warn('[useExplorerData] history:mapError', mapError); } catch {}
+
         }
       }
 
@@ -153,7 +150,6 @@ export function useExplorerData() {
         certificates: account.certificates || [],
         activity,
       };
-      try { console.debug('[useExplorerData] fetchAccountInfo:done', { publicKey, tokens: result.tokens.length, activity: result.activity.length }); } catch {}
       return result;
     } catch (error) {
       try { console.error('[useExplorerData] fetchAccountInfo:error', error); } catch {}
@@ -163,12 +159,10 @@ export function useExplorerData() {
 
   const fetchAccount = useCallback(async (publicKey: string) => {
     setState(prev => ({ ...prev, loading: true, error: null }));
-    try { console.debug('[useExplorerData] fetchAccount:start', { publicKey }); } catch {}
     
     try {
       const account = await fetchAccountInfo(publicKey);
       setState(prev => ({ ...prev, account, loading: false, error: null }));
-      try { console.debug('[useExplorerData] fetchAccount:success', { hasAccount: !!account }); } catch {}
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to fetch account';
       setState(prev => ({ ...prev, account: null, loading: false, error: errorMessage }));

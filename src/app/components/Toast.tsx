@@ -30,7 +30,7 @@ function emitToast(type: ToastType, message: string, options?: ToastOptions) {
   if (toastEmitter) {
     toastEmitter.dispatchEvent(new CustomEvent(TOAST_EVENT, { detail }));
   } else {
-    console.log(`[Toast:${type}] ${message}`);
+
   }
 }
 

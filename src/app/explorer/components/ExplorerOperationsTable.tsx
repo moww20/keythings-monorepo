@@ -349,9 +349,7 @@ export default function ExplorerOperationsTable({
               if (!isMultiToken && rawForCompute && typeof decimalsForCompute === 'number') {
                 try {
                   normalizedAmountClient = formatTokenAmountPlain(rawForCompute, decimalsForCompute, fieldTypeForCompute, decimalsForCompute);
-                  try { console.debug('[ExplorerTable] normalized client amount', { rawForCompute, decimalsForCompute, fieldTypeForCompute, out: normalizedAmountClient }); } catch {}
                 } catch (e) {
-                  try { console.warn('[ExplorerTable] normalize failed', { error: (e as Error)?.message }); } catch {}
                   normalizedAmountClient = null;
                 }
               }

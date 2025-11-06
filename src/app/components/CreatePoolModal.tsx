@@ -201,13 +201,6 @@ export default function CreatePoolModal({ isOpen, onClose, onSuccess }: CreatePo
 
     try {
       // STEP 1: Validate wallet connection
-      console.log('[CreatePool] Wallet status:', {
-        publicKey,
-        hasUserClient: !!userClient,
-        userClientType: typeof userClient,
-        userClientMethods: userClient ? Object.keys(userClient) : []
-      });
-      
       if (!publicKey) {
         throw new Error('Wallet not connected. Please connect your Keeta wallet first.');
       }
@@ -216,13 +209,11 @@ export default function CreatePoolModal({ isOpen, onClose, onSuccess }: CreatePo
         throw new Error('Keeta SDK not initialized. Please unlock your wallet and try again.');
       }
 
-      console.log('[CreatePool] Starting pool creation on Keeta testnet');
-      console.log('[CreatePool] Token A:', tokenA, '| Amount:', amountA);
-      console.log('[CreatePool] Token B:', tokenB, '| Amount:', amountB);
+
 
       // STEP 2: Create pool storage account (uses proven StorageAccountManager)
-      console.log('[CreatePool] Step 1/2: Creating pool storage account...');
-      console.log('[CreatePool] ⚠️ Please approve the transaction in your wallet extension!');
+
+
       setSettlementStatus('building');
       
       const manager = new StorageAccountManager(userClient);
@@ -236,12 +227,11 @@ export default function CreatePoolModal({ isOpen, onClose, onSuccess }: CreatePo
         );
         
         poolStorageAddress = await Promise.race([createPromise, timeoutPromise]);
-        console.log('[CreatePool] ✅ Storage account created:', poolStorageAddress);
+
       } catch (error) {
         if (error instanceof Error && error.message === 'TIMEOUT') {
           // Timeout - but transaction might have succeeded
-          console.warn('[CreatePool] ⚠️ Wallet response timeout - transaction may still have succeeded');
-          
+
           // Ask user if they approved and if they see the storage account in wallet
           const proceed = confirm(
             'Storage account creation timed out.\n\n' +
@@ -256,7 +246,7 @@ export default function CreatePoolModal({ isOpen, onClose, onSuccess }: CreatePo
           
           // User confirmed - proceed with a placeholder, they can deposit manually later
           poolStorageAddress = 'PENDING_VERIFICATION';
-          console.log('[CreatePool] User confirmed approval, proceeding...');
+
         } else {
           throw error;
         }
@@ -271,9 +261,8 @@ export default function CreatePoolModal({ isOpen, onClose, onSuccess }: CreatePo
       // STEP 3: Skip automatic liquidity deposit for now
       // Due to wallet extension serialization limitations with builder.send()
       // Users will need to deposit manually or we'll implement this differently
-      console.log('[CreatePool] ⚠️ Automatic liquidity deposit not yet supported');
-      console.log('[CreatePool] Storage account created - user can deposit manually');
-      
+
+
       // Create a mock successful result for now
       const transferResult = {
         success: true,
@@ -281,7 +270,7 @@ export default function CreatePoolModal({ isOpen, onClose, onSuccess }: CreatePo
       };
       
       // Storage account created successfully - proceed to Step 4: Add Liquidity
-      console.log('[CreatePool] ✅ Storage account created, proceeding to Step 4: Add Liquidity');
+
       setStep('liquidity');
       
       // Extract transaction hash
@@ -295,19 +284,15 @@ export default function CreatePoolModal({ isOpen, onClose, onSuccess }: CreatePo
         }
       }
       setTxHash(txHashValue);
-      console.log('[CreatePool] Transaction hash:', txHashValue);
-      console.log('[CreatePool] Pool storage address:', poolStorageAddress);
-      
+
+
       // STEP 4: Wait for Keeta network settlement (400ms)
       setSettlementStatus('settling');
-      console.log('[CreatePool] Waiting for Keeta settlement (400ms)...');
       await new Promise(resolve => setTimeout(resolve, 600));
 
       // STEP 5: Notify backend for UI tracking (NO CUSTODY)
       const poolId = `${getTokenSymbol(tokenA)}-${getTokenSymbol(tokenB)}`;
-      
-      console.log('[CreatePool] Notifying backend...');
-      
+
       try {
         const backendResponse = await fetch('http://localhost:8080/api/pools/created', {
           method: 'POST',
@@ -327,12 +312,10 @@ export default function CreatePoolModal({ isOpen, onClose, onSuccess }: CreatePo
         });
 
         if (!backendResponse.ok) {
-          console.warn('[CreatePool] Backend notification failed (non-critical):', await backendResponse.text());
         } else {
-          console.log('[CreatePool] ✅ Backend notified successfully');
+
         }
       } catch (backendError) {
-        console.warn('[CreatePool] Backend notification failed (non-critical):', backendError);
         // Continue anyway - pool exists on-chain even if backend doesn't know
       }
 
@@ -357,10 +340,8 @@ export default function CreatePoolModal({ isOpen, onClose, onSuccess }: CreatePo
     setSettlementStatus('building');
 
     try {
-      console.log('[CreatePool] Step 4: Adding liquidity to storage account...');
-      console.log('[CreatePool] Storage account:', poolStorageAddress);
-      console.log('[CreatePool] Amount A:', amountA, getTokenSymbol(tokenA));
-      console.log('[CreatePool] Amount B:', amountB, getTokenSymbol(tokenB));
+
+
       
       if (!userClient || !publicKey) {
         throw new Error('Wallet not connected. Please reconnect your wallet.');
@@ -371,7 +352,7 @@ export default function CreatePoolModal({ isOpen, onClose, onSuccess }: CreatePo
       }
       
       // Build transaction to send tokens to the pool storage account
-      console.log('[CreatePool] Building liquidity deposit transaction...');
+
       setSettlementStatus('building');
       
       const builder = userClient.initBuilder();
@@ -384,14 +365,11 @@ export default function CreatePoolModal({ isOpen, onClose, onSuccess }: CreatePo
       const tokenBDecimals = getTokenDecimals(tokenB);
       const amountAStr = Math.floor(parseFloat(amountA) * Math.pow(10, tokenADecimals)).toString();
       const amountBStr = Math.floor(parseFloat(amountB) * Math.pow(10, tokenBDecimals)).toString();
-      
-      console.log('[CreatePool] Token A decimals:', tokenADecimals);
-      console.log('[CreatePool] Token B decimals:', tokenBDecimals);
-      console.log('[CreatePool] Amount A (raw):', amountA, '→ (units):', amountAStr);
-      console.log('[CreatePool] Amount B (raw):', amountB, '→ (units):', amountBStr);
+
+
       
       // Send token A to pool storage account
-      console.log('[CreatePool] Adding send operation for token A...');
+
       if (typeof builder.send !== 'function') {
         throw new Error('Builder does not support send operations');
       }
@@ -410,40 +388,32 @@ export default function CreatePoolModal({ isOpen, onClose, onSuccess }: CreatePo
       const tokenARef = JSON.parse(JSON.stringify({ publicKeyString: tokenA }));
       const tokenBRef = JSON.parse(JSON.stringify({ publicKeyString: tokenB }));
       
-      console.log('[CreatePool] toAccount:', JSON.stringify(toAccount));
-      console.log('[CreatePool] tokenARef:', JSON.stringify(tokenARef));
-      console.log('[CreatePool] tokenBRef:', JSON.stringify(tokenBRef));
-      
-      console.log('[CreatePool] Sending', amountAStr, 'of token A to', poolStorageAddress);
+
       // builder.send(to, amount, token) - SDK infers "from" account from builder context
       builder.send(toAccount, amountAStr, tokenARef);
       
       // Send token B to pool storage account
-      console.log('[CreatePool] Adding send operation for token B...');
-      console.log('[CreatePool] Sending', amountBStr, 'of token B to', poolStorageAddress);
+
+
       // builder.send(to, amount, token) - SDK infers "from" account from builder context
       builder.send(toAccount, amountBStr, tokenBRef);
       
       // Compute blocks before publishing (required by Keeta SDK for send operations)
-      console.log('[CreatePool] Computing transaction blocks...');
+
       if (typeof (builder as any).computeBlocks === 'function') {
         await (builder as any).computeBlocks();
-        console.log('[CreatePool] ✅ Blocks computed');
+
       }
-      
-      console.log('[CreatePool] ⚠️ Please approve the liquidity deposit transaction in your wallet extension!');
-      console.warn('🔐 SECURITY: Wallet approval required for liquidity deposit');
-      console.warn(`🔐 You are about to deposit ${amountA} ${getTokenSymbol(tokenA)} and ${amountB} ${getTokenSymbol(tokenB)} to the pool`);
-      console.warn('🔐 Please review and approve the transaction in your Keeta Wallet extension');
-      
+
+
+
       setSettlementStatus('signing');
       
       // SECURITY: This publishBuilder call MUST trigger wallet approval
       // User must explicitly approve the liquidity deposit transaction
       const depositResult = await userClient.publishBuilder(builder);
-      console.log('[CreatePool] ✅ Liquidity deposit transaction signed and published');
-      console.log('[CreatePool] Transaction result:', depositResult);
-      
+
+
       // Extract transaction hash
       let txHashValue = 'liquidity_deposit_tx';
       if (typeof depositResult === 'string') {
@@ -461,18 +431,14 @@ export default function CreatePoolModal({ isOpen, onClose, onSuccess }: CreatePo
           txHashValue = typeof result.hash === 'string' ? result.hash : result.hash.toString();
         }
       }
-      
-      console.log('[CreatePool] Liquidity deposit transaction hash:', txHashValue);
-      
+
       // Wait for Keeta settlement (400ms)
       setSettlementStatus('settling');
-      console.log('[CreatePool] Waiting for Keeta settlement (400ms)...');
       await new Promise(resolve => setTimeout(resolve, 600));
 
       setSettlementStatus('complete');
-      console.log('[CreatePool] ✅ Liquidity deposited successfully!');
-      console.log('[CreatePool] Pool is now active and ready for trading');
-      
+
+
       // Show success briefly then close
       await new Promise(resolve => setTimeout(resolve, 1500));
       onSuccess();

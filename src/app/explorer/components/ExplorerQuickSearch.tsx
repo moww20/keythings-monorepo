@@ -85,10 +85,7 @@ export default function ExplorerQuickSearch(): React.JSX.Element {
             return null;
           }
         } catch (walletError) {
-          console.warn(
-            "[EXPLORER_SEARCH] Wallet lookup failed, falling back to SDK",
-            walletError,
-          );
+
         }
       }
 
@@ -123,10 +120,7 @@ export default function ExplorerQuickSearch(): React.JSX.Element {
           }
         }
       } catch (sdkError) {
-        console.warn(
-          "[EXPLORER_SEARCH] SDK account lookup failed, keeping default account view",
-          sdkError,
-        );
+
       }
       return null;
     },

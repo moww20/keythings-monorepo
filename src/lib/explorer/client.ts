@@ -245,23 +245,22 @@ async function resolveNetworkStats(): Promise<NetworkStats> {
   try {
     if (typeof window !== "undefined") {
       try {
-        console.log("[CLIENT] Using SDK read client for network stats");
+
         return await fetchNetworkStatsFromSdk();
       } catch (sdkError) {
-        console.warn("[CLIENT] SDK network stats fetch failed", sdkError);
+
         if (window.keeta) {
           return await fetchNetworkStatsFromWallet();
         }
-        console.log("[CLIENT] Wallet extension not available, using fallback stats");
+
       }
     } else {
-      console.log("[CLIENT] resolveNetworkStats running on server; SDK not available");
+
     }
   } catch (error) {
     console.error("Error fetching network stats:", error);
   }
 
-  console.warn("[CLIENT] Returning fallback network stats (wallet unavailable or failed)");
   return {
     blockCount: 0,
     transactionCount: 0,
@@ -283,7 +282,7 @@ async function getSdkNetworkClient(): Promise<any> {
   }
 
   const preferredNetwork = resolvePreferredNetwork();
-  console.log(`[CLIENT] Resolving SDK UserClient for network: ${preferredNetwork}`);
+
   if (cachedSdkNetworkClient && cachedSdkNetworkClient.network === preferredNetwork) {
     return cachedSdkNetworkClient.client;
   }
@@ -309,7 +308,6 @@ async function getSdkNetworkClient(): Promise<any> {
     network: preferredNetwork,
   };
 
-  console.log('[CLIENT] SDK UserClient initialized');
   return clientCandidate;
 }
 
@@ -317,7 +315,7 @@ async function fetchNetworkStatsFromSdk(): Promise<NetworkStats> {
   const userClient = await getSdkNetworkClient();
   const lowClient = (userClient as any)?.client;
   if (!lowClient) {
-    console.warn('[CLIENT] SDK low-level client not available on UserClient');
+
     return {
       blockCount: 0,
       transactionCount: 0,
@@ -336,17 +334,15 @@ async function fetchNetworkStatsFromSdk(): Promise<NetworkStats> {
     if (typeof lowClient.getNodeStats === 'function') {
       const nodeStats = await lowClient.getNodeStats();
       ledgerStats = nodeStats?.ledger ?? null;
-      console.debug('[CLIENT] SDK getNodeStats().ledger:', ledgerStats);
     } else if (typeof lowClient.getNetworkStatus === 'function') {
       const status = await lowClient.getNetworkStatus(2000);
       const firstOnline = Array.isArray(status) ? status.find((s: any) => s?.online) : null;
       ledgerStats = firstOnline?.ledger ?? null;
-      console.debug('[CLIENT] SDK getNetworkStatus() -> ledger (first online):', ledgerStats);
     } else {
-      console.warn('[CLIENT] Neither getNodeStats nor getNetworkStatus available on SDK Client');
+
     }
   } catch (err) {
-    console.warn('[CLIENT] Error invoking SDK network stats methods:', err);
+
   }
 
   const t1 = now();
@@ -365,8 +361,6 @@ async function fetchNetworkStatsFromSdk(): Promise<NetworkStats> {
         queryTime: Math.max(0, Math.round(t1 - t0)),
         time: new Date().toISOString(),
       };
-
-  console.debug('[CLIENT] Mapped SDK network stats:', result);
 
   const parsed = walletNetworkStatsSchema.safeParse(result);
   if (!parsed.success) {
@@ -411,7 +405,7 @@ export async function fetchVoteStaple(blockhash: string) {
           }
         }
       } catch (e) {
-        console.log('[CLIENT] fetchVoteStaple history path failed:', e);
+
       }
 
       // 2) Fallback: use SDK user client to get block and derive a minimal staple with operations
@@ -465,7 +459,7 @@ export async function fetchVoteStaple(blockhash: string) {
           }
         }
       } catch (e) {
-        console.log('[CLIENT] fetchVoteStaple SDK block path failed:', e);
+
       }
     }
 
@@ -500,11 +494,10 @@ export async function fetchTransactions(query?: ExplorerTransactionsQuery): Prom
   try {
     // Wallet-only path
     if (typeof window !== 'undefined' && window.keeta && query?.publicKey) {
-      console.log('[CLIENT] Using wallet extension for transaction data');
+
       return await fetchTransactionsFromWallet(query);
     }
 
-    console.log('[CLIENT] Wallet extension not available or no public key provided');
     return { nextCursor: null, stapleOperations: [] };
   } catch (error) {
     console.error('Error fetching transactions:', error);
@@ -517,15 +510,13 @@ export async function fetchTransactions(query?: ExplorerTransactionsQuery): Prom
 
 export async function fetchAccount(publicKey: string): Promise<ExplorerAccount | null> {
   try {
-    console.log('[CLIENT] fetchAccount called with publicKey:', publicKey);
-    
+
     // Use wallet extension directly instead of backend
     if (typeof window !== 'undefined' && window.keeta) {
-      console.log('[CLIENT] Using wallet extension for account data');
+
       return await fetchAccountFromWallet(publicKey);
     }
-    
-    console.log('[CLIENT] Wallet extension not available');
+
     return null;
   } catch (error) {
     console.error('[CLIENT] Error fetching account:', error);
@@ -535,7 +526,6 @@ export async function fetchAccount(publicKey: string): Promise<ExplorerAccount |
 
 async function fetchNetworkStatsFromWallet(): Promise<NetworkStats> {
   try {
-    console.log('[CLIENT] Fetching network stats via wallet UserClient');
 
     // Get user client for network operations
     if (!window.keeta) {
@@ -548,7 +538,7 @@ async function fetchNetworkStatsFromWallet(): Promise<NetworkStats> {
 
     const lowClient = (userClient as any)?.client;
     if (!lowClient) {
-      console.warn('[CLIENT] Wallet UserClient.client is not available');
+
       return {
         blockCount: 0,
         transactionCount: 0,
@@ -566,17 +556,15 @@ async function fetchNetworkStatsFromWallet(): Promise<NetworkStats> {
       if (typeof lowClient.getNodeStats === 'function') {
         const nodeStats = await lowClient.getNodeStats();
         ledgerStats = nodeStats?.ledger ?? null;
-        console.debug('[CLIENT] Wallet lowClient.getNodeStats().ledger:', ledgerStats);
       } else if (typeof lowClient.getNetworkStatus === 'function') {
         const status = await lowClient.getNetworkStatus(2000);
         const firstOnline = Array.isArray(status) ? status.find((s: any) => s?.online) : null;
         ledgerStats = firstOnline?.ledger ?? null;
-        console.debug('[CLIENT] Wallet lowClient.getNetworkStatus() -> ledger (first online):', ledgerStats);
       } else {
-        console.warn('[CLIENT] Wallet low-level client lacks getNodeStats/getNetworkStatus');
+
       }
     } catch (inner) {
-      console.warn('[CLIENT] Error calling wallet low-level network stats:', inner);
+
     }
 
     const t1 = now();
@@ -596,8 +584,6 @@ async function fetchNetworkStatsFromWallet(): Promise<NetworkStats> {
           time: new Date().toISOString(),
         };
 
-    console.debug('[CLIENT] Mapped wallet network stats:', result);
-
     const parsed = walletNetworkStatsSchema.safeParse(result);
     if (!parsed.success) {
       console.error('[CLIENT] Wallet network stats schema validation failed:', parsed.error);
@@ -611,13 +597,13 @@ async function fetchNetworkStatsFromWallet(): Promise<NetworkStats> {
     }
 
     if (parsed.data.blockCount === 0 && parsed.data.transactionCount === 0 && parsed.data.representativeCount === 0) {
-      console.warn('[CLIENT] Wallet network stats are zeroed; representatives may be unreachable');
+
     }
 
     return parsed.data;
   } catch (error) {
     console.error('[CLIENT] Error fetching network stats from wallet:', error);
-    console.warn('[CLIENT] Falling back to zeroed network stats due to error');
+
     return {
       blockCount: 0,
       transactionCount: 0,
@@ -630,8 +616,7 @@ async function fetchNetworkStatsFromWallet(): Promise<NetworkStats> {
 
 async function fetchTransactionsFromWallet(query: ExplorerTransactionsQuery): Promise<ExplorerTransactionsResponse> {
   try {
-    console.log('[CLIENT] Fetching transactions from wallet extension');
-    
+
     // Get user client for advanced operations
     if (!window.keeta) {
       throw new Error('Wallet extension not available');
@@ -648,7 +633,6 @@ async function fetchTransactionsFromWallet(query: ExplorerTransactionsQuery): Pr
     };
     
     const historyResult = await (userClient as any).history(historyOptions);
-    console.log('[CLIENT] History from wallet:', historyResult);
 
     const normAddr = (v: any): string => {
       if (typeof v === 'string') return v;
@@ -744,19 +728,16 @@ async function fetchTransactionsFromWallet(query: ExplorerTransactionsQuery): Pr
 
 async function fetchAccountFromWallet(publicKey: string): Promise<ExplorerAccount | null> {
   try {
-    console.log('[CLIENT] Fetching account data from wallet extension for:', publicKey);
-    
+
     // Get account info from wallet extension
     if (!window.keeta) {
       throw new Error('Wallet extension not available');
     }
     const accountInfo = await window.keeta.getAccountInfo!(publicKey);
-    console.log('[CLIENT] Account info from wallet:', accountInfo);
-    
+
     // Get all balances for this account
     const allBalances = await window.keeta.getAllBalances();
-    console.log('[CLIENT] All balances from wallet:', allBalances);
-    
+
     // Transform wallet data to ExplorerAccount format
     const account: ExplorerAccount = {
       publicKey: publicKey,
@@ -777,8 +758,7 @@ async function fetchAccountFromWallet(publicKey: string): Promise<ExplorerAccoun
       certificates: [],
       activity: [] // Will be populated by history if needed
     };
-    
-    console.log('[CLIENT] Transformed account data:', account);
+
     return account;
   } catch (error) {
     console.error('[CLIENT] Error fetching account from wallet:', error);
@@ -788,7 +768,7 @@ async function fetchAccountFromWallet(publicKey: string): Promise<ExplorerAccoun
 
 async function fetchAccountFromBackend(publicKey: string): Promise<ExplorerAccount | null> {
   // Explorer backend disabled; rely on wallet SDK
-  console.log('[CLIENT] fetchAccountFromBackend is disabled; use wallet provider instead');
+
   return null;
 }
 

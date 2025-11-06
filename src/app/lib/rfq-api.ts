@@ -162,7 +162,7 @@ async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
 
 export async function fetchRfqOrders(pair?: string): Promise<RFQOrder[]> {
   try {
-    console.log('[rfq-api] fetchRfqOrders', { pair });
+
     const path = pair
       ? `/api/rfq/orders?${new URLSearchParams({ pair }).toString()}`
       : '/api/rfq/orders';
@@ -170,14 +170,13 @@ export async function fetchRfqOrders(pair?: string): Promise<RFQOrder[]> {
     const listSchema = z.array(orderSchema);
     const result = listSchema.safeParse(payload);
     if (!result.success) {
-      console.warn('[rfq-api] Failed to parse RFQ order list', result.error.flatten());
       return [];
     }
     return result.data;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     if (message.includes('404')) {
-      console.warn('[rfq-api] No RFQ orders found for pair. Returning empty list.', { pair });
+
       return [];
     }
     console.error('[rfq-api] Failed to fetch RFQ orders', error);
@@ -187,11 +186,10 @@ export async function fetchRfqOrders(pair?: string): Promise<RFQOrder[]> {
 
 export async function fetchRfqOrder(orderId: string): Promise<RFQOrder | null> {
   try {
-    console.log('[rfq-api] fetchRfqOrder', { orderId });
+
     const payload = await apiRequest<unknown>(`/api/rfq/orders/${encodeURIComponent(orderId)}`);
     const parsed = orderSchema.safeParse(payload);
     if (!parsed.success) {
-      console.warn('[rfq-api] Failed to parse RFQ order response', parsed.error.flatten());
       return null;
     }
     return parsed.data;
@@ -203,12 +201,11 @@ export async function fetchRfqOrder(orderId: string): Promise<RFQOrder | null> {
 
 export async function fetchRfqMakers(): Promise<RFQMakerMeta[]> {
   try {
-    console.log('[rfq-api] fetchRfqMakers');
+
     const payload = await apiRequest<unknown>('/api/rfq/makers');
     const listSchema = z.array(makerSchema);
     const result = listSchema.safeParse(payload);
     if (!result.success) {
-      console.warn('[rfq-api] Failed to parse maker profiles', result.error.flatten());
       return [];
     }
     return result.data;
@@ -247,7 +244,6 @@ export async function submitRfqFill(
       body: JSON.stringify(payload),
     },
   );
-  console.log('[rfq-api] submitRfqFill response', response);
 
   const parsed = fillResponseSchema.safeParse(response);
   if (!parsed.success) {
@@ -292,7 +288,6 @@ export async function createRfqOrder(order: RFQOrder): Promise<RFQOrder> {
     method: 'POST',
     body: JSON.stringify(backendOrder),
   });
-  console.log('[rfq-api] createRfqOrder response', response);
 
   const parsed = orderSchema.safeParse(response);
   if (!parsed.success) {
@@ -344,7 +339,7 @@ export async function declareIntention(
   orderId: string,
   payload: RFQDeclarationRequest,
 ): Promise<RFQDeclarationResponse> {
-  console.log('[rfq-api] declareIntention request', { orderId, payload });
+
   const response = await apiRequest<unknown>(
     `/api/rfq/orders/${encodeURIComponent(orderId)}/declare`,
     {
@@ -356,7 +351,6 @@ export async function declareIntention(
       }),
     },
   );
-  console.log('[rfq-api] declareIntention response', response);
 
   const parsed = declarationResponseSchema.safeParse(response);
   if (!parsed.success) {
@@ -368,12 +362,11 @@ export async function declareIntention(
 
 export async function fetchDeclarations(orderId: string): Promise<RFQDeclaration[]> {
   try {
-    console.log('[rfq-api] fetchDeclarations', { orderId });
+
     const payload = await apiRequest<unknown>(`/api/rfq/orders/${encodeURIComponent(orderId)}/declarations`);
     const listSchema = z.array(declarationSchema);
     const result = listSchema.safeParse(payload);
     if (!result.success) {
-      console.warn('[rfq-api] Failed to parse declarations list', result.error.flatten());
       return [];
     }
     return result.data;
@@ -387,7 +380,7 @@ export async function approveDeclaration(
   orderId: string,
   payload: RFQApprovalRequest,
 ): Promise<RFQDeclarationResponse> {
-  console.log('[rfq-api] approveDeclaration request', { orderId, payload });
+
   const response = await apiRequest<unknown>(
     `/api/rfq/orders/${encodeURIComponent(orderId)}/approve-declaration`,
     {
@@ -400,7 +393,6 @@ export async function approveDeclaration(
       }),
     },
   );
-  console.log('[rfq-api] approveDeclaration response', response);
 
   const parsed = declarationResponseSchema.safeParse(response);
   if (!parsed.success) {

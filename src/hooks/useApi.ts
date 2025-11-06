@@ -13,6 +13,7 @@ import {
   getTokenMetadata,
   type TokenMetadataEntry,
 } from '@/lib/tokens/metadata-service';
+import { isHexTokenIdentifier, normalizeTokenAddress } from '@/lib/explorer/token-address';
 
 const hasExplorerApiBase = typeof process.env.NEXT_PUBLIC_API_URL === 'string'
   && process.env.NEXT_PUBLIC_API_URL.trim().length > 0;
@@ -506,29 +507,31 @@ const parseStorageState = (rawState: unknown) => {
     }
   }
 
-  if (process.env.NODE_ENV !== 'production') {
-    try {
-      console.warn('[useStorage] Unable to normalize storage state payload', {
-        keys: Object.keys(rawState as Record<string, unknown>),
-      });
-    } catch {
-      // no-op
-    }
-  }
-
   return null;
 };
 
-const fetchStorageFromChain = async (publicKey: string) => {
-  let rawState: unknown = await getAccountState(publicKey);
+async function fetchStorageFromChain(
+  publicKey: string,
+  userClient?: any,
+): Promise<{
+  publicKey: string;
+  owner: string | null;
+  type: string;
+  createdAt: string | null;
+  updatedAt: string | null;
+  tokens: StorageTokenEntry[];
+  certificates: unknown[];
+} | null> {
+  let rawState: unknown = null;
 
-  if (!rawState && typeof window !== 'undefined') {
-    const provider = (window as { keeta?: Record<string, unknown> }).keeta;
+  // Try SDK first for accurate storage account state
+  try {
+    const { getAccountState } = await import('@/lib/explorer/sdk-read-client');
+    rawState = await getAccountState(publicKey);
+  } catch (sdkError) {
+    // Fallback to wallet provider
+    const provider = typeof window !== 'undefined' ? (window as any).keeta : null;
     if (provider) {
-      try {
-        await (provider.requestCapabilities as ((caps: string[]) => Promise<unknown>) | undefined)?.(['read']);
-      } catch {}
-
       try {
         if (typeof provider.getAccountInfo === 'function') {
           rawState = await provider.getAccountInfo(publicKey);
@@ -536,7 +539,7 @@ const fetchStorageFromChain = async (publicKey: string) => {
           rawState = await provider.request({ method: 'keeta_getAccountInfo', params: [publicKey] });
         }
       } catch (walletError) {
-        console.warn('Wallet provider getAccountInfo failed', walletError);
+        // ignore
       }
     }
   }
@@ -552,19 +555,85 @@ const fetchStorageFromChain = async (publicKey: string) => {
   const createdAt = toDateString(info.createdAt ?? state.createdAt ?? null);
   const updatedAt = toDateString(info.updatedAt ?? state.updatedAt ?? null);
 
+  // Extract balances from storage account state
+  // Storage accounts have balances array with token addresses and amounts
   const balancesSource = Array.isArray(state.balances) && state.balances.length > 0
     ? state.balances
     : Array.isArray(state.tokens) ? state.tokens : [];
 
+  if (balancesSource.length === 0) {
+    // If no balances found, return empty tokens array but still return the account info
+    return {
+      publicKey: state.publicKey ?? publicKey,
+      owner,
+      type,
+      createdAt,
+      updatedAt,
+      tokens: [],
+      certificates: [] as unknown[],
+    };
+  }
+
+  // Use the exact same normalizeAccountAddress logic from sdk-read-client (same as account page)
+  // This properly extracts keeta_ format from Account objects via publicKeyString.toString()
+  const normalizeAccountAddress = (candidate: unknown): string | undefined => {
+    if (!candidate) return undefined;
+    if (typeof candidate === 'string') {
+      const t = candidate.trim();
+      return t.length > 0 ? t : undefined;
+    }
+    try {
+      const pk = (candidate as any)?.publicKeyString;
+      if (typeof pk === 'string' && pk.trim().length > 0) return pk.trim();
+      if (pk && typeof pk.toString === 'function') {
+        const s = String(pk.toString()).trim();
+        if (s && s !== '[object Object]') return s;
+      }
+    } catch {}
+    if (typeof (candidate as { toString?: () => string }).toString === 'function') {
+      try {
+        const s = String((candidate as { toString: () => string }).toString()).trim();
+        if (s && s !== '[object Object]') return s;
+      } catch {}
+    }
+    return undefined;
+  };
+  
   const mappedTokens = await Promise.all<StorageTokenEntry | null>(
     balancesSource.map(async (entry): Promise<StorageTokenEntry | null> => {
-      const tokenIdCandidate = toPublicKeyString(entry.token)
-        ?? (typeof entry.token === 'string' ? entry.token : undefined)
-        ?? (typeof entry.publicKey === 'string' ? entry.publicKey : undefined)
-        ?? (typeof entry.publicKeyString === 'string' ? entry.publicKeyString : undefined)
-        ?? (typeof entry.address === 'string' ? entry.address : undefined);
-      const tokenId = tokenIdCandidate?.trim();
+      // Use normalizeAccountAddress exactly like getAggregatedBalancesForOwner does (line 668)
+      // This extracts keeta_ format from Account objects via publicKeyString.toString()
+      // If entry.token is an Account object, it will extract the keeta address
+      // If entry.token is already a string (hex or keeta), it will return that string
+      let tokenId = normalizeAccountAddress((entry as any)?.token ?? (entry as any)?.publicKey) ?? '';
+      
       if (!tokenId) return null;
+      
+      console.log('[useApi] After normalizeAccountAddress:', {
+        tokenId,
+        isKeeta: tokenId.startsWith('keeta_'),
+        isHex: isHexTokenIdentifier(tokenId),
+        entryTokenType: typeof (entry as any)?.token,
+        entryToken: (entry as any)?.token
+      });
+      
+      // If we got a hex string (not keeta format), convert it using fromPublicKeyAndType
+      if (!tokenId.startsWith('keeta_') && isHexTokenIdentifier(tokenId)) {
+        console.log('[useApi] ⚠️ Hex format detected, attempting conversion to keeta address');
+        const converted = await normalizeTokenAddress(tokenId);
+        if (converted) {
+          tokenId = converted;
+          console.log('[useApi] ✅ Converted hex token identifier to keeta format:', tokenId);
+        } else {
+          console.warn('[useApi] ⚠️ Failed to convert hex to keeta format, using hex as-is');
+        }
+      }
+
+      if (!tokenId) return null;
+
+      console.log('[useApi] Final Token ID format:', tokenId.startsWith('keeta_') ? 'keeta ✅' : 'hex ❌', tokenId);
+      console.log('[useApi] Raw entry.token type:', typeof entry.token);
+      console.log('[useApi] Raw entry.token:', entry.token);
 
       const inlineMetadata = parseTokenMetadata(entry.metadata);
 
@@ -573,14 +642,7 @@ const fetchStorageFromChain = async (publicKey: string) => {
         try {
           serviceMetadataEntry = await getTokenMetadata(tokenId);
         } catch (metadataError) {
-          if (process.env.NODE_ENV !== 'production') {
-            try {
-              console.warn('[useStorage] Failed to load token metadata', {
-                tokenId,
-                metadataError,
-              });
-            } catch {}
-          }
+          // Metadata fetch failed - continue without metadata
         }
       }
 
@@ -690,7 +752,7 @@ export function useStorage(publicKey: string | undefined) {
           try {
             data = await storageApi.getStorage(publicKey);
           } catch (apiError) {
-            console.warn('Storage API request failed, falling back to on-chain state', apiError);
+
           }
         }
 

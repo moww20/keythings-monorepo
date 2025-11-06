@@ -252,7 +252,6 @@ export function getTakerTokenAddressFromOrder(order: RFQOrder): string {
  * These functions may return stale or incorrect decimal values
  */
 export function getMakerTokenDecimals(pair: string, side: OrderSide): number {
-  console.warn('[DEPRECATED] getMakerTokenDecimals() - Use getTokenMetadata() from wallet context instead');
   return getTokenDecimalsForSymbol(getMakerTokenSymbol(pair, side));
 }
 
@@ -261,7 +260,6 @@ export function getMakerTokenDecimals(pair: string, side: OrderSide): number {
  * These functions may return stale or incorrect decimal values
  */
 export function getTakerTokenDecimals(pair: string, side: OrderSide): number {
-  console.warn('[DEPRECATED] getTakerTokenDecimals() - Use getTokenMetadata() from wallet context instead');
   return getTokenDecimalsForSymbol(getTakerTokenSymbol(pair, side));
 }
 
@@ -270,7 +268,6 @@ export function getTakerTokenDecimals(pair: string, side: OrderSide): number {
  * These functions may return stale or incorrect decimal values
  */
 export function getMakerTokenDecimalsFromOrder(order: RFQOrder): number {
-  console.warn('[DEPRECATED] getMakerTokenDecimalsFromOrder() - Use getTokenMetadata() from wallet context instead');
   return getMakerTokenDecimals(order.pair, order.side);
 }
 
@@ -279,7 +276,6 @@ export function getMakerTokenDecimalsFromOrder(order: RFQOrder): number {
  * These functions may return stale or incorrect decimal values
  */
 export function getTakerTokenDecimalsFromOrder(order: RFQOrder): number {
-  console.warn('[DEPRECATED] getTakerTokenDecimalsFromOrder() - Use getTokenMetadata() from wallet context instead');
   return getTakerTokenDecimals(order.pair, order.side);
 }
 
@@ -367,7 +363,7 @@ export async function validateTokenMetadataConsistency(
   try {
     const metadata = await getTokenMetadata(tokenAddress);
     if (!metadata) {
-      console.warn('[validateTokenMetadataConsistency] No metadata found for token:', tokenAddress);
+
       return false;
     }
     
@@ -534,7 +530,7 @@ function safeParseMetadata(metadata: unknown): NormalizedTokenMetadata | null {
   const parsed = TokenMetadataSchema.safeParse(toParse);
   if (!parsed.success) {
     try {
-      console.warn('[token-utils] Invalid metadata shape', parsed.error.issues);
+
     } catch {}
     return null;
   }
@@ -862,7 +858,7 @@ async function resolveTokenMetadata(options: MetadataProcessingOptions): Promise
       }
     } catch (error) {
       try {
-        console.warn('[resolveTokenMetadata] fetchMetadata failed', { tokenAddress, error });
+
       } catch {}
       fetchedMetadata = null;
     }
@@ -934,30 +930,6 @@ export async function processTokenForDisplay(
   const metadataName = metadata ? getTokenDisplayName(metadata) : '';
   const metadataTicker = metadata ? getTokenTicker(metadata) : '';
 
-  try {
-    console.debug('[TOKENS] processTokenForDisplay:input', {
-      tokenAddress,
-      hasMetadata: Boolean(metadata),
-      metadataName,
-      metadataTicker,
-      metadataSummary,
-      parsedMetadata: parsedMetadata
-        ? {
-            name: parsedMetadata.name ?? undefined,
-            symbol: parsedMetadata.symbol ?? undefined,
-            ticker: parsedMetadata.ticker ?? undefined,
-            hasKis: typeof parsedMetadata.kis === 'object' && parsedMetadata.kis !== null,
-            decimalPlaces: parsedMetadata.decimalPlaces ?? undefined,
-            decimals: parsedMetadata.decimals ?? undefined,
-          }
-        : null,
-      decimalsFromMetadata: parsedMetadata?.decimals ?? null,
-      fieldTypeFromMetadata: parsedMetadata?.decimalPlaces ? 'decimalPlaces' : parsedMetadata?.decimals ? 'decimals' : null,
-      displayDecimalsFromMetadata: parsedMetadata?.decimalPlaces ?? parsedMetadata?.decimals ?? null,
-      isBaseToken: Boolean(baseTokenAddress && tokenAddress === baseTokenAddress),
-      rawBalance: typeof balance === 'bigint' ? balance.toString() : String(balance),
-    });
-  } catch {}
 
   const resolvedMetadata = await resolveTokenMetadata({
     tokenAddress,
@@ -1012,22 +984,6 @@ export async function processTokenForDisplay(
     }
   }
 
-  try {
-    console.debug('[TOKENS] processTokenForDisplay:output', {
-      tokenAddress,
-      name,
-      ticker,
-      decimals,
-      fieldType,
-      displayDecimals,
-      formattedAmount: displayAmount,
-      hasIcon: Boolean(iconDataUrl),
-      hasFallbackIcon: Boolean(fallbackIcon),
-      finalDecimals: decimals,
-      finalFieldType: fieldType,
-      finalDisplayDecimals: displayDecimals,
-    });
-  } catch {}
 
   return {
     address: tokenAddress,

@@ -50,6 +50,10 @@ export function RecentActivityCard() {
 
     const acct = typeof publicKey === "string" ? publicKey.trim() : ""
 
+    try {
+
+    } catch {}
+
     if (!acct) {
       setItems([])
       setError("Connect your Keeta wallet to pull recent activity.")
@@ -71,10 +75,17 @@ export function RecentActivityCard() {
 
     async function load(forceRefresh: boolean) {
       try {
+        try {
+
+        } catch {}
         const result = await fetchRecentActivityItems(acct, { limit: RECENT_ACTIVITY_LIMIT, forceRefresh })
         if (cancelled) {
           return
         }
+
+        try {
+
+        } catch {}
 
         if (result.items.length > 0) {
           setItems(result.items)
@@ -91,6 +102,9 @@ export function RecentActivityCard() {
         }
       } finally {
         if (!cancelled) {
+          try {
+
+          } catch {}
           setLoading(false)
         }
       }

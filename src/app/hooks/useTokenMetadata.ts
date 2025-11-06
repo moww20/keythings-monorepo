@@ -60,7 +60,6 @@ export function useTokenMetadata(tokenAddress: string): UseTokenMetadataResult {
     }
 
     const provider: any = typeof window !== 'undefined' ? (window as any).keeta : null;
-    try { console.debug('[useTokenMetadata] fetch:start', { tokenAddress }); } catch {}
 
     // Check cache first
     const cached = metadataCache.get(tokenAddress);
@@ -91,13 +90,12 @@ export function useTokenMetadata(tokenAddress: string): UseTokenMetadataResult {
           }
         } catch {}
       }
-      try { console.debug('[useTokenMetadata] targetAddress', { targetAddress }); } catch {}
 
       // Read-first strategy: use SDK state, fallback to wallet provider
       let rawState: unknown = null;
       try {
         rawState = await sdkGetAccountState(targetAddress);
-        try { console.debug('[useTokenMetadata] sdkGetAccountState:raw', rawState); } catch {}
+
       } catch {}
       if (!rawState) {
         if (typeof provider?.getAccountState === 'function') {
@@ -106,7 +104,6 @@ export function useTokenMetadata(tokenAddress: string): UseTokenMetadataResult {
           rawState = await provider.request({ method: 'keeta_getAccountState', params: [targetAddress] });
         }
       }
-      try { console.debug('[useTokenMetadata] accountState:raw', rawState); } catch {}
 
       const parsed = AccountStateSchema.safeParse(rawState);
       if (!parsed.success) {
@@ -117,7 +114,6 @@ export function useTokenMetadata(tokenAddress: string): UseTokenMetadataResult {
 
       const info = (parsed.data as AccountState).info ?? undefined;
       let meta = info?.metadata as unknown as (string | Record<string, unknown> | undefined);
-      try { console.debug('[useTokenMetadata] infoFields', { name: info?.name ?? null, symbol: info?.symbol ?? null, ticker: info?.ticker ?? null, hasMeta: Boolean(meta) }); } catch {}
 
       // Normalize object metadata to base64 string for unified parsing
       if (meta && typeof meta === 'object') {
@@ -142,10 +138,9 @@ export function useTokenMetadata(tokenAddress: string): UseTokenMetadataResult {
             } else if (typeof tm === 'object') {
               try { meta = btoa(JSON.stringify(tm)); } catch {}
             }
-            try { console.debug('[useTokenMetadata] fallback metadata from history', { hasMeta: Boolean(meta) }); } catch {}
           }
         } catch (e) {
-          try { console.debug('[useTokenMetadata] history fallback failed', e); } catch {}
+
         }
       }
 
@@ -162,15 +157,13 @@ export function useTokenMetadata(tokenAddress: string): UseTokenMetadataResult {
             } else if (m && typeof m === 'object') {
               try { meta = btoa(JSON.stringify(m)); } catch { meta = undefined; }
             }
-            try { console.debug('[useTokenMetadata] fallback metadata from getAccountInfo', { hasMeta: Boolean(meta) }); } catch {}
           }
         } catch (e) {
-          try { console.debug('[useTokenMetadata] getAccountInfo fallback failed', e); } catch {}
+
         }
       }
 
       const metaStr: string | undefined = typeof meta === 'string' ? meta : undefined;
-      try { console.debug('[useTokenMetadata] metaStr presence', { hasMetaStr: Boolean(metaStr) }); } catch {}
 
       const { decimals, fieldType } = extractDecimalsAndFieldTypeFromMetadata(metaStr);
       const nameFromMeta = getDisplayNameFromMeta(metaStr) || undefined;
@@ -196,7 +189,6 @@ export function useTokenMetadata(tokenAddress: string): UseTokenMetadataResult {
         ticker,
         metadata: metaStr,
       };
-      try { console.debug('[useTokenMetadata] resolved', { displayName: result.displayName ?? null, name: result.name ?? null, symbol: result.symbol ?? null, ticker: result.ticker ?? null, decimals: result.decimals, fieldType: result.fieldType, hasMeta: Boolean(result.metadata) }); } catch {}
 
       metadataCache.set(tokenAddress, result);
       setMetadata(result);
@@ -205,7 +197,7 @@ export function useTokenMetadata(tokenAddress: string): UseTokenMetadataResult {
 
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to fetch token metadata';
-      console.warn('[useTokenMetadata] Error fetching metadata:', errorMessage);
+
       setError(errorMessage);
       setMetadata(null);
     } finally {
@@ -239,7 +231,7 @@ function extractDecimalsAndFieldTypeFromMetadata(metadata?: string): {
     const { decimals, fieldType } = extractDecimalsAndFieldType(metadata);
     return { decimals, fieldType };
   } catch (error) {
-    console.warn('[useTokenMetadata] Failed to parse metadata via token-utils:', error);
+
     return { decimals: 0, fieldType: 'decimals' };
   }
 }

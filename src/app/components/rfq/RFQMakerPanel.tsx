@@ -248,16 +248,7 @@ export function RFQMakerPanel({ mode, onModeChange, hideInternalTabs }: RFQMaker
     }
   }, [availableTokens, selectedToken]);
 
-  // Debug token balances loading
-  useEffect(() => {
-    console.log('[RFQMakerPanel] Token balances debug:', {
-      isConnected,
-      isLoadingTokens,
-      tokensError,
-      tokensCount: Array.isArray(tokens) ? tokens.length : 'not array',
-      tokens: tokens
-    });
-  }, [isConnected, isLoadingTokens, tokensError, tokens]);
+  // Debug token balances loading - logging removed
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -269,7 +260,7 @@ export function RFQMakerPanel({ mode, onModeChange, hideInternalTabs }: RFQMaker
         const parsed = JSON.parse(stored) as MakerDraftState;
         setDraft({ ...DEFAULT_DRAFT, ...parsed });
       } catch (storageError) {
-        console.warn('Failed to parse RFQ maker draft from storage', storageError);
+
       }
     }
   }, []);
@@ -395,9 +386,8 @@ export function RFQMakerPanel({ mode, onModeChange, hideInternalTabs }: RFQMaker
 
   // Step 4: Fund Quote (following CreatePoolModal pattern)
   const handleFundStorage = useCallback(async () => {
-    console.log('[RFQMakerPanel] handleFundStorage called');
-    console.log('[RFQMakerPanel] storageAccountAddress:', storageAccountAddress);
-    console.log('[RFQMakerPanel] currentSubmission:', currentSubmission);
+
+
 
     if (!userClient || !publicKey) {
       setError('Connect your wallet before funding the RFQ order.');
@@ -405,13 +395,11 @@ export function RFQMakerPanel({ mode, onModeChange, hideInternalTabs }: RFQMaker
     }
 
     if (!storageAccountAddress || !storageAccountAddress.startsWith('keeta_')) {
-      console.log('[RFQMakerPanel] Storage account validation failed - redirecting to review step');
+
       setError('Storage account not created. Please click "Fund Quote" first to create the storage account.');
       setStep('review');
       return;
     }
-
-    console.log('[RFQMakerPanel] Storage account validation passed:', storageAccountAddress);
 
     if (!currentSubmission) {
       setError('Missing order submission data. Please try creating the order again.');
@@ -427,9 +415,8 @@ export function RFQMakerPanel({ mode, onModeChange, hideInternalTabs }: RFQMaker
     setError(null);
     setProgressMessage('Setting RFQ order metadata...');
     try {
-      console.log('[RFQMakerPanel] Step 2/2: Setting RFQ order metadata...');
-      console.log('[RFQMakerPanel] Storage account:', storageAccountAddress);
-      console.log('[RFQMakerPanel] Current submission:', JSON.stringify(currentSubmission));
+
+
 
       // Type guard: Ensure currentSubmission is not null (already validated above)
       if (!currentSubmission) {
@@ -437,7 +424,6 @@ export function RFQMakerPanel({ mode, onModeChange, hideInternalTabs }: RFQMaker
       }
 
       // Build transaction to set RFQ order metadata
-      console.log('[RFQMakerPanel] Building RFQ metadata transaction...');
 
       const builder = userClient.initBuilder();
       if (!builder) {
@@ -456,10 +442,8 @@ export function RFQMakerPanel({ mode, onModeChange, hideInternalTabs }: RFQMaker
       // Create serializable object for the storage account (following CreatePoolModal pattern)
       const toAccount = JSON.parse(JSON.stringify({ publicKeyString: storageAccountAddress }));
 
-      console.log('[RFQMakerPanel] toAccount:', JSON.stringify(toAccount));
 
       // Fund the storage account with the maker's tokens
-      console.log('[RFQMakerPanel] Funding storage account with maker tokens...');
 
       // Get selected token information
       if (!selectedToken) {
@@ -552,11 +536,8 @@ export function RFQMakerPanel({ mode, onModeChange, hideInternalTabs }: RFQMaker
         defaultPermission: createPermissionPayload(['STORAGE_DEPOSIT', 'STORAGE_CAN_HOLD']),
       }, { account: toAccount });
 
-      console.log('[RFQMakerPanel] ✅ Storage account configured with storage permissions (SEND_ON_BEHALF will be granted per-taker)');
 
-      console.log('[RFQMakerPanel] Depositing', currentSubmission.size, 'tokens to storage account');
-      console.log('[RFQMakerPanel] Token address:', makerTokenAddress);
-      console.log('[RFQMakerPanel] Amount in base units:', makerAmount);
+
 
       // Create serializable token object
       const makerTokenRef = JSON.parse(JSON.stringify({ publicKeyString: makerTokenAddress }));
@@ -567,35 +548,29 @@ export function RFQMakerPanel({ mode, onModeChange, hideInternalTabs }: RFQMaker
       }
 
       builder.send(toAccount, makerAmount, makerTokenRef);
-      console.log('[RFQMakerPanel] ✅ Token deposit operation added to builder');
-      console.log('[RFQMakerPanel] ✅ Storage account configured with public withdrawal permissions for atomic swaps');
+
 
       // Compute blocks before publishing (required by Keeta SDK for send operations)
-      console.log('[RFQMakerPanel] Computing transaction blocks...');
+
       if (typeof (builder as any).computeBlocks === 'function') {
         await (builder as any).computeBlocks();
-        console.log('[RFQMakerPanel] ✅ Blocks computed');
+
       }
 
-      console.log('[RFQMakerPanel] ⚠️ Please approve the RFQ funding transaction in your wallet extension!');
-      console.warn('🔐 SECURITY: Wallet approval required for RFQ funding');
-      console.warn(`🔐 You are about to deposit ${currentSubmission.size} tokens to the RFQ order`);
-      console.warn('🔐 Please review and approve the transaction in your Keeta Wallet extension');
+
+
 
       // SECURITY: This publishBuilder call MUST trigger wallet approval
       // User must explicitly approve the RFQ funding transaction
       const fundingResult = await userClient.publishBuilder(builder);
-      console.log('[RFQMakerPanel] ✅ RFQ funding transaction signed and funded');
-      console.log('[RFQMakerPanel] Transaction result:', fundingResult);
+
 
       // Wait for Keeta settlement (400ms)
-      console.log('[RFQMakerPanel] Waiting for Keeta settlement (400ms)...');
       await new Promise(resolve => setTimeout(resolve, 600));
 
       // Create the order with the real storage account address
-      console.log('[RFQMakerPanel] Creating order with real storage account address...');
-      console.log('[RFQMakerPanel] storageAccountAddress:', storageAccountAddress);
-      console.log('[RFQMakerPanel] storageAccountAddress type:', typeof storageAccountAddress);
+
+
 
       if (!storageAccountAddress || !storageAccountAddress.startsWith('keeta_')) {
         throw new Error(`Invalid storage account address: ${storageAccountAddress}`);

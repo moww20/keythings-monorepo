@@ -29,13 +29,7 @@ export default function ExplorerNetworkStats(): React.JSX.Element {
   const stats = data ?? null;
 
   useEffect(() => {
-    console.debug('[ExplorerNetworkStats] Query state', {
-      hasStats: !!stats,
-      stats,
-      isPending,
-      isFetching,
-      error,
-    });
+
   }, [stats, isPending, isFetching, error]);
 
   const metrics = useMemo(() => {
@@ -60,7 +54,7 @@ export default function ExplorerNetworkStats(): React.JSX.Element {
         value: typeof stats.queryTime === "number" && stats.queryTime > 0 ? `${stats.queryTime} ms` : " - ",
       },
     ];
-    console.debug('[ExplorerNetworkStats] Computed metrics', { computed, raw: stats });
+
     return computed;
   }, [stats]);
 

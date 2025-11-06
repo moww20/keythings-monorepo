@@ -54,7 +54,7 @@ function formatSupply(value: unknown, decimals?: number | null): string {
     try {
       return String((value as { toString: () => string }).toString());
     } catch (error) {
-      console.warn("[TOKEN_PAGE] Unable to format token supply", error);
+      // ignore
     }
   }
   if (typeof decimals === "number" && decimals > 0) {
@@ -116,7 +116,6 @@ export default function TokenPage(): React.JSX.Element {
         } else if (typeof provider.request === 'function') {
           raw = await provider.request({ method: 'keeta_getAccountState', params: [tokenPublicKey] });
         }
-        try { console.debug('[TOKEN_PAGE] provider.getAccountState:raw', raw); } catch {}
         const InfoSchema = z.object({
           info: z.object({
             name: z.string().optional().nullable(),
@@ -141,7 +140,6 @@ export default function TokenPage(): React.JSX.Element {
             headBlock: (parsed.data.headBlock as any) ?? null,
             type: 'TOKEN',
           });
-          try { console.debug('[TOKEN_PAGE] provider.getAccountState:resolved', { supply: info?.supply ?? null, accessMode: info?.accessMode ?? null, flags, headBlock: parsed.data.headBlock ?? null }); } catch {}
         }
       } catch {
         if (!cancelled) setSdkTokenInfo(null);
@@ -170,7 +168,6 @@ export default function TokenPage(): React.JSX.Element {
           stateClient = providerClient;
         } else {
           try { stateClient = await getReadClient(); } catch {}
-          try { console.debug('[TOKEN_PAGE] using read client for state; providerClient.state missing?', { hasProviderClient: Boolean(providerClient), hasState: typeof providerClient?.state === 'function' }); } catch {}
         }
         // Choose a client for ACLs if supported
         if (providerClient && typeof providerClient.listACLsByEntity === 'function') {
@@ -232,9 +229,7 @@ export default function TokenPage(): React.JSX.Element {
           if (fs.includes('ACCESS')) allowed.push(acc); else blocked.push(acc);
         }
         if (!cancelled) setAclState({ admins, allowed, blocked, defaultFlags, mode });
-        try { console.debug('[TOKEN_PAGE] supply&acl', { total: total.toString(), distributed: distributed.toString(), unallocated: unallocated.toString(), mode, defaultFlags, admins: admins.length, allowed: allowed.length, blocked: blocked.length }); } catch {}
       } catch (e) {
-        try { console.debug('[TOKEN_PAGE] loadSupplyAndACL failed', e); } catch {}
       }
     }
     void loadSupplyAndACL();
@@ -333,7 +328,6 @@ export default function TokenPage(): React.JSX.Element {
     return () => { cancelled = true };
   }, [tokenPublicKey]);
 
-  try { console.debug('[TOKEN_PAGE] tokenMeta', tokenMeta); } catch {}
   const pageLoading = infoLoading || tokenMetaLoading; // gate until both info + metadata attempts resolve
   if (pageLoading) { return <TokenPageSkeleton />; }
 
@@ -351,12 +345,6 @@ export default function TokenPage(): React.JSX.Element {
   const displayPermissions = (aclState?.defaultFlags ?? sdkTokenInfo?.defaultPermissions) ?? [];
   const resolvedSupply = (sdkTokenInfo?.supply) as unknown;
   const displayType = sdkTokenInfo?.type ?? 'TOKEN';
-  try { console.debug('[TOKEN_PAGE] resolvedDisplay', { displayName, displayTicker, displayDecimals, displayAccessMode, permissions: displayPermissions, supply: resolvedSupply, type: displayType, headBlock: sdkTokenInfo?.headBlock ?? null }); } catch {}
-
-  
-  
-  
-  
 
   return (
     <div className="flex flex-1 flex-col overflow-y-auto">

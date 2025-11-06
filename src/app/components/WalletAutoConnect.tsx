@@ -47,7 +47,7 @@ export default function WalletAutoConnect() {
               return;
             }
           } catch (error) {
-            console.debug('Auto-connect: getAccounts check failed:', error);
+
           }
         }
 
@@ -59,7 +59,7 @@ export default function WalletAutoConnect() {
           try {
             shouldAttemptConnect = await provider.isConnected();
           } catch (error) {
-            console.debug('Auto-connect: isConnected check failed:', error);
+
           }
         } else if (provider && typeof provider.isConnected === 'boolean') {
           shouldAttemptConnect = provider.isConnected;
@@ -70,7 +70,7 @@ export default function WalletAutoConnect() {
           await connectWallet(true); // Pass true to request read capabilities
         }
       } catch (error) {
-        console.debug('Auto-connect attempt failed:', error);
+
       }
     };
 

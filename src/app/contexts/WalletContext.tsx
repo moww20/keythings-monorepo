@@ -1023,7 +1023,7 @@ export function WalletProvider({ children }: WalletProviderProps) {
           const matches = cleaned.match(/[0-9a-f]{2}/gi) ?? [];
           blockBytes = new Uint8Array(matches.map((pair) => parseInt(pair, 16)));
         } catch (error) {
-          console.warn('[WalletContext] Failed to parse unsigned block hex', error);
+
         }
       }
 
@@ -1032,7 +1032,7 @@ export function WalletProvider({ children }: WalletProviderProps) {
           const text = typeof unsignedBlockJson === 'string' ? unsignedBlockJson : JSON.stringify(unsignedBlockJson);
           blockBytes = new TextEncoder().encode(text);
         } catch (error) {
-          console.warn('[WalletContext] Failed to encode unsigned block JSON', error);
+
         }
       }
 
@@ -1056,7 +1056,7 @@ export function WalletProvider({ children }: WalletProviderProps) {
         try {
           signedBlock = JSON.stringify(receipt);
         } catch (error) {
-          console.warn('[WalletContext] Failed to serialize publishBuilder receipt', error);
+
         }
       }
 
@@ -1177,16 +1177,6 @@ export function WalletProvider({ children }: WalletProviderProps) {
         };
       });
 
-      console.log('[WalletContext] Storage state snapshot', {
-        address: storageAddress,
-        balanceCount: balances.length,
-        tokens: balances.map((balance) => ({
-          token: balance.token,
-          decimals: balance.decimals,
-          normalizedAmount: balance.normalizedAmount,
-        })),
-      });
-
       let permissions: StorageAccountPermission[] = [];
       if (userClient && typeof userClient.listACLsByEntity === 'function') {
         try {
@@ -1202,7 +1192,7 @@ export function WalletProvider({ children }: WalletProviderProps) {
             }));
           }
         } catch (error) {
-          console.warn('[WalletContext] Unable to load storage permissions', error);
+
         }
       }
 
@@ -1299,13 +1289,12 @@ export function WalletProvider({ children }: WalletProviderProps) {
         if (!userClient) return null;
         
         try {
-          console.log('[WalletContext] getTokenMetadata called for:', tokenAddress);
-          console.log('[WalletContext] userClient.baseToken:', userClient.baseToken);
-          console.log('[WalletContext] baseTokenAddress:', primaryAccount);
-          
+
+
+
           // Handle placeholder tokens - return null for placeholders
           if (tokenAddress.startsWith('PLACEHOLDER_') || tokenAddress === 'PLACEHOLDER_BASE') {
-            console.log('[WalletContext] Placeholder token detected, returning null');
+
             return null;
           }
           
@@ -1320,8 +1309,7 @@ export function WalletProvider({ children }: WalletProviderProps) {
               
               if (metadata) {
                 const { decimals, fieldType } = extractDecimalsAndFieldType(metadata);
-                console.log('[WalletContext] Base token metadata found:', { decimals, fieldType });
-                
+
                 // Fix incorrect naming - ensure proper KTA naming
                 let name = info.name || 'Keeta Token';
                 let symbol = info.symbol || 'KTA';
@@ -1350,7 +1338,7 @@ export function WalletProvider({ children }: WalletProviderProps) {
             }
             
             // Fallback for base token when metadata is not available
-            console.log('[WalletContext] Base token metadata not found, using fallback');
+
             return {
               decimals: 9, // Default KTA decimals
               fieldType: 'decimals' as const,
@@ -1362,13 +1350,13 @@ export function WalletProvider({ children }: WalletProviderProps) {
           }
 
           // For regular tokens, try to get from account state
-          console.log('[WalletContext] Trying to get account state for token:', tokenAddress);
+
           if ('getAccountState' in userClient && typeof userClient.getAccountState === 'function') {
             const accountState = await userClient.getAccountState(tokenAddress);
-            console.log('[WalletContext] Account state result:', accountState);
+
             if (accountState?.info?.metadata) {
               const { decimals, fieldType } = extractDecimalsAndFieldType(accountState.info.metadata);
-              console.log('[WalletContext] Token metadata found:', { decimals, fieldType });
+
               return {
                 decimals,
                 fieldType,
@@ -1380,7 +1368,6 @@ export function WalletProvider({ children }: WalletProviderProps) {
             }
           }
 
-          console.log('[WalletContext] No metadata found for token:', tokenAddress);
           return null;
         } catch (error) {
           console.error('Failed to fetch token metadata:', error);

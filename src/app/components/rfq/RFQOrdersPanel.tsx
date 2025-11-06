@@ -72,7 +72,7 @@ export function RFQOrdersPanel({ mode, onModeChange, hideInternalTabs }: RFQOrde
             const declarations = await fetchDeclarations(order.id);
             return { orderId: order.id, declarations };
           } catch (error) {
-            console.warn('[RFQOrdersPanel] Failed to load declarations for order', order.id, error);
+
             return { orderId: order.id, declarations: [] as RFQDeclaration[] };
           }
         }),
@@ -120,7 +120,7 @@ export function RFQOrdersPanel({ mode, onModeChange, hideInternalTabs }: RFQOrde
                 unsignedBlockJson = parsed;
               }
             } catch (error) {
-              console.warn('[RFQOrdersPanel] Failed to parse unsigned block JSON, using raw payload', error);
+
               unsignedBlockJson = rawPayload;
             }
           }

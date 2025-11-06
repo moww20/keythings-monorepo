@@ -88,10 +88,7 @@ function buildEntry(tokenId: string, record: TokenMetadataRecord): TokenMetadata
   const parsed = TokenMetadataSchema.safeParse({ token: tokenId, ...record });
   if (!parsed.success) {
     try {
-      console.warn("[token-metadata] Invalid metadata", {
-        tokenId,
-        issues: parsed.error.issues,
-      });
+
     } catch {}
     return null;
   }
@@ -228,7 +225,7 @@ export async function prefetchTokenMetadata(tokenIds: string[]): Promise<void> {
         .then(() => undefined)
         .catch((error) => {
           try {
-            console.warn("[token-metadata] Prefetch failed", { tokenId, error });
+
           } catch {}
         }),
     );

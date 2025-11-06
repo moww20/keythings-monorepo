@@ -61,7 +61,7 @@ export function loadTokenCatalogFromEnv(): TokenCatalogConfig {
     return { tokens, rawValue: raw, errors };
   } catch (error) {
     errors.push('[TokenCatalog] Failed to parse NEXT_PUBLIC_RFQ_TOKEN_CATALOG JSON.');
-    console.warn('[TokenCatalog] Parse failure', error);
+
     return { tokens: [], rawValue: raw, errors };
   }
 }

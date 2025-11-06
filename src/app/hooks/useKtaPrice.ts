@@ -53,7 +53,7 @@ async function fetchPriceFromProvider(): Promise<KtaPriceSnapshot | null> {
     try {
       raw = await provider.request({ method: "keeta_getKtaPrice" });
     } catch (error) {
-      console.warn("[useKtaPrice] keeta_getKtaPrice request failed", error);
+
       raw = null;
     }
   }

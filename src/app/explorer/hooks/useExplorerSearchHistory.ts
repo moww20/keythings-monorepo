@@ -41,7 +41,7 @@ function persistHistory(history: string[]): string[] {
     try {
       window.localStorage.setItem(STORAGE_KEY, JSON.stringify(history.slice(0, HISTORY_LIMIT)));
     } catch (error) {
-      console.warn("[EXPLORER] Failed to persist search history", error);
+
     }
   }
   return history.slice(0, HISTORY_LIMIT);

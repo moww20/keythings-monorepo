@@ -65,7 +65,6 @@ export async function fetchProviderHistory(
     requestPayload.cursor = options.cursor;
   }
 
-  if (__DEV__) { try { console.debug("[provider-history] request", requestPayload); } catch {} }
   const response = await provider.history(requestPayload);
   const parsed = ProviderHistoryResponseSchema.safeParse(response);
   if (!parsed.success) {
@@ -88,7 +87,6 @@ export async function fetchProviderHistory(
   }
 
   const { records, cursor, hasMore } = parsed.data;
-  if (__DEV__) { try { console.debug("[provider-history] response", { records: Array.isArray(records) ? records.length : 0, hasMore: Boolean(hasMore), cursor: cursor ?? null }); } catch {} }
   return {
     records,
     cursor: cursor ?? null,
@@ -102,6 +100,79 @@ function shouldSkipTokenLookup(tokenId?: string | null, ticker?: string | null):
   if (tokenId === "base") return true;
   if (ticker && ticker.toUpperCase() === BASE_TOKEN_TICKER) return true;
   return false;
+}
+
+function extractHashValue(value: unknown, depth: number = 0): string | undefined {
+  if (value == null) {
+    return undefined;
+  }
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : undefined;
+  }
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return String(value);
+  }
+  if (typeof value === "bigint") {
+    return value.toString();
+  }
+  if (typeof value === "object" && depth < 3) {
+    const record = value as Record<string, unknown>;
+    const candidateKeys = ["$hash", "hash", "blockHash", "id", "voteStapleHash", "block_id", "blockId"] as const;
+    for (const key of candidateKeys) {
+      if (key in record) {
+        const resolved = extractHashValue(record[key], depth + 1);
+        if (resolved) {
+          return resolved;
+        }
+      }
+    }
+    if ("block" in record) {
+      const nested = extractHashValue(record.block, depth + 1);
+      if (nested) {
+        return nested;
+      }
+    }
+    if (typeof (record as { toString?: () => string }).toString === "function") {
+      try {
+        const coerced = String((record as { toString: () => string }).toString()).trim();
+        if (coerced && coerced !== "[object Object]") {
+          return coerced;
+        }
+      } catch {}
+    }
+  }
+  return undefined;
+}
+
+function resolveBlockHashCandidate(record: unknown, op: unknown): string | undefined {
+  const priority: unknown[] = [];
+  const push = (value: unknown) => {
+    if (value !== undefined && value !== null) {
+      priority.push(value);
+    }
+  };
+
+  const opRecord = op as Record<string, unknown> | undefined;
+  const normalizedRecord = record as Record<string, unknown> | undefined;
+
+  push(opRecord?.block);
+  push(opRecord?.blockHash);
+  push(opRecord?.hash);
+  push((opRecord?.operation as Record<string, unknown> | undefined)?.blockHash);
+  push(normalizedRecord?.block);
+  push((normalizedRecord?.voteStaple as Record<string, unknown> | undefined)?.hash);
+  push(normalizedRecord?.hash);
+  push(normalizedRecord?.id);
+
+  for (const candidate of priority) {
+    const resolved = extractHashValue(candidate);
+    if (resolved) {
+      return resolved;
+    }
+  }
+
+  return undefined;
 }
 
 function coerceAmountString(value: unknown): string | undefined {
@@ -307,11 +378,7 @@ export function normalizeHistoryRecords(
     }
 
     const op = candidate as Record<string, any>;
-    const blockHashCandidate =
-      sx(record?.block) ??
-      sx(record?.hash) ??
-      sx(record?.id) ??
-      sx(op.block);
+    const blockHashCandidate = resolveBlockHashCandidate(record, op);
     const blockHash = typeof blockHashCandidate === "string" && blockHashCandidate.length > 0
       ? blockHashCandidate
       : null;
@@ -495,23 +562,6 @@ export function normalizeHistoryRecords(
           "decimals";
         const fieldType = resolvedFieldTypeInner === "decimalPlaces" ? "decimalPlaces" : "decimals";
 
-        try {
-          if (__DEV__) console.debug("[history] format amount", {
-            where: "pre-parseExplorerOperation",
-            voteStapleHash: sx(record?.voteStaple?.hash) ?? blockHash,
-            blockHash,
-            rawAmount: String(operationPayload.rawAmount),
-            tokenDecimals: operationPayload.tokenDecimals,
-            fieldType,
-            ticker,
-            hasMeta: Boolean(operationPayload.tokenMetadata),
-            metaDecimals: (operationPayload.tokenMetadata as any)?.decimals,
-            metaFieldType: (operationPayload.tokenMetadata as any)?.fieldType,
-            fallbackDecimals,
-            fallbackFieldType,
-            decimalFormattedCandidate,
-          });
-        } catch {}
 
         operationPayload.formattedAmount = formatTokenAmount(
           amt,
@@ -520,7 +570,6 @@ export function normalizeHistoryRecords(
           ticker,
         );
       } catch (e) {
-        try { console.warn("[history] format amount failed", { error: (e as Error)?.message }); } catch {}
         // ignore formatting errors
       }
     }
@@ -593,23 +642,6 @@ export function normalizeHistoryRecords(
     }
 
     if (!tokenLookupId) {
-      try {
-        if (__DEV__) console.debug("[history] normalizeHistoryRecords missing tokenLookupId", {
-          operationType: normalizedType,
-          voteStapleHash: sx(record?.voteStaple?.hash) ?? blockHash,
-          blockHash,
-          rawAmountValue,
-          tokenTicker: operationPayload.tokenTicker,
-          primaryTokenId,
-          operationToken: op.token,
-          operationTokenAddress: op.tokenAddress,
-          nestedOperationToken: (op.operation as any)?.token,
-          fallbackToken,
-          fallbackTicker,
-          fallbackDecimals,
-          metadataFromRecord,
-        });
-      } catch {}
     }
 
     const dedupeKey = `${blockHash}|${fromValue}|${toValue}|${tokenLookupId}|${rawAmountValue}`;
@@ -628,21 +660,7 @@ export function normalizeHistoryRecords(
     (enriched as any).tokenLookupId = tokenLookupId || undefined;
 
     // Additional debug payload to inspect normalization when amounts look unnormalized
-    try {
-      if (__DEV__) { const debugFmt = {
-        voteStapleHash: sx(record?.voteStaple?.hash) ?? blockHash,
-        blockHash,
-        type: enriched.type,
-        token: enriched.token || enriched.tokenAddress || (enriched.operation as any)?.token || null,
-        tokenTicker: enriched.tokenTicker,
-        tokenDecimals: enriched.tokenDecimals,
-        hasFormattedAmount: typeof enriched.formattedAmount === "string" && enriched.formattedAmount.length > 0,
-        formattedAmount: enriched.formattedAmount,
-        rawAmountValue,
-        amountCandidate,
-        normalizedRawAmount,
-      }; console.debug("[history] enriched operation", debugFmt); }
-    } catch {}
+    // Debug logging removed
     // Prefer page cache, fall back to global cache managed by metadata-service
     let cachedMeta = tokenLookupId ? tokenMetadata[tokenLookupId] : undefined;
     if (!cachedMeta && tokenLookupId) {
@@ -714,11 +732,11 @@ export function normalizeHistoryRecords(
 
       if (__DEV__) {
         if (!hasTokenDecimals) {
-          console.debug("[history] normalizeHistoryRecords missing tokenDecimals", debugPayload);
+
         }
 
         if (!resolvedFieldType) {
-          console.debug("[history] normalizeHistoryRecords missing fieldType", debugPayload);
+
         }
       }
     }
@@ -846,6 +864,9 @@ export function groupOperationsByBlock(baseOperations: ExplorerOperation[]): Exp
       }
       // Must have block.$hash for grouping
       if (typeof op.block.$hash !== "string" || op.block.$hash.length === 0) {
+        try {
+
+        } catch {}
         return null;
       }
       return op;

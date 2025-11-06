@@ -141,21 +141,7 @@ export async function processBalancesEntries(
       );
 
       try {
-        console.debug('[TOKENS_TAB] mappers.processBalancesEntries', {
-          tokenAddress,
-          isBaseToken,
-          entryName: entry?.name,
-          entryTicker: entry?.ticker,
-          entryDecimals: entry?.decimals,
-          pName: p.name,
-          pTicker: p.ticker,
-          pDecimals: p.decimals,
-          resolvedName,
-          resolvedTicker,
-          resolvedDecimals,
-          resolvedFieldType,
-          formattedAmount: recomputed ?? p.formattedAmount,
-        });
+
       } catch {}
 
       return {

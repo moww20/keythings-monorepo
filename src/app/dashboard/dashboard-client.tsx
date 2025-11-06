@@ -99,7 +99,7 @@ export default function DashboardClient(): JSX.Element {
       }
 
       if (!permissionsGranted) {
-        console.warn("Transaction permissions were not granted; balance details may be limited.");
+
         return;
       }
     } catch (error) {
@@ -123,9 +123,6 @@ export default function DashboardClient(): JSX.Element {
       balance: wallet.balance,
       isConnecting: isConnecting || isWalletLoading,
       onConnect: handleConnectWallet,
-      onReceive: () => console.log("Receive clicked"),
-      onSend: () => console.log("Send clicked"),
-      onTransfer: () => console.log("Transfer clicked"),
       tokens,
       ktaPriceData,
       isTradingEnabled,

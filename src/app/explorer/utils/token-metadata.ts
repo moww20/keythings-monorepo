@@ -64,7 +64,6 @@ export function parseTokenMetadata(metadataBase64?: string | null): Partial<Toke
   }
 
   if (!parsed || typeof parsed !== 'object') {
-    try { console.warn('[token-metadata] parseTokenMetadata failed', { inputPreview, length: metadataBase64.length }); } catch {}
     return null;
   }
 
@@ -76,15 +75,6 @@ export function parseTokenMetadata(metadataBase64?: string | null): Partial<Toke
     metadata: metadataBase64,
   };
 
-  try {
-    console.debug('[token-metadata] parseTokenMetadata ok', {
-      path: decodePath,
-      hasTicker: Boolean(out.ticker),
-      decimals: out.decimals,
-      fieldType: out.fieldType,
-      hasName: Boolean(out.name),
-    });
-  } catch {}
 
   return out;
 }
@@ -123,7 +113,7 @@ export async function processTokenMetadata(
           }
         }
       } catch (error) {
-        console.warn('Failed to fetch token metadata:', error);
+
       }
     }
 
@@ -131,7 +121,7 @@ export async function processTokenMetadata(
     tokenInfoCache.set(tokenAddress, tokenInfo);
     return tokenInfo;
   } catch (error) {
-    console.warn('Error processing token metadata:', error);
+
     return tokenInfo;
   }
 }

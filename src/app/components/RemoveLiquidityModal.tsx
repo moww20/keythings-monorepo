@@ -103,8 +103,7 @@ export default function RemoveLiquidityModal({ isOpen, onClose, onSuccess, pool 
       }
 
       const result = await response.json();
-      console.log('Liquidity removed:', result);
-      
+
       onSuccess();
       onClose();
     } catch (err) {

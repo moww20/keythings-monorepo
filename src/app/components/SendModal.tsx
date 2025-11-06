@@ -290,7 +290,6 @@ const SendModal = ({
       }
 
       const receipt = await userClient.publishBuilder(builder);
-      console.log("[SendModal] ✅ Transaction signed and submitted:", receipt);
 
       Toast.success(`Sent ${values.amount} ${selectedTokenLabel} to ${values.toAddress}`);
 
@@ -330,7 +329,7 @@ const SendModal = ({
                 onClick={() => {
                   if (!publicKey) return;
                   navigator.clipboard.writeText(publicKey).catch((err) => {
-                    console.warn("[SendModal] Failed to copy address", err);
+
                   });
                 }}
               >

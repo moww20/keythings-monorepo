@@ -173,7 +173,6 @@ export class StorageAccountManager {
   }
 
   async createStorageAccount(exchangeOperatorPubkey: string | null, allowedTokens: string[]): Promise<string> {
-    console.log('Creating storage account...');
 
     const builder = this.userClient.initBuilder();
     if (!builder) {
@@ -196,7 +195,7 @@ export class StorageAccountManager {
       
       for (const token of allowedTokens) {
         if (!isValidAddress(token)) {
-          console.log('Skipping placeholder token:', token);
+
           continue;
         }
         
@@ -204,32 +203,28 @@ export class StorageAccountManager {
           const tokenAccount = normalizeAccountRef(token);
           await this.grantSendOnBehalf(builder, operatorAccount, tokenAccount, storageAccount);
         } catch (error) {
-          console.warn("Skipping token permission due to error:", token, error);
+
         }
       }
     } else {
-      console.log('Skipping permission grants - no exchange operator configured');
+
     }
 
     const receipt = await this.userClient.publishBuilder(builder);
-    console.log('[StorageAccountManager] Receipt from publishBuilder:', JSON.stringify(receipt, null, 2));
-    console.log('[StorageAccountManager] storageAccount (fallback):', JSON.stringify(storageAccount, null, 2));
     
     // Handle case where receipt is a string (the account address directly)
     let publishedAccount;
     if (typeof receipt === 'string') {
-      console.log('[StorageAccountManager] Receipt is a string, using it directly as the account');
+
       publishedAccount = { publicKeyString: receipt };
     } else {
       publishedAccount =
         extractAccount(receipt?.account) ?? (receipt?.accounts ? extractAccount(receipt.accounts[0]) : null) ?? storageAccount;
     }
     
-    console.log('[StorageAccountManager] publishedAccount after extraction:', JSON.stringify(publishedAccount, null, 2));
 
     const publicKey = normalizePublicKeyString(publishedAccount);
-    console.log('[StorageAccountManager] Final public key:', publicKey);
-    
+
     if (!publicKey) {
       throw new Error("Failed to resolve storage account public key after publishing");
     }
@@ -242,7 +237,6 @@ export class StorageAccountManager {
       throw new Error("Wallet extension returned placeholder instead of real storage account address");
     }
 
-    console.log('Storage account created:', publicKey);
     return publicKey;
   }
 
@@ -370,7 +364,7 @@ export class StorageAccountManager {
   private async setStorageAccountDefaults(builder: KeetaBuilder, storageAccount: KeetaAccountRef): Promise<void> {
     const setInfo = this.getMethod(builder, ["setInfo", "info"]);
     if (!setInfo) {
-      console.warn("StorageAccountManager: builder is missing setInfo/info method, skipping metadata configuration");
+
       return;
     }
 

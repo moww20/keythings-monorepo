@@ -99,12 +99,12 @@ export default function WalletRedirector(): null {
                 redirectToDashboard();
               }
             } catch (error) {
-              console.debug("Keeta provider isConnected check failed", error);
+
             }
           }
         }
       } catch (error) {
-        console.debug("Keeta connection check failed", error);
+
       }
     };
 

@@ -27,21 +27,14 @@ export function usePoolsApi() {
     tokenIn: string,
     amountIn: string
   ): Promise<QuoteResponse> => {
-    console.log('[usePoolsApi] Getting quote:', {
-      pool_id: poolId,
-      token_in: tokenIn,
-      amount_in: amountIn
-    });
-    
+
     try {
       const response = await fetch(`${apiBase}/api/pools/quote`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ pool_id: poolId, token_in: tokenIn, amount_in: amountIn })
       });
-      
-      console.log('[usePoolsApi] Quote response status:', response.status);
-      
+
       if (!response.ok) {
         const errorText = await response.text();
         console.error('[usePoolsApi] Quote failed:', errorText);
@@ -49,7 +42,7 @@ export function usePoolsApi() {
       }
       
       const result = await response.json();
-      console.log('[usePoolsApi] Quote result:', result);
+
       return result;
     } catch (error) {
       if (error instanceof TypeError && error.message === 'Failed to fetch') {

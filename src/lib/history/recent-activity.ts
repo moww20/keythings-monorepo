@@ -53,6 +53,24 @@ type TokenMetadataMap = Record<string, CachedTokenMeta>;
 
 const FALLBACK_SOURCE: OperationSource = "provider";
 
+function logDebug(message: string, payload?: Record<string, unknown>): void {
+  try {
+
+  } catch {}
+}
+
+function logInfo(message: string, payload?: Record<string, unknown>): void {
+  try {
+
+  } catch {}
+}
+
+function logWarn(message: string, payload?: Record<string, unknown>): void {
+  try {
+
+  } catch {}
+}
+
 // Minimal validation schemas to ensure we only process valid records
 const OperationSchema = z.object({
   type: z.string().optional(),
@@ -231,6 +249,11 @@ function mergeActivities(
   sdkItems: RecentActivityItem[],
   options: MergeOptions,
 ): RecentActivityItem[] {
+  logDebug("mergeActivities:start", {
+    provider: providerItems.length,
+    sdk: sdkItems.length,
+    limit: options.limit,
+  });
   const deduped: RecentActivityItem[] = [];
   const seen = new Set<string>();
 
@@ -252,14 +275,21 @@ function mergeActivities(
 
   sortItemsDesc(providerItems).forEach(push);
   sortItemsDesc(sdkItems).forEach(push);
-
-  return sortItemsDesc(deduped).slice(0, options.limit);
+  const sorted = sortItemsDesc(deduped);
+  const sliced = sorted.slice(0, options.limit);
+  logDebug("mergeActivities:result", {
+    deduped: deduped.length,
+    returned: sliced.length,
+    keys: sliced.map((item) => ({ id: item.id, source: item.source, ts: item.timestampMs ?? null })),
+  });
+  return sliced;
 }
 
 async function loadProviderRecords(account: string, limit: number): Promise<RecentActivityItem[]> {
   const provider: KeetaProvider | undefined =
     typeof window !== "undefined" ? ((window as unknown as { keeta?: KeetaProvider }).keeta ?? undefined) : undefined;
   if (!provider) {
+    logWarn("loadProviderRecords:no-provider", { account });
     return [];
   }
 
@@ -267,6 +297,8 @@ async function loadProviderRecords(account: string, limit: number): Promise<Rece
   const aggregated: ExplorerOperation[] = [];
   let cursor: string | null = null;
   let page = 0;
+
+  logInfo("loadProviderRecords:start", { account, limit });
 
   while (page < PROVIDER_MAX_PAGES && aggregated.length < limit * 4) {
     try {
@@ -278,91 +310,109 @@ async function loadProviderRecords(account: string, limit: number): Promise<Rece
       const rawRecords = Array.isArray(pageResult.records)
         ? (pageResult.records as ProviderRecords)
         : [];
+      logDebug("loadProviderRecords:page", {
+        page,
+        rawRecords: rawRecords.length,
+        hasMore: pageResult.hasMore,
+        cursor: pageResult.cursor ?? null,
+      });
       if (rawRecords.length === 0) {
+        logDebug("loadProviderRecords:break-empty", { page });
         break;
       }
 
       const normalized = normalizeHistoryRecords(rawRecords as any[], account, tokenMetadata);
+      logDebug("loadProviderRecords:normalized", {
+        operations: normalized.operations.length,
+        tokensToFetch: normalized.tokensToFetch.length,
+        blocksToFetch: normalized.blocksToFetch.length,
+      });
       if (normalized.operations.length > 0) {
         const grouped = groupOperationsByBlock(normalized.operations);
+        logDebug("loadProviderRecords:grouped", { grouped: grouped.length });
         aggregated.push(...grouped);
       }
 
       if (!pageResult.hasMore || !pageResult.cursor) {
+        logDebug("loadProviderRecords:break-end", { page });
         break;
       }
 
       cursor = pageResult.cursor;
       page += 1;
     } catch (error) {
-      try {
-        console.warn("[recent-activity] provider history fetch failed", error);
-      } catch {}
+      logWarn("loadProviderRecords:error", {
+        page,
+        error: error instanceof Error ? error.message : String(error),
+      });
       break;
     }
   }
 
   const validated = aggregated.filter((operation) => OperationSchema.safeParse(operation).success);
   if (validated.length < aggregated.length) {
-    try {
-      console.warn(
-        "[recent-activity] filtered invalid provider operations",
-        { total: aggregated.length, valid: validated.length },
-      );
-    } catch {}
+    logWarn("loadProviderRecords:filtered-invalid", {
+      total: aggregated.length,
+      valid: validated.length,
+    });
   }
-  return validated.map((operation, index) => operationToActivityItem(operation, index, "provider"));
+  const mapped = validated.map((operation, index) => operationToActivityItem(operation, index, "provider"));
+  logInfo("loadProviderRecords:done", { account, pages: page + 1, aggregated: aggregated.length, returned: mapped.length });
+  return mapped;
 }
 
 async function loadSdkRecords(account: string, limit: number): Promise<RecentActivityItem[]> {
   try {
+    logInfo("loadSdkRecords:start", { account, limit });
     const sdkRecords = await getHistoryForAccount(account, {
       depth: Math.max(limit * 5, SDK_DEPTH),
       includeTokenMetadata: true,
     });
     if (!Array.isArray(sdkRecords) || sdkRecords.length === 0) {
+      logDebug("loadSdkRecords:empty", { account });
       return [];
     }
     const validated = sdkRecords.filter((record) => SdkRecordSchema.safeParse(record).success);
     if (validated.length < sdkRecords.length) {
-      try {
-        console.warn(
-          "[recent-activity] filtered invalid sdk records",
-          { total: sdkRecords.length, valid: validated.length },
-        );
-      } catch {}
+      logWarn("loadSdkRecords:filtered-invalid", {
+        total: sdkRecords.length,
+        valid: validated.length,
+      });
     }
-    return validated.map((record, index) => recordToActivityItem(record as any, index));
+    const mapped = validated.map((record, index) => recordToActivityItem(record as any, index));
+    logInfo("loadSdkRecords:done", { account, returned: mapped.length });
+    return mapped;
   } catch (error) {
-    try {
-      console.warn("[recent-activity] sdk history fetch failed", error);
-    } catch {}
+    logWarn("loadSdkRecords:error", {
+      error: error instanceof Error ? error.message : String(error),
+    });
     return [];
   }
 }
 
 async function loadRecentActivity(account: string, limit: number): Promise<RecentActivityResult> {
-  const [providerItems, sdkItems] = await Promise.all([
-    loadProviderRecords(account, limit),
-    loadSdkRecords(account, limit),
-  ]);
+  logInfo("loadRecentActivity:start", { account, limit });
 
-  const items = mergeActivities(providerItems, sdkItems, { limit });
+  // Provider-only path (use wallet history like the History page)
+  const providerItems = await loadProviderRecords(account, limit);
 
-  let source: RecentActivityResult["source"] = "mixed";
-  if (items.length === 0) {
-    source = providerItems.length > 0 ? "provider" : "sdk";
-  } else if (items.every((item) => item.source === "provider")) {
-    source = "provider";
-  } else if (items.every((item) => item.source === "sdk")) {
-    source = "sdk";
-  }
+  const items = sortItemsDesc(providerItems).slice(0, limit);
+  const source: RecentActivityResult["source"] = "provider";
 
-  return {
+  const result = {
     items,
     source,
     fetchedAt: Date.now(),
   } satisfies RecentActivityResult;
+  logInfo("loadRecentActivity:done", {
+    account,
+    limit,
+    returned: items.length,
+    source,
+    providerItems: providerItems.length,
+    sdkItems: 0,
+  });
+  return result;
 }
 
 export async function fetchRecentActivityItems(
@@ -371,15 +421,33 @@ export async function fetchRecentActivityItems(
 ): Promise<RecentActivityResult> {
   const trimmed = typeof account === "string" ? account.trim() : "";
   if (!trimmed) {
+    logWarn("fetchRecentActivityItems:empty-account", { rawAccount: account });
     return { items: [], source: FALLBACK_SOURCE, fetchedAt: Date.now() };
   }
 
   const limit = Math.max(1, Math.min(options?.limit ?? DEFAULT_LIMIT, MAX_LIMIT));
   const key = buildCacheKey(trimmed, limit);
 
+  logInfo("fetchRecentActivityItems:request", {
+    account: trimmed,
+    limit,
+    forceRefresh: Boolean(options?.forceRefresh),
+    cacheKey: key,
+  });
+
   return recentActivityCache.get(
     key,
-    async () => loadRecentActivity(trimmed, limit),
+    async () => {
+      logDebug("fetchRecentActivityItems:cache-miss", { account: trimmed, limit });
+      const loaded = await loadRecentActivity(trimmed, limit);
+      logDebug("fetchRecentActivityItems:cache-store", {
+        account: trimmed,
+        limit,
+        returned: loaded.items.length,
+        source: loaded.source,
+      });
+      return loaded;
+    },
     { forceRefresh: options?.forceRefresh },
   );
 }
@@ -393,7 +461,15 @@ export function peekRecentActivityItems(
     return undefined;
   }
   const limit = Math.max(1, Math.min(options?.limit ?? DEFAULT_LIMIT, MAX_LIMIT));
-  return recentActivityCache.peek(buildCacheKey(trimmed, limit));
+  const key = buildCacheKey(trimmed, limit);
+  const cached = recentActivityCache.peek(key);
+  logDebug("peekRecentActivityItems", {
+    account: trimmed,
+    limit,
+    cacheHit: Boolean(cached),
+    returned: cached?.items.length ?? 0,
+  });
+  return cached;
 }
 
 export function invalidateRecentActivityItems(
@@ -409,5 +485,7 @@ export function invalidateRecentActivityItems(
     return;
   }
   const limit = Math.max(1, Math.min(options?.limit ?? DEFAULT_LIMIT, MAX_LIMIT));
-  recentActivityCache.delete(buildCacheKey(trimmed, limit));
+  const key = buildCacheKey(trimmed, limit);
+  logInfo("invalidateRecentActivityItems", { account: trimmed, limit });
+  recentActivityCache.delete(key);
 }

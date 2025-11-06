@@ -23,7 +23,7 @@ function formatSerial(serial: unknown): string {
     try {
       return String((serial as { toString: () => string }).toString());
     } catch (error) {
-      console.warn("Failed to stringify certificate serial", error);
+
     }
   }
   return "—";

@@ -1,6 +1,7 @@
 "use client";
 import { z } from 'zod';
 import { extractDecimalsAndFieldType, formatAmountWithCommas, formatTokenAmount, getTokenTicker } from '@/app/lib/token-utils';
+import { normalizeTokenAddress } from '@/lib/explorer/token-address';
 
 // Best-effort normalization of an account-like object into a string public key
 function normalizeAccountAddress(candidate: unknown): string | undefined {
@@ -31,15 +32,10 @@ async function loadKeeta(): Promise<any> {
     throw new Error('Keeta SDK is only available in the browser');
   }
   try {
-    console.debug('[sdk-read-client] loadKeeta start');
     // Use native dynamic import so the bundler rewrites the specifier correctly
     const mod = await import('@keetanetwork/keetanet-client');
-    const hasUserClient = Boolean((mod as any)?.UserClient);
-    const hasLib = Boolean((mod as any)?.lib);
-    console.debug('[sdk-read-client] loadKeeta done', { hasUserClient, hasLib });
     return mod;
   } catch (e) {
-    console.error('[sdk-read-client] loadKeeta failed', e);
     throw e;
   }
 }
@@ -176,7 +172,19 @@ async function fetchTokenMetadataWithCache(
 
   const promise = (async () => {
     try {
-      const tokenAccount = KeetaNet.lib.Account.fromPublicKeyString(tokenAddress);
+      let lookupAddress = tokenAddress;
+      let tokenAccount: any;
+      try {
+        tokenAccount = KeetaNet.lib.Account.fromPublicKeyString(lookupAddress);
+      } catch (initialError) {
+        const converted = await normalizeTokenAddress(lookupAddress);
+        if (!converted) {
+          return null;
+        }
+        lookupAddress = converted;
+        tokenAccount = KeetaNet.lib.Account.fromPublicKeyString(lookupAddress);
+      }
+
       const tokenState = await client.state({ account: tokenAccount });
       const info = tokenState?.info ?? {};
       const metadata = typeof info?.metadata === 'string' ? info.metadata : undefined;
@@ -207,17 +215,9 @@ async function fetchTokenMetadataWithCache(
         ticker: ticker && ticker.length > 0 ? ticker : undefined,
       };
       // Persist to localStorage cache
-      try { writeTokenMetadataToLS(tokenAddress, record); } catch {}
-      try {
-        console.debug('[sdk-read-client] token metadata fetched', {
-          token: tokenAddress,
-          hasMetadata: Boolean(record.metadata),
-          decimals: record.decimals,
-        });
-      } catch {}
+      try { writeTokenMetadataToLS(lookupAddress, record); } catch {}
       return record;
     } catch (e) {
-      try { console.warn('[sdk-read-client] token metadata fetch failed', { token: tokenAddress }, e); } catch {}
       return null;
     }
   })().finally(() => {
@@ -249,10 +249,8 @@ export async function getReadClient(): Promise<any> {
 
   let client: any;
   if (typeof (KeetaNet as any).UserClient?.fromNetwork === 'function') {
-    console.debug('[sdk-read-client] getReadClient using fromNetwork', { network });
     client = (KeetaNet as any).UserClient.fromNetwork(network, account);
   } else if (typeof (KeetaNet as any).UserClient === 'function') {
-    console.debug('[sdk-read-client] getReadClient using ctor', { network });
     client = new (KeetaNet as any).UserClient({ network, account });
   } else {
     throw new Error('Keeta SDK UserClient not available');
@@ -260,7 +258,6 @@ export async function getReadClient(): Promise<any> {
 
   cachedClient = client;
   cachedNetwork = desiredNetwork;
-  console.debug('[sdk-read-client] getReadClient ready');
   return client;
 }
  
@@ -270,19 +267,16 @@ async function getClientForHistory(): Promise<any> {
       const w = window as any;
       const hasKeeta = Boolean(w?.keeta);
       const hasGetUserClient = hasKeeta && typeof w.keeta.getUserClient === 'function';
-      try { console.debug('[sdk-read-client] getClientForHistory probe', { hasKeeta, hasGetUserClient }); } catch {}
       if (hasGetUserClient) {
         const c = await w.keeta.getUserClient();
         if (c) {
           lastHistoryClientSource = 'wallet';
-          try { console.debug('[sdk-read-client] getClientForHistory selected', { source: lastHistoryClientSource }); } catch {}
           return c;
         }
       }
     }
   } catch {}
   lastHistoryClientSource = 'read';
-  try { console.debug('[sdk-read-client] getClientForHistory selected', { source: lastHistoryClientSource }); } catch {}
   return getReadClient();
 }
 
@@ -300,19 +294,9 @@ export async function getHistory(options?: { depth?: number; cursor?: string | n
     }
 
     if (typeof client.history === 'function') {
-      console.debug('[sdk-read-client] getHistory', { hasAccount: Boolean((query as any).account), depth: query.depth, hasCursor: Boolean((query as any).startBlocksHash), clientSource: lastHistoryClientSource });
       let res = await client.history(query);
       const inspect = (value: unknown) => {
-        if (Array.isArray(value)) {
-          try {
-            const firstKeys = value.length > 0 && value[0] ? Object.keys(value[0]).slice(0, 6) : null;
-            console.debug('[sdk-read-client] getHistory raw', { length: value.length, firstKeys });
-          } catch {}
-        } else {
-          const type = value === null ? 'null' : typeof value;
-          const keys = value && typeof value === 'object' ? Object.keys(value as Record<string, unknown>).slice(0, 6) : null;
-          console.debug('[sdk-read-client] getHistory object', { type, keys });
-        }
+        // Inspection removed - no logging
       };
       inspect(res);
       if (!Array.isArray(res) && res && typeof res === 'object') {
@@ -329,7 +313,6 @@ export async function getHistory(options?: { depth?: number; cursor?: string | n
       if ((!Array.isArray(res) || res.length === 0) && (query as any).account) {
         try {
           const { account, ...rest } = query as any;
-          console.debug('[sdk-read-client] getHistory empty with account, retrying without account', { clientSource: lastHistoryClientSource });
           let res2: unknown = await client.history(rest);
           inspect(res2);
           if (!Array.isArray(res2) && res2 && typeof res2 === 'object') {
@@ -349,7 +332,6 @@ export async function getHistory(options?: { depth?: number; cursor?: string | n
       if (!Array.isArray(res) || res.length === 0) {
         try {
           const rc = await getReadClient();
-          console.debug('[sdk-read-client] getHistory forcing read client');
           let resR: unknown = await rc.history(query as any);
           inspect(resR);
           if (!Array.isArray(resR) && resR && typeof resR === 'object') {
@@ -391,7 +373,6 @@ export async function getHistory(options?: { depth?: number; cursor?: string | n
     }
     return [];
   } catch (e) {
-    console.error('[sdk-read-client] getHistory error', e);
     return [];
   }
 }
@@ -403,27 +384,19 @@ export async function getAccountState(publicKey: string): Promise<unknown | null
     const account = KeetaNet.lib.Account.fromPublicKeyString(publicKey);
 
     if (typeof client.state === 'function') {
-      console.debug('[sdk-read-client] getAccountState via client.state', { publicKey });
       const res = await client.state({ account });
-      const hasBalances = Array.isArray((res as any)?.balances) && (res as any).balances.length > 0;
-      console.debug('[sdk-read-client] getAccountState result', { hasBalances });
       return res;
     }
     if (typeof client.account === 'function') {
-      console.debug('[sdk-read-client] getAccountState via client.account', { publicKey });
       const res = await client.account(publicKey);
-      console.debug('[sdk-read-client] getAccountState result (account)');
       return res;
     }
     if (typeof client.getAccount === 'function') {
-      console.debug('[sdk-read-client] getAccountState via client.getAccount', { publicKey });
       const res = await client.getAccount(publicKey);
-      console.debug('[sdk-read-client] getAccountState result (getAccount)');
       return res;
     }
     return null;
   } catch (e) {
-    console.error('[sdk-read-client] getAccountState error', e);
     return null;
   }
 }
@@ -504,10 +477,8 @@ export async function getNormalizedBalancesForAccount(accountPublicKey: string):
       results.push({ token: tokenAddr, balance: rawBalance, name, ticker, decimals, fieldType, formattedAmount });
     }
 
-    console.debug('[sdk-read-client] listStorageAccountsByOwner result', { count: results.length });
     return results;
   } catch (e) {
-    console.error('[sdk-read-client] listStorageAccountsByOwner error', e);
     return [];
   }
 }
@@ -531,31 +502,18 @@ export async function listStorageAccountsByOwner(ownerPublicKey: string): Promis
     const owner = KeetaNet.lib.Account.fromPublicKeyString(ownerPublicKey);
 
     if (typeof client.listACLsByPrincipal !== 'function') {
-      console.warn('[sdk-read-client] listStorageAccountsByOwner not supported');
       return [];
     }
 
-    console.log('[sdk-read-client] listStorageAccountsByOwner start', { owner: ownerPublicKey });
     let entries = await client.listACLsByPrincipal([owner]);
-    let calledShape: 'array' | 'object' = 'array';
     if (!entries || (Array.isArray(entries) && entries.length === 0)) {
       try {
         // Some client versions expect an object shape: { account }
         entries = await client.listACLsByPrincipal({ account: owner });
-        calledShape = 'object';
       } catch (e) {
-        try { console.debug('[sdk-read-client] listACLsByPrincipal object-shape call failed', e); } catch {}
+        // ignore
       }
     }
-    try {
-      console.log('[sdk-read-client] listACLsByPrincipal returned', {
-        type: typeof entries,
-        isArray: Array.isArray(entries),
-        count: Array.isArray(entries) ? entries.length : undefined,
-        sample: Array.isArray(entries) && entries.length > 0 ? Object.keys(entries[0] ?? {}).slice(0, 6) : null,
-        calledShape,
-      });
-    } catch {}
     const results: Array<{ principal?: string; entity?: string; target?: string; permissions?: string[] }> = [];
 
     const toAccountString = (value: unknown): string | undefined => {
@@ -593,7 +551,6 @@ export async function listStorageAccountsByOwner(ownerPublicKey: string): Promis
             (typeof entity?.isStorage === 'function' ? Boolean(entity.isStorage()) : false) ||
             permissions.some((p) => typeof p === 'string' && p.toUpperCase().startsWith('STORAGE_'));
           if (!isStorage) {
-            try { console.log('[sdk-read-client] ACL skipped (not storage)', { entityType: typeof entity, hasIsStorage: typeof entity?.isStorage === 'function', permissions }); } catch {}
             continue;
           }
 
@@ -601,15 +558,12 @@ export async function listStorageAccountsByOwner(ownerPublicKey: string): Promis
           const entityS = toAccountString((acl as any).entity);
           const targetS = toAccountString((acl as any).target);
           results.push({ principal: principalS, entity: entityS, target: targetS, permissions });
-          try { console.log('[sdk-read-client] ACL accepted', { principal: principalS, entity: entityS, target: targetS, permissionsCount: permissions.length }); } catch {}
         } catch (e) {
-          try { console.warn('[sdk-read-client] ACL parse error', e); } catch {}
           // skip malformed entry
         }
       }
     }
 
-    try { console.log('[sdk-read-client] listStorageAccountsByOwner done', { count: results.length }); } catch {}
     return results;
   } catch {
     return [];
@@ -655,7 +609,6 @@ export async function getAggregatedBalancesForOwner(
 
     const tokensRequiringMetadata = new Set<string>();
 
-    console.debug('[sdk-read-client] getAggregatedBalancesForOwner start', { ownerPublicKey, maxStorages, includeTokenMetadata });
     try {
       const ownerAccount = KeetaNet.lib.Account.fromPublicKeyString(ownerPublicKey);
       const ownerState = await client.state({ account: ownerAccount });
@@ -694,16 +647,14 @@ export async function getAggregatedBalancesForOwner(
         upsert(tokenAddr, amount, metadata, decimals, name, ticker);
       }
     } catch (e) {
-      console.warn('[sdk-read-client] owner balances read failed', e);
+      // ignore
     }
 
     let storages: Array<{ entity?: string }> = [];
     try {
       const acl = await listStorageAccountsByOwner(ownerPublicKey);
       storages = Array.isArray(acl) ? acl.slice(0, maxStorages) : [];
-      console.debug('[sdk-read-client] storage accounts', { count: storages.length });
     } catch (e) {
-      console.warn('[sdk-read-client] listStorageAccountsByOwner failed', e);
       storages = [];
     }
 
@@ -747,7 +698,7 @@ export async function getAggregatedBalancesForOwner(
           upsert(tokenAddr, amount, metadata, decimals, name, ticker);
         }
       } catch (e) {
-        console.warn('[sdk-read-client] fetchStorage failed', { address }, e);
+        // ignore
       }
     };
 
@@ -787,14 +738,8 @@ export async function getAggregatedBalancesForOwner(
     for (const [token, info] of totals.entries()) {
       result.push({ token, balance: info.balance.toString(), metadata: info.metadata, decimals: info.decimals, name: info.name, ticker: info.ticker });
     }
-    try {
-      const summary = result.map(r => ({ token: r.token, name: r.name ?? null, ticker: r.ticker ?? null, decimals: r.decimals ?? null, hasMeta: Boolean(r.metadata) }));
-      console.debug('[sdk-read-client] aggregated totals summary', summary);
-    } catch {}
-    console.debug('[sdk-read-client] getAggregatedBalancesForOwner done', { tokens: result.length, distinctTokens: result.map(r => r.token) });
     return result;
   } catch (e) {
-    console.error('[sdk-read-client] getAggregatedBalancesForOwner error', e);
     return [];
   }
 }
@@ -825,18 +770,8 @@ export async function getHistoryForAccount(
     if (options?.cursor) (query as any).startBlocksHash = options.cursor;
     (query as any).account = accountObj;
 
-    console.debug('[sdk-read-client] getHistoryForAccount start', { accountPublicKey, depth: query.depth, hasCursor: Boolean(query.startBlocksHash), clientSource: lastHistoryClientSource });
     const inspect = (value: unknown) => {
-      if (Array.isArray(value)) {
-        try {
-          const firstKeys = value.length > 0 && value[0] ? Object.keys(value[0]).slice(0, 6) : null;
-          console.debug('[sdk-read-client] getHistoryForAccount response', { length: value.length, firstKeys });
-        } catch {}
-      } else {
-        const type = value === null ? 'null' : typeof value;
-        const keys = value && typeof value === 'object' ? Object.keys(value as Record<string, unknown>).slice(0, 6) : null;
-        console.debug('[sdk-read-client] getHistoryForAccount object', { type, keys });
-      }
+      // Inspection removed - no logging
     };
     let response: unknown = typeof client.history === 'function' ? await client.history(query) : [];
     inspect(response);
@@ -854,7 +789,6 @@ export async function getHistoryForAccount(
     if ((!Array.isArray(response) || response.length === 0)) {
       try {
         const { account, ...rest } = query as any;
-        console.debug('[sdk-read-client] getHistoryForAccount empty; retrying without account filter', { clientSource: lastHistoryClientSource });
         let fallbackRes: unknown = await client.history(rest);
         inspect(fallbackRes);
         if (!Array.isArray(fallbackRes) && fallbackRes && typeof fallbackRes === 'object') {
@@ -873,7 +807,6 @@ export async function getHistoryForAccount(
       if (!Array.isArray(response) || response.length === 0) {
         try {
           const rc = await getReadClient();
-          console.debug('[sdk-read-client] getHistoryForAccount forcing read client');
           let resR: unknown = await rc.history(query as any);
           inspect(resR);
           if (!Array.isArray(resR) && resR && typeof resR === 'object') {
@@ -911,7 +844,6 @@ export async function getHistoryForAccount(
           }
         } catch {}
         if (!Array.isArray(response) || response.length === 0) {
-          console.debug('[sdk-read-client] getHistoryForAccount empty response after retry', { clientSource: lastHistoryClientSource });
           return [];
         }
       }
@@ -922,7 +854,6 @@ export async function getHistoryForAccount(
       .map((entry) => (entry && typeof entry === 'object' && 'voteStaple' in entry ? (entry as any).voteStaple : entry))
       .filter((v) => Boolean(v));
     if (voteStaples.length === 0) {
-      console.debug('[sdk-read-client] getHistoryForAccount no voteStaples', { clientSource: lastHistoryClientSource });
       return [];
     }
 
@@ -1146,10 +1077,8 @@ export async function getHistoryForAccount(
 
     results.push(...pending);
     results.sort((a, b) => (b.timestamp ?? 0) - (a.timestamp ?? 0));
-    console.debug('[sdk-read-client] getHistoryForAccount done', { count: results.length, hadFilter: hasFiltered });
     return results;
   } catch (e) {
-    console.error('[sdk-read-client] getHistoryForAccount error', e);
     return [];
   }
 }

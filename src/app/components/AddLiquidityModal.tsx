@@ -119,8 +119,7 @@ export default function AddLiquidityModal({ isOpen, onClose, onSuccess, pool }: 
       }
 
       const result = await response.json();
-      console.log('Liquidity added:', result);
-      
+
       onSuccess();
       onClose();
     } catch (err) {

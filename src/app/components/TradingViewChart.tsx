@@ -187,7 +187,7 @@ export function TradingViewChart({
         try {
           widgetRef.current.remove();
         } catch (removalError) {
-          console.warn('Failed to remove TradingView widget', removalError);
+
         }
         widgetRef.current = null;
       }
@@ -255,7 +255,7 @@ export function TradingViewChart({
                 return inflight;
               }
             } catch (inflightError) {
-              console.warn('TradingViewChart: inflight request failed, refetching', inflightError);
+
             }
           }
 

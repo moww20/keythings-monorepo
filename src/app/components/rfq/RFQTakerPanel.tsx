@@ -180,7 +180,6 @@ export function RFQTakerPanel({ mode, onModeChange, onPairChange, hideInternalTa
 
     const parsed = EscrowMetadataSchema.safeParse(escrowState.metadata);
     if (!parsed.success) {
-    console.warn('[RFQTakerPanel] Ignoring escrow metadata parsing error:', parsed.error.flatten());
     return null;
     }
 

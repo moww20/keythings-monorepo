@@ -374,7 +374,6 @@ function deriveTypeLabel(typeValue: unknown, opTypeValue: unknown, account?: str
 }
 
 export function normalizeHistoryRecord(input: unknown, contextAccount?: string): RecentActivityItem | null {
-  try { console.debug("[normalizeHistoryRecord] start", { input, contextAccount }); } catch {}
   const parsed = KeetaHistoryRecordSchema.safeParse(input);
   if (!parsed.success) return null;
   const r = parsed.data;
@@ -423,7 +422,6 @@ export function normalizeHistoryRecord(input: unknown, contextAccount?: string):
   const hasSwapHints = Boolean(r.operationSend && r.operationReceive);
   const typeLabel = deriveTypeLabel(r.type, r.operationType, contextAccount, from, to, hasSwapHints);
 
-  try { console.debug("[normalizeHistoryRecord] result", { id, block, timestamp, type: typeLabel, amount: amountRaw, from, to, token, tokenTicker: tokenDetails.ticker, tokenDecimals: tokenDetails.decimals, operationType: toStringSafe(r.operationType) || toStringSafe(r.type) || "UNKNOWN", tokenMetadata: normalizedTokenMetadata }); } catch {}
   return {
     id,
     block,
@@ -443,11 +441,9 @@ export function normalizeHistoryRecord(input: unknown, contextAccount?: string):
 }
 
 export function normalizeHistoryResponse(data: unknown, contextAccount?: string): RecentActivityItem[] {
-  try { console.debug("[normalizeHistoryResponse] start", { data, contextAccount }); } catch {}
   const resp = KeetaHistoryResponseSchema.safeParse(data);
   if (!resp.success) return [];
   const { records } = resp.data;
-  try { console.debug("[normalizeHistoryResponse] records", { recordsCount: records.length }); } catch {}
   return records
     .map((r) => normalizeHistoryRecord(r, contextAccount))
     .filter((x): x is RecentActivityItem => x !== null);
@@ -480,7 +476,6 @@ const KeetaSDKHistoryItemSchema = z
   .passthrough();
 
 export function extractActivityFromSDKHistory(data: unknown, contextAccount?: string): RecentActivityItem[] {
-  try { console.debug("[extractActivityFromSDKHistory] start", { data, contextAccount }); } catch {}
   const items = Array.isArray(data) ? data : [];
   const results: RecentActivityItem[] = [];
 
@@ -577,12 +572,10 @@ export function extractActivityFromSDKHistory(data: unknown, contextAccount?: st
       }
     }
   }
-  try { console.debug("[extractActivityFromSDKHistory] result", { resultsCount: results.length }); } catch {}
   return results;
 }
 
 function extractFromBlockObject(blockObj: any, contextAccount?: string): RecentActivityItem[] {
-  try { console.debug("[extractFromBlockObject] start", { blockObj, contextAccount }); } catch {}
   const blockHash = toStringSafe(blockObj?.hash, "");
   const ts = toTimestampMs(blockObj?.timestamp ?? blockObj?.createdAt, Date.now());
   const ops = Array.isArray(blockObj?.operations) ? blockObj.operations : [];
@@ -598,7 +591,6 @@ function extractFromBlockObject(blockObj: any, contextAccount?: string): RecentA
     const n = normalizeHistoryRecord(merged, contextAccount);
     if (n) results.push(n);
   }
-  try { console.debug("[extractFromBlockObject] result", { resultsCount: results.length }); } catch {}
   return results;
 }
 
@@ -607,7 +599,6 @@ export function enrichActivityWithBlocks(
   blocksByHash: Record<string, unknown>,
   contextAccount?: string,
 ): RecentActivityItem[] {
-  try { console.debug("[enrichActivityWithBlocks] start", { itemsCount: items.length, blocksByHashCount: Object.keys(blocksByHash).length, contextAccount }); } catch {}
   const out: RecentActivityItem[] = [];
   for (const item of items) {
     if (item.from && item.to && item.token) {
@@ -630,7 +621,6 @@ export function enrichActivityWithBlocks(
     );
     out.push(matchByAccount ?? derived[0]);
   }
-  try { console.debug("[enrichActivityWithBlocks] result", { outCount: out.length }); } catch {}
   return out;
 }
 
@@ -843,13 +833,6 @@ export function processKeetaHistoryWithFiltering(
 ): RecentActivityItem[] {
   // Legacy helper kept for compatibility (token explorer fallback).
   // Simply reuse the SDK extraction logic, ensuring we always return an array.
-  try {
-    console.debug("[processKeetaHistoryWithFiltering] invoked", {
-      hasArray: Array.isArray(historyData),
-      type: typeof historyData,
-      contextAccount,
-    });
-  } catch {}
 
   const extracted = extractActivityFromSDKHistory(historyData, contextAccount);
   if (extracted.length) {
@@ -864,7 +847,7 @@ export function processKeetaHistoryWithFiltering(
   }
 
   try {
-    console.debug("[processKeetaHistoryWithFiltering] returning empty results");
+
   } catch {}
   return [];
 }
@@ -951,8 +934,7 @@ function extractTokenMetadataFromOperation(operation: any): any {
  * This can be called from the browser console for debugging
  */
 export function testKeetaHistoryParsing() {
-  console.log('🧪 Testing Keeta History Parsing...');
-  
+
   // Sample data structure that matches your current flattened format
   const sampleFlattenedData = {
     amount: '20300',
@@ -994,24 +976,21 @@ export function testKeetaHistoryParsing() {
       effects: {}
     }
   ];
-  
-  console.log('📊 Sample Flattened Data:', sampleFlattenedData);
-  console.log('📊 Sample Keeta SDK Data:', sampleKeetaSDKData);
-  
+
+
   // Test the new parsing function
   const result = processKeetaHistoryWithFiltering(sampleKeetaSDKData, 'keeta_account_123');
-  console.log('✅ Parsing Result:', result);
-  
+
   // Verify the result has the expected fields
   if (result.length > 0) {
     const firstResult = result[0];
-    console.log('🔍 First Result Analysis:');
-    console.log('- Has amount:', !!firstResult.amount);
-    console.log('- Has from/to:', !!firstResult.from && !!firstResult.to);
-    console.log('- Has token:', !!firstResult.token);
-    console.log('- Has metadata:', !!firstResult.tokenMetadata);
-    console.log('- Operation type:', firstResult.operationType);
-    console.log('- Transaction type:', firstResult.type);
+
+
+
+
+
+
+
   }
   
   return result;

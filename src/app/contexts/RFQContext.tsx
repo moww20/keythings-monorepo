@@ -210,20 +210,14 @@ export function RFQProvider({ tokenA, tokenB, children }: RFQProviderProps): Rea
       return;
     }
 
-    console.debug('[RFQContext] refreshOrders:start', { pair: derivedPair });
     try {
       const [orderList, makerList] = await Promise.all([fetchRfqOrders(derivedPair), fetchRfqMakers()]);
-      console.debug('[RFQContext] refreshOrders:data', {
-        pair: derivedPair,
-        orderCount: orderList.length,
-        makerCount: makerList.length,
-        firstOrder: orderList[0],
-      });
+
       setOrders(orderList);
       setMakers(makerList);
 
       if (orderList.length === 0) {
-        console.debug('[RFQContext] refreshOrders:empty', { pair: derivedPair });
+
         const allOrders = await fetchRfqOrders();
         const pairs = Array.from(new Set(allOrders.map((order) => order.pair))).filter(Boolean);
         setAvailablePairs((prev) => {
@@ -254,7 +248,7 @@ export function RFQProvider({ tokenA, tokenB, children }: RFQProviderProps): Rea
       }
 
       const defaultOrder = orderList.find((order) => order.status === 'open') ?? orderList[0];
-      console.debug('[RFQContext] refreshOrders:defaultOrder', { pair: derivedPair, defaultOrderId: defaultOrder?.id });
+
       setAvailablePairs((previous) => {
         const next = new Set(previous);
         if (derivedPair) {
@@ -288,7 +282,6 @@ export function RFQProvider({ tokenA, tokenB, children }: RFQProviderProps): Rea
   }, [derivedPair, walletIdentity, persistTakerDeclaredOrderIds]);
 
   useEffect(() => {
-    console.debug('[RFQContext] useEffect(refreshOrders) invoked', { pair: derivedPair });
     void refreshOrders();
   }, [refreshOrders, derivedPair]);
 
@@ -312,10 +305,7 @@ export function RFQProvider({ tokenA, tokenB, children }: RFQProviderProps): Rea
   );
 
   useEffect(() => {
-    console.debug('[RFQContext] selectedOrder updated', {
-      selectedOrderId,
-      selectedOrder,
-    });
+
     if (selectedOrder) {
       setFillAmountState(selectedOrder.minFill ?? selectedOrder.size);
     } else {
@@ -342,10 +332,7 @@ export function RFQProvider({ tokenA, tokenB, children }: RFQProviderProps): Rea
     try {
       setIsVerifyingEscrow(true);
       const state = await walletVerifyStorageAccount(storageAddress);
-      console.debug('[RFQContext] refreshEscrowState:resolved', {
-        storageAddress,
-        balancesCount: state?.balances?.length,
-      });
+
       setEscrowState(state);
       setEscrowError(null);
       setLastEscrowVerification(Date.now());
@@ -394,7 +381,7 @@ export function RFQProvider({ tokenA, tokenB, children }: RFQProviderProps): Rea
   }, []);
 
   const setFillAmount = useCallback((value?: number) => {
-    console.debug('[RFQContext] setFillAmount invoked', { value });
+
     setFillAmountState(value && Number.isFinite(value) ? value : undefined);
   }, []);
 
@@ -472,10 +459,8 @@ export function RFQProvider({ tokenA, tokenB, children }: RFQProviderProps): Rea
 
   const createQuote = useCallback(
     async (submission: RFQQuoteSubmission, storageAccountAddress?: string) => {
-      console.log('[RFQContext] createQuote called with storageAccountAddress:', storageAccountAddress);
-      console.log('[RFQContext] storageAccountAddress type:', typeof storageAccountAddress);
-      console.log('[RFQContext] storageAccountAddress starts with keeta_:', storageAccountAddress?.startsWith('keeta_'));
-      console.log('[RFQContext] submission:', submission);
+
+
 
       if (!derivedPair) {
         throw new Error('Select Token A and Token B before creating RFQ quotes.');
@@ -551,23 +536,7 @@ export function RFQProvider({ tokenA, tokenB, children }: RFQProviderProps): Rea
         updatedAt: nowIso,
       };
 
-      console.debug('[RFQContext] createQuote:payload', {
-        orderId,
-        storageAccount: newOrder.storageAccount,
-        pair: newOrder.pair,
-        side: newOrder.side,
-        price,
-        size,
-        minFillValue,
-        expiryIso,
-      });
-
       const createdOrder = await createRfqOrder(newOrder);
-      console.debug('[RFQContext] createQuote:response', {
-        createdOrderId: createdOrder.id,
-        storageAccount: createdOrder.storageAccount,
-        status: createdOrder.status,
-      });
 
       setOrders((prev) => [createdOrder, ...prev]);
       setSelectedOrderId(createdOrder.id);
@@ -611,10 +580,7 @@ export function RFQProvider({ tokenA, tokenB, children }: RFQProviderProps): Rea
               if (derivedFromEscrow && typeof derivedFromEscrow === 'string') {
                 const trimmed = derivedFromEscrow.trim();
                 if (trimmed.length > 0 && !trimmed.startsWith('PLACEHOLDER_')) {
-                  console.debug('[rfq] Using storage metadata token reference for cancellation', {
-                    orderId,
-                    derivedFromEscrow: trimmed,
-                  });
+
                   return trimmed;
                 }
               }
@@ -634,7 +600,7 @@ export function RFQProvider({ tokenA, tokenB, children }: RFQProviderProps): Rea
                 makerTokenDecimals = balanceEntry.decimals;
               }
             } catch (error) {
-              console.warn('[rfq] Failed to fetch storage balance metadata during cancellation', error);
+
             }
           }
         }
@@ -668,10 +634,7 @@ export function RFQProvider({ tokenA, tokenB, children }: RFQProviderProps): Rea
           let makerAmount = toBaseUnits(remaining, makerTokenDecimals);
 
           if (makerAmount <= BigInt(0)) {
-            console.info('[rfq] Cancellation skipped transfer because remaining amount is non-positive', {
-              orderId,
-              remaining,
-            });
+
             makerAmount = BigInt(0);
           }
 
@@ -687,24 +650,16 @@ export function RFQProvider({ tokenA, tokenB, children }: RFQProviderProps): Rea
                   availableFromStorage = BigInt(tokenEntry.amount ?? 0);
                   balanceInfoDiscovered = true;
                   if (availableFromStorage < makerAmount) {
-                    console.warn('[rfq] Storage balance lower than expected during cancellation; clamping transfer', {
-                      orderId,
-                      requested: makerAmount.toString(),
-                      available: availableFromStorage.toString(),
-                    });
                     makerAmount = availableFromStorage;
                   }
                 }
               } catch (error) {
-                console.warn('[rfq] Unable to verify storage balance during cancellation', error);
+
               }
             }
 
             if (!balanceInfoDiscovered && makerAmount > BigInt(0)) {
-              console.warn('[rfq] No storage balance entry found for maker token during cancellation; skipping token transfer', {
-                orderId,
-                sanitizedTokenAddress,
-              });
+
               makerAmount = BigInt(0);
             }
           }
@@ -726,7 +681,7 @@ export function RFQProvider({ tokenA, tokenB, children }: RFQProviderProps): Rea
                 ),
               );
             } catch (error) {
-              console.warn('[rfq] Failed to enqueue platform fee payment during cancellation', error);
+
             }
           }
 
@@ -743,36 +698,23 @@ export function RFQProvider({ tokenA, tokenB, children }: RFQProviderProps): Rea
                 ),
               ),
             );
-          } else {
-            console.info('[rfq] No tokens to return during cancellation; skipping send operation', {
-              orderId,
-              availableFromStorage: availableFromStorage?.toString() ?? null,
-              remaining,
-              sanitizedTokenAddress,
-            });
-            console.info('[rfq] No tokens to return during cancellation; skipping send operation', { orderId });
           }
 
           await Promise.all(pendingOperations);
 
           if (pendingOperations.length === 0 || makerAmount === BigInt(0)) {
-            console.info('[rfq] Cancellation completed without submitting a builder (no token movements required)', {
-              orderId,
-            });
+            // No operations to execute
           } else {
             const receipt = await userClient.publishBuilder?.(builder);
             if (!receipt) {
               throw new Error('Wallet failed to publish cancellation transaction.');
             }
-            console.debug('[rfq] Cancellation builder published', { orderId, receipt });
+
           }
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
           if (message.includes('Resulting balance becomes negative')) {
-            console.warn('[rfq] Wallet reported empty escrow during cancellation', {
-              orderId,
-              message,
-            });
+
           } else {
             throw error instanceof Error ? error : new Error(message);
           }
