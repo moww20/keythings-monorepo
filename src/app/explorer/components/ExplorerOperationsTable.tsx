@@ -391,42 +391,41 @@ export default function ExplorerOperationsTable({
               }
 
               const tokenLink = rawTokenIdentifier ? resolveLink(rawTokenIdentifier) : null;
-              
-              
-              // Enhanced metadata name extraction from multiple sources
-              const metadataName = 
-                (typeof operationAny.tokenMetadata?.name === "string" && operationAny.tokenMetadata.name.trim().length > 0 ? operationAny.tokenMetadata.name.trim() : null) ||
-                (typeof (primaryOp as any).tokenMetadata?.name === "string" && (primaryOp as any).tokenMetadata.name.trim().length > 0 ? (primaryOp as any).tokenMetadata.name.trim() : null) ||
-                (typeof (sendOp as any).tokenMetadata?.name === "string" && (sendOp as any).tokenMetadata.name.trim().length > 0 ? (sendOp as any).tokenMetadata.name.trim() : null) ||
-                (typeof (receiveOp as any).tokenMetadata?.name === "string" && (receiveOp as any).tokenMetadata.name.trim().length > 0 ? (receiveOp as any).tokenMetadata.name.trim() : null);
-
-              const metadataNameToRender = metadataName && extractedTicker && metadataName.toUpperCase() === extractedTicker.toUpperCase()
-                ? null
-                : metadataName;
-
-              const tickerUsedInPrimary = extractedTicker
-                ? Boolean(
-                    (amountDisplay ?? '')
-                      .toUpperCase()
-                      .includes(extractedTicker.toUpperCase()),
-                  )
-                : false;
+              const displayTicker = extractedTicker && extractedTicker !== "UNKNOWN" ? extractedTicker : null;
               const shortIdentifier = rawTokenIdentifier
                 ? rawTokenIdentifier.length > 32
                   ? truncateIdentifier(rawTokenIdentifier, 12, 10)
                   : rawTokenIdentifier
                 : null;
-              let primaryLine = amountDisplay ?? extractedTicker ?? "Unknown amount";
-              if (extractedTicker === 'UNKNOWN' && typeof primaryLine === 'string') {
-                primaryLine = primaryLine.replace(/\s+UNKNOWN$/, '');
+              const amountPart = amountDisplay && amountDisplay.length > 0 ? amountDisplay : null;
+              let primaryLine: string | null = null;
+              if (isMultiToken && enrichedFormattedAmount) {
+                primaryLine = enrichedFormattedAmount;
+              } else {
+                const pieces: string[] = [];
+                if (amountPart) pieces.push(amountPart);
+                if (displayTicker) pieces.push(displayTicker);
+                if (pieces.length > 0) {
+                  primaryLine = pieces.join(" ").trim();
+                }
               }
-              
-              // Enhanced logic for determining when to show "Unknown token"
-              const hasTokenMetadata = Boolean(metadataName || extractedTicker || isMultiToken);
-              const hasTokenIdentifier = Boolean(tokenLink || shortIdentifier);
-              const hasValidTokenInfo = hasTokenMetadata || hasTokenIdentifier;
-              
-              const shouldShowUnknownToken = !hasValidTokenInfo;
+              if (!primaryLine || primaryLine.length === 0) {
+                primaryLine = displayTicker ?? amountPart ?? (tokenLink ? tokenLink.label : null) ?? shortIdentifier ?? "Unknown token";
+              }
+              const primaryLineText = primaryLine ?? "Unknown token";
+              const tokenPrimaryNode = tokenLink ? (
+                <Link
+                  href={tokenLink.href}
+                  className="block text-sm text-foreground hover:text-accent hover:underline truncate"
+                  title={primaryLineText}
+                >
+                  {primaryLineText}
+                </Link>
+              ) : (
+                <span className="text-sm text-foreground truncate" title={primaryLineText}>
+                  {primaryLineText}
+                </span>
+              );
 
               return (
                 <TableRow
@@ -437,27 +436,22 @@ export default function ExplorerOperationsTable({
                     <div className="flex flex-col gap-1 overflow-hidden text-ellipsis">
                       <Link
                         href={blockLink}
-                        className="font-medium text-accent hover:text-foreground"
+                        className="font-medium text-foreground hover:text-accent hover:underline"
                       >
                         {truncateIdentifier(operation.block.$hash, 12, 8)}
                       </Link>
-                      {operation.block.account ? (
-                        <span className="text-xs text-muted truncate">
-                          {truncateIdentifier(operation.block.account)}
-                        </span>
-                      ) : null}
                     </div>
                   </TableCell>
                   <TableCell className="px-6 py-4 w-[140px] text-xs font-semibold uppercase tracking-[0.3em] text-muted align-top">
                     {operation.type}
                   </TableCell>
                   <TableCell className="px-6 py-4 w-[280px] align-top">
-                    <div className="flex flex-col gap-1 text-sm text-subtle overflow-hidden">
+                    <div className="flex flex-col gap-1 text-sm text-foreground overflow-hidden">
                       {(!showOnlyTo) && (
                         <span>
                           From{" "}
                           {fromLink ? (
-                            <Link href={fromLink.href} className="text-accent hover:text-foreground">
+                            <Link href={fromLink.href} className="text-foreground hover:text-accent hover:underline">
                               {fromLink.label}
                             </Link>
                           ) : (
@@ -469,7 +463,7 @@ export default function ExplorerOperationsTable({
                         <span>
                           To{" "}
                           {toLink ? (
-                            <Link href={toLink.href} className="text-accent hover:text-foreground">
+                            <Link href={toLink.href} className="text-foreground hover:text-accent hover:underline">
                               {toLink.label}
                             </Link>
                           ) : (
@@ -481,29 +475,7 @@ export default function ExplorerOperationsTable({
                   </TableCell>
                   <TableCell className="px-6 py-4 w-[320px] text-sm text-subtle align-top">
                     <div className="flex flex-col gap-1 overflow-hidden">
-                      <span className="text-sm text-foreground truncate">
-                        {primaryLine}
-                      </span>
-                      <div className="flex flex-wrap items-center gap-2 text-xs text-muted overflow-hidden">
-                        {metadataNameToRender ? (
-                          <span className="truncate max-w-[200px]">{metadataNameToRender}</span>
-                        ) : null}
-                        {!tickerUsedInPrimary && extractedTicker && extractedTicker !== 'UNKNOWN' ? (
-                          <span>{extractedTicker}</span>
-                        ) : null}
-                        {!extractedTicker ? (
-                          tokenLink ? (
-                          <Link
-                            href={tokenLink.href}
-                            className="text-xs text-accent hover:text-foreground"
-                          >
-                            {tokenLink.label}
-                          </Link>
-                        ) : shortIdentifier ? (
-                          <span>{shortIdentifier}</span>
-                        ) : null) : null}
-                        {shouldShowUnknownToken ? <span>Unknown token</span> : null}
-                      </div>
+                      {tokenPrimaryNode}
                     </div>
                   </TableCell>
                   <TableCell className="px-6 py-4 w-[120px] text-sm text-muted align-top whitespace-nowrap" title={absolute ?? undefined}>
