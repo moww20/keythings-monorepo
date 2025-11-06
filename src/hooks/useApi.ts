@@ -27,23 +27,27 @@ const StorageBalanceEntrySchema = z.object({
   balance: z.union([z.string(), z.number(), z.bigint()]).optional(),
   amount: z.union([z.string(), z.number(), z.bigint()]).optional(),
   decimals: z.number().optional(),
-  metadata: z.string().optional(),
+  metadata: z.union([z.string(), z.record(z.string(), z.unknown())]).optional(),
 }).passthrough();
+
+const StorageInfoSchema = z.object({
+  owner: z.string().optional(),
+  type: z.string().optional(),
+  name: z.string().optional(),
+  description: z.string().optional(),
+  createdAt: z.union([z.string(), z.number(), z.date()]).optional(),
+  updatedAt: z.union([z.string(), z.number(), z.date()]).optional(),
+}).partial();
+
+const DateLikeSchema = z.union([z.string(), z.number(), z.date()]).optional();
 
 const StorageAccountStateSchema = z.object({
   publicKey: z.string().optional(),
   owner: z.string().optional(),
   type: z.string().optional(),
-  createdAt: z.union([z.string(), z.number(), z.date()]).optional(),
-  updatedAt: z.union([z.string(), z.number(), z.date()]).optional(),
-  info: z.object({
-    owner: z.string().optional(),
-    type: z.string().optional(),
-    name: z.string().optional(),
-    description: z.string().optional(),
-    createdAt: z.union([z.string(), z.number(), z.date()]).optional(),
-    updatedAt: z.union([z.string(), z.number(), z.date()]).optional(),
-  }).partial().optional(),
+  createdAt: DateLikeSchema,
+  updatedAt: DateLikeSchema,
+  info: StorageInfoSchema.optional(),
   balances: z.array(StorageBalanceEntrySchema).optional(),
 }).passthrough();
 
@@ -75,12 +79,30 @@ const toBalanceString = (value: unknown): string => {
   return '0';
 };
 
-const parseTokenMetadata = (rawMetadata: string | undefined) => {
+const normalizeMetadataInput = (rawMetadata: unknown): string | undefined => {
   if (!rawMetadata) {
+    return undefined;
+  }
+  if (typeof rawMetadata === 'string') {
+    return rawMetadata;
+  }
+  if (rawMetadata && typeof rawMetadata === 'object') {
+    try {
+      return JSON.stringify(rawMetadata);
+    } catch {
+      return undefined;
+    }
+  }
+  return undefined;
+};
+
+const parseTokenMetadata = (rawMetadata: unknown) => {
+  const normalized = normalizeMetadataInput(rawMetadata);
+  if (!normalized) {
     return null;
   }
   try {
-    const parsedJson = JSON.parse(rawMetadata);
+    const parsedJson = JSON.parse(normalized);
     const parsed = TokenMetadataSchema.safeParse(parsedJson);
     return parsed.success ? parsed.data : null;
   } catch {
@@ -88,18 +110,54 @@ const parseTokenMetadata = (rawMetadata: string | undefined) => {
   }
 };
 
+const parseStorageState = (rawState: unknown) => {
+  if (!rawState || typeof rawState !== 'object') {
+    return null;
+  }
+
+  const candidates: unknown[] = [];
+  if ('account' in (rawState as Record<string, unknown>) && (rawState as Record<string, unknown>).account) {
+    candidates.push((rawState as Record<string, unknown>).account);
+  }
+  candidates.push(rawState);
+
+  for (const candidate of candidates) {
+    const parsed = StorageAccountStateSchema.safeParse(candidate);
+    if (parsed.success) {
+      return parsed.data;
+    }
+  }
+
+  return null;
+};
+
 const fetchStorageFromChain = async (publicKey: string) => {
-  const rawState = await getAccountState(publicKey);
-  if (!rawState) {
+  let rawState: unknown = await getAccountState(publicKey);
+
+  if (!rawState && typeof window !== 'undefined') {
+    const provider = (window as { keeta?: Record<string, unknown> }).keeta;
+    if (provider) {
+      try {
+        await (provider.requestCapabilities as ((caps: string[]) => Promise<unknown>) | undefined)?.(['read']);
+      } catch {}
+
+      try {
+        if (typeof provider.getAccountInfo === 'function') {
+          rawState = await provider.getAccountInfo(publicKey);
+        } else if (typeof provider.request === 'function') {
+          rawState = await provider.request({ method: 'keeta_getAccountInfo', params: [publicKey] });
+        }
+      } catch (walletError) {
+        console.warn('Wallet provider getAccountInfo failed', walletError);
+      }
+    }
+  }
+
+  const state = parseStorageState(rawState);
+  if (!state) {
     return null;
   }
 
-  const parsed = StorageAccountStateSchema.safeParse(rawState);
-  if (!parsed.success) {
-    return null;
-  }
-
-  const state = parsed.data;
   const info = state.info ?? {};
   const owner = info.owner ?? state.owner ?? null;
   const type = info.type ?? state.type ?? 'STORAGE';

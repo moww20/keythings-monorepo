@@ -470,7 +470,7 @@ export function TradingViewChart({
         widgetRef.current = null;
       }
     };
-  }, [error, isLoading, symbol, timeframe, queryTimeframe, isMounted]);
+  }, [containerId, error, isLoading, symbol, timeframe, queryTimeframe, isMounted]);
 
   if (isLoading) {
     return (

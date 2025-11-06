@@ -13,10 +13,12 @@ export interface TokenIconProps {
 
 export function TokenIcon({ address, symbol, size = 24 }: TokenIconProps): React.JSX.Element {
   const { metadata } = useTokenMetadata(address);
-  
+
+  const rawMetadata = metadata?.metadata;
+
   const { iconUrl, fallbackIcon } = useMemo(() => {
     // Extract icon from metadata
-    const iconFromMetadata = metadata?.metadata ? getTokenIconFromMetadata(metadata.metadata) : null;
+    const iconFromMetadata = rawMetadata ? getTokenIconFromMetadata(rawMetadata) : null;
     const iconDataUrl = iconFromMetadata ? getTokenIconDataUrl(iconFromMetadata) : '';
     
     // Create fallback icon if no metadata icon
@@ -26,7 +28,7 @@ export function TokenIcon({ address, symbol, size = 24 }: TokenIconProps): React
       iconUrl: iconDataUrl || undefined,
       fallbackIcon: fallback,
     };
-  }, [metadata?.metadata, symbol]);
+  }, [rawMetadata, symbol]);
 
   if (iconUrl) {
     return (

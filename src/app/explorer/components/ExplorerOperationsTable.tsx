@@ -173,7 +173,7 @@ export default function ExplorerOperationsTable({
       return ah.localeCompare(bh);
     });
     return copy;
-  }, [operations]);
+  }, [assumeSorted, operations]);
   const pageCount = Math.max(1, Math.ceil(sortedOperations.length / pageSize));
   useEffect(() => {
     setPageIndex((prev) => Math.min(prev, pageCount - 1));

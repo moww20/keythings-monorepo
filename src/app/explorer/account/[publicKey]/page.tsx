@@ -51,9 +51,15 @@ function toDisplayString(value: unknown): string | null {
   if (typeof value === "number" || typeof value === "boolean") {
     return String(value);
   }
+  if (typeof value === "bigint") {
+    return value.toString();
+  }
   if (value && typeof value === "object") {
     try {
-      return JSON.stringify(value);
+      return JSON.stringify(
+        value,
+        (_key, val) => (typeof val === "bigint" ? val.toString() : val),
+      );
     } catch (error) {
       console.error("[ACCOUNT_PAGE] Failed to stringify metadata value", error);
       return null;
