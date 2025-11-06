@@ -42,7 +42,6 @@ import {
   resolveExplorerPath,
   truncateIdentifier,
 } from "../../utils/resolveExplorerPath";
-import { useWallet } from "@/app/contexts/WalletContext";
 
 function toDisplayString(value: unknown): string | null {
   if (typeof value === "string") {
@@ -228,10 +227,10 @@ export default function AccountPage(): React.JSX.Element {
   const hasCertificates = certificates.length > 0;
   
 
-  const representativeLink = account?.representative
+  const representativeLink = account?.representative && typeof account.representative === 'string'
     ? resolveExplorerPath(account.representative)
     : null;
-  const ownerLink = account?.owner ? resolveExplorerPath(account.owner) : null;
+  const ownerLink = account?.owner && typeof account.owner === 'string' ? resolveExplorerPath(account.owner) : null;
 
   // Determine if this is a storage account
   const accountType = account?.type?.toUpperCase()?.trim();
@@ -247,7 +246,6 @@ export default function AccountPage(): React.JSX.Element {
   const [storageCount, setStorageCount] = useState<number | null>(null);
   const [storageOwner, setStorageOwner] = useState<string | null>(null);
   const [ownerLoading, setOwnerLoading] = useState(false);
-  const { userClient } = useWallet();
 
   useEffect(() => {
     setActiveTab("tokens");
@@ -271,7 +269,7 @@ export default function AccountPage(): React.JSX.Element {
     const accountType = account.type?.toUpperCase()?.trim();
     const isStorageAccount = accountType === 'STORAGE';
     
-    if (!isStorageAccount || !userClient) {
+    if (!isStorageAccount) {
       setStorageOwner(null);
       return;
     }
@@ -281,9 +279,11 @@ export default function AccountPage(): React.JSX.Element {
     
     (async () => {
       try {
-        // Use listACLsByEntity to get ACL entries for this storage account
-        // The owner is the principal with OWNER permission
-        if (typeof userClient.listACLsByEntity !== 'function') {
+        // Use read client for reading ACL data (no wallet needed)
+        const { getReadClient } = await import('@/lib/explorer/sdk-read-client');
+        const client = await getReadClient();
+        
+        if (typeof client.listACLsByEntity !== 'function') {
           if (!cancelled) {
             setStorageOwner(null);
             setOwnerLoading(false);
@@ -291,11 +291,32 @@ export default function AccountPage(): React.JSX.Element {
           return;
         }
 
-        // Use listACLsByEntity to get ACL entries for this storage account
-        // The owner is the principal with OWNER permission
-        // Convert Account object to the format expected by listACLsByEntity
-        const accountRef = { publicKeyString: publicKey };
-        const acls = await userClient.listACLsByEntity({ account: accountRef });
+        // Load Keeta SDK to create proper Account object
+        const KeetaNet = await import('@keetanetwork/keetanet-client');
+        const storageAccount = KeetaNet.lib.Account.fromPublicKeyString(publicKey);
+
+        // Try both array and object parameter formats (similar to listACLsByPrincipal pattern)
+        let acls: any[] = [];
+        try {
+          acls = await client.listACLsByEntity([storageAccount]);
+          if (!Array.isArray(acls) || acls.length === 0) {
+            // Try object format as fallback
+            acls = await client.listACLsByEntity({ account: storageAccount });
+          }
+        } catch (err) {
+          // If array format fails, try object format
+          try {
+            acls = await client.listACLsByEntity({ account: storageAccount });
+          } catch (err2) {
+            // Both formats failed
+            if (!cancelled) {
+              console.error('[AccountPage] Failed to call listACLsByEntity:', err2);
+              setStorageOwner(null);
+              setOwnerLoading(false);
+            }
+            return;
+          }
+        }
         
         if (cancelled) return;
 
@@ -304,6 +325,31 @@ export default function AccountPage(): React.JSX.Element {
           setOwnerLoading(false);
           return;
         }
+
+        // Helper to extract account string from various formats
+        const toAccountString = (value: unknown): string | undefined => {
+          if (typeof value === 'string') {
+            const trimmed = value.trim();
+            return trimmed.length > 0 ? trimmed : undefined;
+          }
+          try {
+            if (value && typeof (value as { publicKeyString?: string }).publicKeyString === 'string') {
+              return (value as { publicKeyString: string }).publicKeyString;
+            }
+            const maybePK = (value as { publicKeyString?: { toString?: () => string } }).publicKeyString;
+            if (maybePK && typeof maybePK.toString === 'function') {
+              const coerced = String(maybePK.toString());
+              if (coerced && coerced !== '[object Object]') return coerced;
+            }
+            if (value && typeof (value as { toString?: () => string }).toString === 'function') {
+              const coerced = String((value as { toString: () => string }).toString());
+              if (coerced && coerced !== '[object Object]') return coerced;
+            }
+          } catch {
+            // ignore
+          }
+          return undefined;
+        };
 
         // Find the ACL entry with OWNER permission
         // Extract flags from permissions.base.flags or permissions array
@@ -316,14 +362,8 @@ export default function AccountPage(): React.JSX.Element {
         });
 
         if (ownerEntry) {
-          // Extract principal address
-          const principal = typeof ownerEntry.principal === 'string'
-            ? ownerEntry.principal
-            : (ownerEntry.principal?.publicKeyString 
-                ? (typeof ownerEntry.principal.publicKeyString === 'string'
-                    ? ownerEntry.principal.publicKeyString
-                    : String(ownerEntry.principal.publicKeyString.toString?.() ?? ''))
-                : null);
+          // Extract principal address using the helper function
+          const principal = toAccountString(ownerEntry.principal);
           
           if (principal && principal.trim().length > 0) {
             setStorageOwner(principal.trim());
@@ -348,7 +388,7 @@ export default function AccountPage(): React.JSX.Element {
     return () => {
       cancelled = true;
     };
-  }, [account, publicKey, userClient]);
+  }, [account, publicKey]);
 
   
 
@@ -403,54 +443,6 @@ export default function AccountPage(): React.JSX.Element {
                 <p className="max-w-3xl text-base text-subtle">
                   {accountDescription}
                 </p>
-                {/* Show Representative and Owner for storage accounts */}
-                {isStorageAccount && (
-                  <div className="mt-4 flex flex-wrap gap-6 text-sm">
-                    <div className="flex flex-col gap-1">
-                      <span className="text-xs uppercase tracking-[0.3em] text-muted">
-                        Representative
-                      </span>
-                      <span className="text-foreground">
-                        {representativeLink ? (
-                          <Link
-                            href={representativeLink}
-                            className="font-medium text-accent hover:text-foreground"
-                          >
-                            {truncateIdentifier(account.representative!, 12, 10)}
-                          </Link>
-                        ) : (
-                          "—"
-                        )}
-                      </span>
-                    </div>
-                    <div className="flex flex-col gap-1">
-                      <span className="text-xs uppercase tracking-[0.3em] text-muted">
-                        Owner
-                      </span>
-                      <span className="text-foreground">
-                        {ownerLoading ? (
-                          <span className="text-muted">Loading...</span>
-                        ) : storageOwner ? (
-                          (() => {
-                            const ownerLink = resolveExplorerPath(storageOwner);
-                            return ownerLink ? (
-                              <Link
-                                href={ownerLink}
-                                className="font-medium text-accent hover:text-foreground"
-                              >
-                                {truncateIdentifier(storageOwner, 12, 10)}
-                              </Link>
-                            ) : (
-                              truncateIdentifier(storageOwner, 12, 10)
-                            );
-                          })()
-                        ) : (
-                          "—"
-                        )}
-                      </span>
-                    </div>
-                  </div>
-                )}
               </div>
             </CardHeader>
             <CardContent>
@@ -479,67 +471,54 @@ export default function AccountPage(): React.JSX.Element {
                     lastActivityTimestamp ? formatDate(lastActivityTimestamp) : "No recent activity"
                   }
                 />
+                {isStorageAccount && (
+                  <>
+                    <SummaryMetric
+                      label="Representative"
+                      value={
+                        representativeLink && account.representative && typeof account.representative === 'string' ? (
+                          <Link
+                            href={representativeLink}
+                            className="text-sm font-medium text-accent hover:text-foreground"
+                          >
+                            {truncateIdentifier(account.representative, 12, 10)}
+                          </Link>
+                        ) : (
+                          "—"
+                        )
+                      }
+                    />
+                    <SummaryMetric
+                      label="Owner"
+                      value={
+                        ownerLoading ? (
+                          <span className="text-muted">Loading...</span>
+                        ) : storageOwner ? (
+                          (() => {
+                            const ownerLink = resolveExplorerPath(storageOwner);
+                            return ownerLink ? (
+                              <Link
+                                href={ownerLink}
+                                className="text-sm font-medium text-foreground hover:text-accent hover:underline"
+                              >
+                                {truncateIdentifier(storageOwner, 12, 10)}
+                              </Link>
+                            ) : (
+                              <span className="text-foreground">
+                                {truncateIdentifier(storageOwner, 12, 10)}
+                              </span>
+                            );
+                          })()
+                        ) : (
+                          "—"
+                        )
+                      }
+                    />
+                  </>
+                )}
               </div>
             </CardContent>
           </Card>
-
-          {!isStorageAccount && (
-            <div className="grid gap-6 md:grid-cols-2">
-              <Card className="glass border border-hairline bg-surface shadow-[0_18px_50px_rgba(5,6,11,0.45)]">
-                <CardHeader>
-                  <CardTitle className="text-lg font-semibold text-foreground">
-                    Metadata
-                  </CardTitle>
-                  <CardDescription>
-                    Structured metadata published for this account.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4 text-sm text-subtle">
-                  <DetailRow
-                    label="Name"
-                    value={
-                      account.info?.name && typeof account.info.name === 'string'
-                        ? account.info.name
-                        : "—"
-                    }
-                  />
-                  <DetailRow
-                    label="Description"
-                    value={
-                      account.info?.description && typeof account.info.description === 'string'
-                        ? account.info.description
-                        : "—"
-                    }
-                  />
-                  <DetailRow
-                    label="Metadata"
-                    value={
-                      account.info?.metadata
-                        ? (
-                            <div className="max-h-48 overflow-y-auto rounded-md bg-[color:color-mix(in_oklab,var(--foreground)_6%,transparent)] p-3 font-mono text-xs">
-                              <pre className="whitespace-pre-wrap break-words text-foreground">
-                                {decodeBase64Metadata(account.info.metadata) ?? "—"}
-                              </pre>
-                            </div>
-                          )
-                        : "—"
-                    }
-                  />
-                  <DetailRow
-                    label="Default Permission"
-                    value={formatDefaultPermissions(account.info?.defaultPermission)}
-                  />
-                  {(!account.info || 
-                    (!account.info.name && 
-                     !account.info.description && 
-                     !account.info.metadata && 
-                     !account.info.defaultPermission)) && (
-                    <p className="text-sm text-muted">No metadata available.</p>
-                  )}
-                </CardContent>
-              </Card>
-            </div>
-          )}
 
           <Tabs 
             value={activeTab} 
@@ -562,12 +541,17 @@ export default function AccountPage(): React.JSX.Element {
                 </TabsTrigger>
               )}
               {!isStorageAccount && (
-                <TabsTrigger 
-                  value="storage" 
-                  className="px-4"
-                >
-                  Storage
-                </TabsTrigger>
+                <>
+                  <TabsTrigger 
+                    value="storage" 
+                    className="px-4"
+                  >
+                    Storage
+                  </TabsTrigger>
+                  <TabsTrigger value="metadata" className="px-4">
+                    Metadata
+                  </TabsTrigger>
+                </>
               )}
               <TabsTrigger value="activity" className="px-4">
                 Activity
@@ -745,6 +729,64 @@ export default function AccountPage(): React.JSX.Element {
                           })}
                         </div>
                       </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </TabsContent>
+            )}
+
+            {!isStorageAccount && (
+              <TabsContent value="metadata">
+                <Card className="glass border border-hairline bg-surface shadow-[0_18px_50px_rgba(5,6,11,0.45)]">
+                  <CardHeader>
+                    <CardTitle className="text-lg font-semibold text-foreground">
+                      Metadata
+                    </CardTitle>
+                    <CardDescription>
+                      Structured metadata published for this account.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4 text-sm text-subtle">
+                    <DetailRow
+                      label="Name"
+                      value={
+                        account.info?.name && typeof account.info.name === 'string'
+                          ? account.info.name
+                          : "—"
+                      }
+                    />
+                    <DetailRow
+                      label="Description"
+                      value={
+                        account.info?.description && typeof account.info.description === 'string'
+                          ? account.info.description
+                          : "—"
+                      }
+                    />
+                    <DetailRow
+                      label="Metadata"
+                      value={
+                        account.info?.metadata
+                          ? (
+                              <div className="max-h-48 overflow-y-auto rounded-md bg-[color:color-mix(in_oklab,var(--foreground)_6%,transparent)] p-3 font-mono text-xs">
+                                <pre className="whitespace-pre-wrap break-words text-foreground">
+                                  {decodeBase64Metadata(account.info.metadata) ?? "—"}
+                                </pre>
+                              </div>
+                            )
+                          : "—"
+                      }
+                    />
+                    <DetailRow
+                      label="Default Permission"
+                      value={formatDefaultPermissions(account.info?.defaultPermission)}
+                    />
+                    {(!account.info || 
+                      (!account.info.name && 
+                       !account.info.description && 
+                       !account.info.metadata && 
+                       !account.info.defaultPermission)) && (
+                      <p className="text-sm text-muted">No metadata available.</p>
                     )}
                   </CardContent>
                 </Card>

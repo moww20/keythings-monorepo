@@ -16,12 +16,22 @@ interface ResolveResult {
   path: string;
 }
 
-export function resolveExplorerPath(input: string): string | null {
-  const result = resolveExplorerTarget(input);
+export function resolveExplorerPath(input: string | null | undefined): string | null {
+  if (!input) {
+    return null;
+  }
+  
+  // Ensure input is a string
+  const stringInput = typeof input === 'string' ? input : String(input);
+  const result = resolveExplorerTarget(stringInput);
   return result?.path ?? null;
 }
 
 export function resolveExplorerTarget(input: string): ResolveResult | null {
+  if (typeof input !== 'string') {
+    return null;
+  }
+  
   const value = input.trim();
   if (!value) {
     return null;
@@ -47,9 +57,13 @@ export function resolveExplorerTarget(input: string): ResolveResult | null {
   return null;
 }
 
-export function truncateIdentifier(value: string, start = 6, end = 4): string {
-  if (value.length <= start + end) {
-    return value;
+export function truncateIdentifier(value: string | null | undefined, start = 6, end = 4): string {
+  if (!value) {
+    return '—';
   }
-  return `${value.slice(0, start)}…${value.slice(-end)}`;
+  const stringValue = typeof value === 'string' ? value : String(value);
+  if (stringValue.length <= start + end) {
+    return stringValue;
+  }
+  return `${stringValue.slice(0, start)}…${stringValue.slice(-end)}`;
 }

@@ -874,18 +874,41 @@ export async function getHistoryForAccount(
     }
 
     let filtered: Record<string, Array<{ block: any; filteredOperations: any[] }>> = {};
+    let filterStapleOperationsWorked = false;
     try {
       if (typeof client.filterStapleOperations === 'function') {
         // Prefer passing account context so only relevant ops are returned
         const ctx = { account: accountObj } as any;
         const result = client.filterStapleOperations(voteStaples, ctx);
         filtered = (await Promise.resolve(result)) as typeof filtered;
+        // Check if filterStapleOperations actually returned meaningful results
+        if (filtered && typeof filtered === 'object' && Object.keys(filtered).length > 0) {
+          // Verify that at least one entry has filteredOperations
+          const hasOperations = Object.values(filtered).some((blocks) => 
+            Array.isArray(blocks) && blocks.some((b: any) => 
+              Array.isArray(b?.filteredOperations) && b.filteredOperations.length > 0
+            )
+          );
+          filterStapleOperationsWorked = hasOperations;
+        }
       } else if (typeof client.filterStapleOps === 'function') {
         const ctx = { account: accountObj } as any;
         const result = client.filterStapleOps(voteStaples, ctx);
         filtered = (await Promise.resolve(result)) as typeof filtered;
+        // Check if filterStapleOps actually returned meaningful results
+        if (filtered && typeof filtered === 'object' && Object.keys(filtered).length > 0) {
+          const hasOperations = Object.values(filtered).some((blocks) => 
+            Array.isArray(blocks) && blocks.some((b: any) => 
+              Array.isArray(b?.filteredOperations) && b.filteredOperations.length > 0
+            )
+          );
+          filterStapleOperationsWorked = hasOperations;
+        }
       }
-    } catch {}
+    } catch (filterError) {
+      // filterStapleOperations failed, will use manual extraction
+      filterStapleOperationsWorked = false;
+    }
 
     const normalizeAddress = (candidate: unknown): string | undefined => {
       if (typeof candidate === 'string') {
@@ -955,10 +978,15 @@ export async function getHistoryForAccount(
     const pending: PendingOperation[] = [];
 
     // If filter API returned results, use them; otherwise derive from staple blocks directly
-    const hasFiltered = filtered && Object.keys(filtered).length > 0;
+    const hasFiltered = filterStapleOperationsWorked && filtered && Object.keys(filtered).length > 0;
     if (hasFiltered) {
       for (const [stapleHash, blocks] of Object.entries(filtered)) {
         for (const { block, filteredOperations } of blocks) {
+          // Skip if no filtered operations
+          if (!Array.isArray(filteredOperations) || filteredOperations.length === 0) {
+            continue;
+          }
+          
           const blockTimestamp = block?.date instanceof Date ? block.date.getTime() : Date.now();
           const blockHash = typeof block?.hash?.toString === 'function' ? block.hash.toString() : undefined;
           const blockAccount = normalizeAddress(block?.account) ?? '';
@@ -984,29 +1012,17 @@ export async function getHistoryForAccount(
               ?? (operation as any).currency);
 
             // When filterStapleOperations returns results, they should already be filtered for the account.
-            // However, we still verify to be safe, especially for storage accounts where operations
-            // might be referenced in different fields (target, entity, account, etc.)
+            // We trust filterStapleOperations results and only do a light verification.
+            // For keyed accounts, operations typically have the account in 'from', 'to', or 'blockAccount'
             const operationTarget = normalizeAddress((operation as any).target 
               ?? (operation as any).entity
               ?? (operation as any).account);
             
-            // Check if this operation affects the account (from, to, block account, or operation target/entity)
-            // Use normalized comparison to handle address format differences
-            // For storage accounts, the blockAccount is often the storage account itself
-            const affectsAccount = addressMatchesAccount(from) 
-              || addressMatchesAccount(to) 
-              || addressMatchesAccount(blockAccount)
-              || addressMatchesAccount(operationTarget)
-              || from === normalizedAccountPublicKey
-              || to === normalizedAccountPublicKey
-              || blockAccount === normalizedAccountPublicKey
-              || (operationTarget && operationTarget === normalizedAccountPublicKey);
-
-            // If filterStapleOperations returned this operation, it should be relevant, but verify anyway
-            // This helps catch cases where filterStapleOperations might not work correctly for storage accounts
-            if (!affectsAccount) {
-              continue;
-            }
+            // Since filterStapleOperations already filtered these operations for the account,
+            // we trust them completely and don't do additional filtering.
+            // filterStapleOperations is designed to return only operations relevant to the account,
+            // so if it returned this operation, it's relevant.
+            // This is especially important for keyed accounts where filterStapleOperations should work correctly.
 
             let record: TokenMetadataRecord | null | undefined;
             if (includeTokenMetadata && token) {
