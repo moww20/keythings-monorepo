@@ -24,6 +24,7 @@ import Toast from "@/app/components/Toast";
 
 import { useExplorerSearchHistory } from "../hooks/useExplorerSearchHistory";
 import { resolveExplorerTarget, truncateIdentifier } from "../utils/resolveExplorerPath";
+import { getAccountState } from "@/lib/explorer/sdk-read-client";
 
 export default function ExplorerQuickSearch(): React.JSX.Element {
   const router = useRouter();
@@ -68,23 +69,63 @@ export default function ExplorerQuickSearch(): React.JSX.Element {
           : undefined;
 
       if (!keeta?.getAccountInfo) {
-        return null;
+        // Fall through to SDK lookup when the wallet provider is unavailable
+      } else {
+        try {
+          const info = await keeta.getAccountInfo(publicKey);
+          const account: any = info ?? {};
+          const accountType = String(account?.type ?? account?.info?.type ?? "").toUpperCase();
+          if (accountType === "STORAGE") {
+            return `/explorer/storage/${publicKey}`;
+          }
+          if (accountType === "TOKEN") {
+            return `/explorer/token/${publicKey}`;
+          }
+          if (accountType && accountType !== "ACCOUNT") {
+            return null;
+          }
+        } catch (walletError) {
+          console.warn(
+            "[EXPLORER_SEARCH] Wallet lookup failed, falling back to SDK",
+            walletError,
+          );
+        }
       }
 
       try {
-        const info = await keeta.getAccountInfo(publicKey);
-        const account: any = info ?? {};
-        const accountType = String(account?.type ?? "").toUpperCase();
-        if (accountType === "STORAGE") {
-          return `/explorer/storage/${publicKey}`;
+        const rawState = await getAccountState(publicKey);
+        if (!rawState || typeof rawState !== "object") {
+          return null;
         }
-        if (accountType === "TOKEN") {
-          return `/explorer/token/${publicKey}`;
+
+        const candidates: Array<Record<string, unknown>> = [];
+        const baseState = rawState as Record<string, unknown>;
+        candidates.push(baseState);
+        if (baseState.account && typeof baseState.account === "object") {
+          candidates.push(baseState.account as Record<string, unknown>);
         }
-      } catch (walletError) {
+
+        for (const candidate of candidates) {
+          const typeValue = candidate.type ?? (candidate.info as Record<string, unknown> | undefined)?.type;
+          const accountType = typeof typeValue === "string" ? typeValue.toUpperCase() : null;
+          if (!accountType) {
+            continue;
+          }
+
+          if (accountType === "STORAGE") {
+            return `/explorer/storage/${publicKey}`;
+          }
+          if (accountType === "TOKEN") {
+            return `/explorer/token/${publicKey}`;
+          }
+          if (accountType === "ACCOUNT") {
+            return null;
+          }
+        }
+      } catch (sdkError) {
         console.warn(
-          "[EXPLORER_SEARCH] Wallet lookup failed, keeping default account view",
-          walletError,
+          "[EXPLORER_SEARCH] SDK account lookup failed, keeping default account view",
+          sdkError,
         );
       }
       return null;
@@ -115,17 +156,16 @@ export default function ExplorerQuickSearch(): React.JSX.Element {
 
       try {
         setIsSubmitting(true);
-        const destination = target.path;
-
-        handleNavigate(destination, trimmed);
+        let destination = target.path;
 
         if (target.type === "account") {
-          void refineAccountDestination(trimmed).then((refined) => {
-            if (refined && refined !== destination) {
-              router.replace(refined);
-            }
-          });
+          const refined = await refineAccountDestination(trimmed);
+          if (refined) {
+            destination = refined;
+          }
         }
+
+        handleNavigate(destination, trimmed);
       } catch (lookupError) {
         console.error(
           "[EXPLORER_SEARCH] Failed to resolve explorer resource",
@@ -139,7 +179,7 @@ export default function ExplorerQuickSearch(): React.JSX.Element {
         setIsSubmitting(false);
       }
     },
-    [handleNavigate, inputValue, isSubmitting, refineAccountDestination, router],
+    [handleNavigate, inputValue, isSubmitting, refineAccountDestination],
   );
 
   useEffect(() => {

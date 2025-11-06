@@ -36,3 +36,5 @@ export async function fetchCandles(address: string, timeframe: string): Promise<
 
 
 
+
+

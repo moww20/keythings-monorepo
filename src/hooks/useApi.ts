@@ -2,6 +2,17 @@ import { useEffect, useState } from 'react';
 import { z } from 'zod';
 import { accountApi, storageApi, tokenApi, transactionApi, networkApi } from '@/lib/api/client';
 import { getAccountState } from '@/lib/explorer/sdk-read-client';
+import {
+  processTokenForDisplay,
+  type TokenMetadataFetcher,
+  type TokenMetadataLookupResult,
+} from '@/app/lib/token-utils';
+import type { TokenDisplayEntry } from '@/lib/explorer/mappers';
+import {
+  getCachedTokenMetadata,
+  getTokenMetadata,
+  type TokenMetadataEntry,
+} from '@/lib/tokens/metadata-service';
 
 const hasExplorerApiBase = typeof process.env.NEXT_PUBLIC_API_URL === 'string'
   && process.env.NEXT_PUBLIC_API_URL.trim().length > 0;
@@ -10,7 +21,9 @@ const TokenMetadataSchema = z.object({
   name: z.string().optional(),
   ticker: z.string().optional(),
   symbol: z.string().optional(),
+  displayName: z.string().optional(),
   decimals: z.number().optional(),
+  decimalPlaces: z.number().optional(),
 }).passthrough();
 
 type StorageTokenEntry = {
@@ -39,7 +52,7 @@ const StorageInfoSchema = z.object({
   updatedAt: z.union([z.string(), z.number(), z.date()]).optional(),
 }).partial();
 
-const DateLikeSchema = z.union([z.string(), z.number(), z.date()]).optional();
+const DateLikeSchema = z.union([z.string(), z.number(), z.date(), z.null()]).optional();
 
 const StorageAccountStateSchema = z.object({
   publicKey: z.string().optional(),
@@ -49,6 +62,7 @@ const StorageAccountStateSchema = z.object({
   updatedAt: DateLikeSchema,
   info: StorageInfoSchema.optional(),
   balances: z.array(StorageBalanceEntrySchema).optional(),
+  tokens: z.array(StorageBalanceEntrySchema).optional(),
 }).passthrough();
 
 const toDateString = (value: unknown): string | null => {
@@ -62,6 +76,33 @@ const toDateString = (value: unknown): string | null => {
     return value;
   }
   return null;
+};
+
+const pickString = (...values: (string | null | undefined)[]): string | undefined => {
+  for (const value of values) {
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      if (trimmed.length > 0) {
+        return trimmed;
+      }
+    }
+  }
+  return undefined;
+};
+
+const pickNullableString = (
+  ...values: (string | null | undefined)[]
+): string | null => pickString(...values) ?? null;
+
+const pickNumber = (
+  ...values: (number | null | undefined)[]
+): number | undefined => {
+  for (const value of values) {
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      return value;
+    }
+  }
+  return undefined;
 };
 
 const toBalanceString = (value: unknown): string => {
@@ -96,18 +137,358 @@ const normalizeMetadataInput = (rawMetadata: unknown): string | undefined => {
   return undefined;
 };
 
+const decodeBase64String = (value: string): string | null => {
+  const trimmed = value.trim();
+  if (!trimmed || trimmed.length < 4) {
+    return null;
+  }
+  try {
+    if (typeof window !== 'undefined' && typeof window.atob === 'function') {
+      return window.atob(trimmed);
+    }
+  } catch {
+    // ignore browser decode failure and fall back to Buffer
+  }
+  try {
+    if (typeof Buffer !== 'undefined') {
+      return Buffer.from(trimmed, 'base64').toString('utf-8');
+    }
+  } catch {
+    // ignore server decode failure
+  }
+  return null;
+};
+
 const parseTokenMetadata = (rawMetadata: unknown) => {
   const normalized = normalizeMetadataInput(rawMetadata);
   if (!normalized) {
     return null;
   }
-  try {
-    const parsedJson = JSON.parse(normalized);
-    const parsed = TokenMetadataSchema.safeParse(parsedJson);
-    return parsed.success ? parsed.data : null;
-  } catch {
+
+  const tryParse = (input: string) => {
+    try {
+      const parsedJson = JSON.parse(input);
+      const parsed = TokenMetadataSchema.safeParse(parsedJson);
+      return parsed.success ? parsed.data : null;
+    } catch {
+      return null;
+    }
+  };
+
+  const directParse = tryParse(normalized);
+  if (directParse) {
+    return directParse;
+  }
+
+  const decoded = decodeBase64String(normalized);
+  if (!decoded) {
     return null;
   }
+
+  return tryParse(decoded);
+};
+
+const ARRAY_CANDIDATE_KEYS = [
+  "balances",
+  "tokens",
+  "entries",
+  "items",
+  "records",
+  "data",
+  "list",
+  "values",
+];
+
+const isPlainObject = (value: unknown): value is Record<string, unknown> =>
+  Boolean(value) && typeof value === "object" && !Array.isArray(value);
+
+const PUBLIC_KEY_FALLBACK_FIELDS = [
+  "publicKey",
+  "publicKeyString",
+  "address",
+  "account",
+  "entity",
+  "storage",
+  "token",
+];
+
+const toPublicKeyString = (value: unknown, depth = 0): string | undefined => {
+  if (!value) {
+    return undefined;
+  }
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : undefined;
+  }
+  if (typeof value === "object") {
+    if (depth > 4) {
+      return undefined;
+    }
+    for (const key of PUBLIC_KEY_FALLBACK_FIELDS) {
+      const candidate = (value as Record<string, unknown>)[key];
+      const resolved = toPublicKeyString(candidate, depth + 1);
+      if (resolved) {
+        return resolved;
+      }
+    }
+    if (typeof (value as { toString?: () => string }).toString === "function") {
+      try {
+        const stringified = String((value as { toString: () => string }).toString());
+        return stringified && stringified !== "[object Object]"
+          ? stringified
+          : undefined;
+      } catch {
+        return undefined;
+      }
+    }
+  }
+  return undefined;
+};
+
+const normalizeTokenField = (entry: Record<string, unknown>, fallbackKey?: string): void => {
+  const tokenField = entry.token;
+  if (typeof tokenField === "string" && tokenField.trim().length > 0) {
+    entry.token = tokenField.trim();
+    return;
+  }
+
+  const tokenCandidate = toPublicKeyString(tokenField)
+    ?? toPublicKeyString(entry.publicKey)
+    ?? toPublicKeyString(entry.publicKeyString)
+    ?? toPublicKeyString(entry.tokenAccount)
+    ?? (typeof fallbackKey === "string" && fallbackKey.trim().length > 0 ? fallbackKey.trim() : undefined);
+
+  if (tokenCandidate) {
+    entry.token = tokenCandidate;
+    return;
+  }
+
+  if (typeof entry.entity === "string" && entry.entity.trim().length > 0) {
+    entry.token = entry.entity.trim();
+  }
+};
+
+const normalizeBalanceEntries = (value: unknown): Array<Record<string, unknown>> => {
+  if (!value) {
+    return [];
+  }
+
+  const coerceTupleEntry = (entry: unknown[]): Record<string, unknown> | null => {
+    if (!Array.isArray(entry)) {
+      return null;
+    }
+    const [maybeToken, maybeBalance, extras] = entry;
+    const payload: Record<string, unknown> = {};
+    const tokenId = typeof maybeToken === "string"
+      ? maybeToken
+      : toPublicKeyString(maybeToken);
+    if (tokenId) {
+      payload.token = tokenId;
+    }
+    if (maybeBalance !== undefined) {
+      payload.balance = maybeBalance;
+    }
+    if (isPlainObject(extras)) {
+      Object.assign(payload, extras);
+    }
+    normalizeTokenField(payload);
+    return payload.token ? payload : null;
+  };
+
+  if (Array.isArray(value)) {
+    return value
+      .map((entry) => {
+        if (isPlainObject(entry)) {
+          const copy = { ...entry } as Record<string, unknown>;
+          normalizeTokenField(copy);
+          return copy.token ? copy : null;
+        }
+        if (Array.isArray(entry)) {
+          return coerceTupleEntry(entry);
+        }
+        if (typeof entry === "string") {
+          return { token: entry };
+        }
+        if (entry === null || entry === undefined) {
+          return null;
+        }
+        return { balance: entry } as Record<string, unknown>;
+      })
+      .filter((entry): entry is Record<string, unknown> => Boolean(entry));
+  }
+
+  if (value instanceof Map) {
+    return Array.from(value.entries())
+      .map(([tokenKey, payload]) => {
+        const fallbackKey = typeof tokenKey === "string"
+          ? tokenKey
+          : toPublicKeyString(tokenKey);
+        if (isPlainObject(payload)) {
+          const copy = { ...payload } as Record<string, unknown>;
+          normalizeTokenField(copy, fallbackKey);
+          return copy.token ? copy : null;
+        }
+        if (Array.isArray(payload)) {
+          return coerceTupleEntry(payload);
+        }
+        if (fallbackKey) {
+          const copy: Record<string, unknown> = { token: fallbackKey, balance: payload };
+          normalizeTokenField(copy);
+          return copy;
+        }
+        return null;
+      })
+      .filter((entry): entry is Record<string, unknown> => Boolean(entry));
+  }
+
+  if (isPlainObject(value)) {
+    for (const key of ARRAY_CANDIDATE_KEYS) {
+      const nested = (value as Record<string, unknown>)[key];
+      if (Array.isArray(nested)) {
+        return normalizeBalanceEntries(nested);
+      }
+    }
+
+    if (typeof (value as { toArray?: () => unknown }).toArray === "function") {
+      try {
+        const result = (value as { toArray: () => unknown }).toArray();
+        return normalizeBalanceEntries(result);
+      } catch {
+        // ignore and fall through to object iteration
+      }
+    }
+
+    return Object.entries(value as Record<string, unknown>)
+      .map(([tokenKey, payload]) => {
+        if (payload === null || payload === undefined) {
+          return null;
+        }
+
+        if (isPlainObject(payload)) {
+          const copy = { ...payload } as Record<string, unknown>;
+          normalizeTokenField(copy, tokenKey);
+          return copy.token ? copy : null;
+        }
+
+        if (Array.isArray(payload)) {
+          return coerceTupleEntry(payload);
+        }
+
+        const fallbackKey = typeof tokenKey === "string" && tokenKey.trim().length > 0
+          ? tokenKey.trim()
+          : undefined;
+        const tokenId = fallbackKey ?? toPublicKeyString(payload);
+        if (tokenId) {
+          const copy: Record<string, unknown> = { token: tokenId, balance: payload };
+          normalizeTokenField(copy);
+          return copy;
+        }
+
+        return null;
+      })
+      .filter((entry): entry is Record<string, unknown> => Boolean(entry));
+  }
+
+  return [];
+};
+
+const normalizeStorageCandidate = (candidate: Record<string, unknown>) => {
+  const normalized: Record<string, unknown> = { ...candidate };
+
+  const infoRecord = isPlainObject(normalized.info) ? { ...normalized.info } : undefined;
+  if (infoRecord) {
+    normalized.info = infoRecord;
+  } else if (normalized.info !== undefined) {
+    delete normalized.info;
+  }
+
+  (['balances', 'tokens'] as const).forEach((key) => {
+    if (key in normalized) {
+      const entries = normalizeBalanceEntries((normalized as Record<string, unknown>)[key]);
+      if (entries.length > 0) {
+        normalized[key] = entries;
+      } else {
+        delete normalized[key];
+      }
+    }
+  });
+
+  if (!normalized.publicKey) {
+    const fallbackKeys = [
+      normalized.publicKeyString,
+      normalized.address,
+      normalized.storage,
+    ].filter((value): value is string => typeof value === "string");
+    if (fallbackKeys.length > 0) {
+      normalized.publicKey = fallbackKeys[0];
+    } else if (isPlainObject(normalized.account)) {
+      const accountRecord = normalized.account as Record<string, unknown>;
+      const nestedKey = [
+        accountRecord.publicKey,
+        accountRecord.publicKeyString,
+        accountRecord.address,
+      ].find((value) => typeof value === "string");
+      if (nestedKey) {
+        normalized.publicKey = nestedKey;
+      }
+    }
+  }
+
+  const sourceForType = [normalized.type, infoRecord?.type]
+    .find((value): value is string => typeof value === "string" && value.length > 0);
+  if (sourceForType) {
+    normalized.type = sourceForType;
+  }
+
+  const sourceForOwner = [normalized.owner, infoRecord?.owner]
+    .find((value): value is string => typeof value === "string" && value.length > 0);
+  if (sourceForOwner) {
+    normalized.owner = sourceForOwner;
+  }
+
+  if (!normalized.createdAt && infoRecord?.createdAt !== undefined) {
+    normalized.createdAt = infoRecord.createdAt;
+  }
+
+  if (!normalized.updatedAt && infoRecord?.updatedAt !== undefined) {
+    normalized.updatedAt = infoRecord.updatedAt;
+  }
+
+  return normalized;
+};
+
+const collectCandidateRecords = (root: unknown): Record<string, unknown>[] => {
+  if (!root || typeof root !== "object") {
+    return [];
+  }
+
+  const candidates: Record<string, unknown>[] = [];
+  const seen = new Set<unknown>();
+  const stack: unknown[] = [root];
+
+  while (stack.length > 0) {
+    const current = stack.pop();
+    if (!current || typeof current !== "object" || seen.has(current)) {
+      continue;
+    }
+    seen.add(current);
+
+    if (isPlainObject(current)) {
+      candidates.push(current);
+      const nestedCandidates = [
+        current.account,
+        current.state,
+        current.data,
+      ];
+      nestedCandidates.forEach((nested) => {
+        if (nested && typeof nested === "object" && !seen.has(nested)) {
+          stack.push(nested);
+        }
+      });
+    }
+  }
+
+  return candidates;
 };
 
 const parseStorageState = (rawState: unknown) => {
@@ -115,16 +496,23 @@ const parseStorageState = (rawState: unknown) => {
     return null;
   }
 
-  const candidates: unknown[] = [];
-  if ('account' in (rawState as Record<string, unknown>) && (rawState as Record<string, unknown>).account) {
-    candidates.push((rawState as Record<string, unknown>).account);
-  }
-  candidates.push(rawState);
+  const candidates = collectCandidateRecords(rawState);
 
   for (const candidate of candidates) {
-    const parsed = StorageAccountStateSchema.safeParse(candidate);
+    const normalized = normalizeStorageCandidate(candidate);
+    const parsed = StorageAccountStateSchema.safeParse(normalized);
     if (parsed.success) {
       return parsed.data;
+    }
+  }
+
+  if (process.env.NODE_ENV !== 'production') {
+    try {
+      console.warn('[useStorage] Unable to normalize storage state payload', {
+        keys: Object.keys(rawState as Record<string, unknown>),
+      });
+    } catch {
+      // no-op
     }
   }
 
@@ -164,15 +552,70 @@ const fetchStorageFromChain = async (publicKey: string) => {
   const createdAt = toDateString(info.createdAt ?? state.createdAt ?? null);
   const updatedAt = toDateString(info.updatedAt ?? state.updatedAt ?? null);
 
-  const tokens = (state.balances ?? [])
-    .map<StorageTokenEntry | null>((entry) => {
-      const tokenId = entry.token ?? entry.publicKey;
+  const balancesSource = Array.isArray(state.balances) && state.balances.length > 0
+    ? state.balances
+    : Array.isArray(state.tokens) ? state.tokens : [];
+
+  const mappedTokens = await Promise.all<StorageTokenEntry | null>(
+    balancesSource.map(async (entry): Promise<StorageTokenEntry | null> => {
+      const tokenIdCandidate = toPublicKeyString(entry.token)
+        ?? (typeof entry.token === 'string' ? entry.token : undefined)
+        ?? (typeof entry.publicKey === 'string' ? entry.publicKey : undefined)
+        ?? (typeof entry.publicKeyString === 'string' ? entry.publicKeyString : undefined)
+        ?? (typeof entry.address === 'string' ? entry.address : undefined);
+      const tokenId = tokenIdCandidate?.trim();
       if (!tokenId) return null;
 
-      const metadata = parseTokenMetadata(entry.metadata);
-      const decimals = entry.decimals ?? metadata?.decimals;
-      const name = metadata?.name ?? metadata?.symbol ?? metadata?.ticker;
-      const symbol = metadata?.ticker ?? metadata?.symbol;
+      const inlineMetadata = parseTokenMetadata(entry.metadata);
+
+      let serviceMetadataEntry = getCachedTokenMetadata(tokenId);
+      if (!serviceMetadataEntry) {
+        try {
+          serviceMetadataEntry = await getTokenMetadata(tokenId);
+        } catch (metadataError) {
+          if (process.env.NODE_ENV !== 'production') {
+            try {
+              console.warn('[useStorage] Failed to load token metadata', {
+                tokenId,
+                metadataError,
+              });
+            } catch {}
+          }
+        }
+      }
+
+      const serviceMetadata = serviceMetadataEntry?.metadataBase64
+        ? parseTokenMetadata(serviceMetadataEntry.metadataBase64)
+        : null;
+
+      const decimals = pickNumber(
+        serviceMetadataEntry?.decimals,
+        serviceMetadata?.decimals,
+        serviceMetadata?.decimalPlaces,
+        inlineMetadata?.decimals,
+        inlineMetadata?.decimalPlaces,
+        entry.decimals,
+      );
+
+      const name = pickNullableString(
+        serviceMetadataEntry?.name,
+        serviceMetadata?.name,
+        serviceMetadata?.displayName,
+        serviceMetadataEntry?.ticker,
+        serviceMetadata?.ticker,
+        serviceMetadata?.symbol,
+        inlineMetadata?.name,
+        inlineMetadata?.symbol,
+        inlineMetadata?.ticker,
+      );
+
+      const symbol = pickNullableString(
+        serviceMetadataEntry?.ticker,
+        serviceMetadata?.ticker,
+        serviceMetadata?.symbol,
+        inlineMetadata?.ticker,
+        inlineMetadata?.symbol,
+      );
 
       return {
         tokenId,
@@ -180,9 +623,13 @@ const fetchStorageFromChain = async (publicKey: string) => {
         symbol,
         balance: toBalanceString(entry.balance ?? entry.amount ?? '0'),
         decimals,
-      };
-    })
-    .filter((tokenEntry): tokenEntry is StorageTokenEntry => tokenEntry !== null);
+      } satisfies StorageTokenEntry;
+    }),
+  );
+
+  const tokens = mappedTokens.filter(
+    (tokenEntry): tokenEntry is StorageTokenEntry => tokenEntry !== null,
+  );
 
   return {
     publicKey: state.publicKey ?? publicKey,

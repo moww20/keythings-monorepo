@@ -38,3 +38,5 @@ export type CandlesResponse = z.infer<typeof CandlesResponseSchema>;
 
 
 
+
+
